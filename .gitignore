@@ -1,0 +1,276 @@
+
+# ==========================================================
+# MYSIC — MONOREPO GITIGNORE
+# Flutter + Node.js + Express + Prisma + Firebase
+# ==========================================================
+
+# ----------------------------------------------------------
+# OPERATING SYSTEM
+# ----------------------------------------------------------
+
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+Thumbs.db:encryptable
+Desktop.ini
+$RECYCLE.BIN/
+.Trashes
+.Spotlight-V100
+.fseventsd
+*~
+
+# ----------------------------------------------------------
+# EDITORS / IDE
+# ----------------------------------------------------------
+
+.idea/
+*.iml
+
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+*.swp
+*.swo
+*.swn
+
+.history/
+*.code-workspace
+
+# ----------------------------------------------------------
+# NODE.JS
+# ----------------------------------------------------------
+
+node_modules/
+**/node_modules/
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+.npm/
+.pnpm-store/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# ----------------------------------------------------------
+# NODE BUILD / CACHE
+# ----------------------------------------------------------
+
+dist/
+**/dist/
+
+coverage/
+**/coverage/
+
+.nyc_output/
+.turbo/
+.cache/
+.parcel-cache/
+
+*.tsbuildinfo
+
+# ----------------------------------------------------------
+# ENVIRONMENT VARIABLES
+# ----------------------------------------------------------
+
+.env
+.env.*
+**/.env
+**/.env.*
+
+!.env.example
+!**/.env.example
+
+!.env.sample
+!**/.env.sample
+
+# ----------------------------------------------------------
+# FIREBASE / GOOGLE CREDENTIALS
+# ----------------------------------------------------------
+
+google-services.json
+**/google-services.json
+
+GoogleService-Info.plist
+**/GoogleService-Info.plist
+
+firebase-adminsdk*.json
+*service-account*.json
+*service_account*.json
+
+firebase-debug.log
+firebase-debug.*.log
+
+.firebase/
+
+# Firebase generated configuration:
+# Track only when reviewed and intentionally approved.
+**/firebase_options.dart
+
+# ----------------------------------------------------------
+# PRIVATE KEYS / CERTIFICATES
+# ----------------------------------------------------------
+
+*.pem
+*.key
+*.p12
+*.pfx
+
+*.keystore
+*.jks
+
+key.properties
+**/key.properties
+
+*.mobileprovision
+
+# ----------------------------------------------------------
+# FLUTTER / DART
+# ----------------------------------------------------------
+
+.dart_tool/
+**/.dart_tool/
+
+.flutter-plugins
+.flutter-plugins-dependencies
+
+.packages
+.pub-cache/
+.pub/
+
+.flutter_tool_state
+
+build/
+**/build/
+
+# Generated Flutter artifacts
+**/flutter_*.png
+
+# ----------------------------------------------------------
+# ANDROID
+# ----------------------------------------------------------
+
+**/android/local.properties
+
+**/android/.gradle/
+**/android/captures/
+
+*.apk
+*.aab
+
+# Android signing artifacts
+**/android/key.properties
+**/android/*.keystore
+**/android/*.jks
+
+# ----------------------------------------------------------
+# IOS / XCODE
+# ----------------------------------------------------------
+
+**/ios/Pods/
+**/ios/.symlinks/
+
+**/ios/Flutter/ephemeral/
+
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+
+**/ios/Runner/GeneratedPluginRegistrant.*
+
+**/ios/*.xcworkspace/xcuserdata/
+**/ios/*.xcodeproj/xcuserdata/
+
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+
+# ----------------------------------------------------------
+# MACOS
+# ----------------------------------------------------------
+
+**/macos/Pods/
+**/macos/Flutter/ephemeral/
+
+# ----------------------------------------------------------
+# WINDOWS
+# ----------------------------------------------------------
+
+**/windows/flutter/ephemeral/
+
+# ----------------------------------------------------------
+# LINUX FLUTTER
+# ----------------------------------------------------------
+
+**/linux/flutter/ephemeral/
+
+# ----------------------------------------------------------
+# PRISMA / DATABASE
+# ----------------------------------------------------------
+
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+*.sqlite-shm
+*.sqlite-wal
+
+# Keep Prisma schema and migrations tracked.
+# Do not ignore:
+# backend/prisma/schema.prisma
+# backend/prisma/migrations/
+
+# ----------------------------------------------------------
+# LOGS / TEMPORARY FILES
+# ----------------------------------------------------------
+
+logs/
+**/logs/
+
+*.log
+
+tmp/
+temp/
+.cache-temp/
+
+*.tmp
+*.bak
+
+# ----------------------------------------------------------
+# TEST RESULTS
+# ----------------------------------------------------------
+
+test-results/
+playwright-report/
+blob-report/
+
+# ----------------------------------------------------------
+# LOCAL BACKUPS
+# ----------------------------------------------------------
+
+backups/
+*.backup
+*.dump
+
+# ----------------------------------------------------------
+# KEEP IMPORTANT PROJECT FILES TRACKED
+# ----------------------------------------------------------
+
+!README.md
+!AGENTS.md
+
+!docs/
+!docs/**
+
+!**/package.json
+!**/pnpm-lock.yaml
+!**/pubspec.yaml
+!**/pubspec.lock
+!**/.gitignore
