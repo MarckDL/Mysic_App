@@ -9,7 +9,7 @@ Permite explorar un catálogo musical, gestionar playlists, guardar favoritos, c
 
 La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 
-> Estado: en planificación y desarrollo inicial.
+> Estado: fundamentos implementados y probados localmente; cierre del Sprint 1 pendiente de publicación y CI.
 >
 > El catálogo experimental utiliza `youtubei.js` desde el backend. La disponibilidad de metadatos no garantiza acceso autorizado a streams de audio. La reproducción se valida por separado mediante fuentes compatibles y permitidas.
 
@@ -91,7 +91,7 @@ Mysic_App/
     └── workflows/
 ```
 
-Las carpetas `backend/`, `mobile/` y los archivos de configuración se crearán durante el Sprint 1.
+`backend/` y `mobile/` (Android) están implementados como base del Sprint 1. Health y el arranque Android fueron demostrados localmente. Consultar [seguimiento](docs/05-sprint-01-seguimiento.md) y [mobile/README.md](mobile/README.md). iOS queda para una ampliación.
 
 ## Requisitos previos
 
@@ -105,8 +105,8 @@ Las carpetas `backend/`, `mobile/` y los archivos de configuración se crearán 
 - Flutter SDK.
 - Android SDK.
 - Java JDK compatible.
-- Proyecto Firebase.
-- Proyecto Supabase PostgreSQL.
+- Proyecto Firebase (se configura en Sprint 2).
+- Proyecto Supabase PostgreSQL (se configura en Sprint 3).
 
 ### Recomendados
 
@@ -157,10 +157,10 @@ Entrar en el directorio:
 cd backend
 ```
 
-Instalar dependencias cuando exista `package.json`:
+Instalar dependencias:
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 ```
 
 Crear archivo de entorno a partir de la plantilla:
@@ -206,7 +206,7 @@ pnpm exec prisma migrate deploy
 
 ### Ejecutar servidor
 
-Cuando el Sprint 1 haya configurado los scripts:
+Ejecutar en desarrollo:
 
 ```bash
 pnpm dev
@@ -308,14 +308,14 @@ En dispositivo físico, usar una dirección alcanzable desde el dispositivo, por
 
 La configuración se definirá mediante `--dart-define` o un mecanismo equivalente.
 
-Ejemplo previsto:
+Configuración prevista para la futura conexión HTTP:
 
 ```bash
 flutter run \
   --dart-define=API_BASE_URL=http://10.0.2.2:3000
 ```
 
-El código Flutter debe leer esta variable para que tenga efecto.
+`ApiConfig` ya lee esta variable, pero la pantalla inicial todavía no hace solicitudes HTTP.
 
 El tráfico HTTP local requiere configuración de desarrollo apropiada. Los despliegues remotos deben utilizar HTTPS.
 
@@ -337,7 +337,7 @@ flutter analyze
 flutter test
 ```
 
-Los scripts backend se definirán en el Sprint 1.
+Backend también dispone de `pnpm typecheck`, `pnpm format:check` y `pnpm build`. Las verificaciones requieren instalar primero las dependencias.
 
 ## 6. Generar APK
 
