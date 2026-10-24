@@ -9,7 +9,7 @@ Permite explorar un catálogo musical, gestionar playlists, guardar favoritos, c
 
 La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 
-> Estado: fundamentos implementados y probados localmente; cierre del Sprint 1 pendiente de publicación y CI.
+> Estado: fundamentos del Sprint 1 verificados localmente y en GitHub Actions; etiqueta de cierre pendiente.
 >
 > El catálogo experimental utiliza `youtubei.js` desde el backend. La disponibilidad de metadatos no garantiza acceso autorizado a streams de audio. La reproducción se valida por separado mediante fuentes compatibles y permitidas.
 

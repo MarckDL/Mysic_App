@@ -1,7 +1,7 @@
 # Sprint 01 — Fundamentos
 
 Fecha de revisión: 24 de octubre de 2026.
-Estado: **implementación local verificada; cierre formal pendiente**.
+Estado al registrar la revisión: **validación local y CI completadas; publicación de etiqueta pendiente**.
 Historia: US-001. Requisitos habilitados: RNF-004, RNF-013, RNF-014,
 RNF-021, RNF-022 y RNF-023. Firebase y PostgreSQL se implementan en sprints 2/3.
 
@@ -29,8 +29,8 @@ RNF-021, RNF-022 y RNF-023. Firebase y PostgreSQL se implementan en sprints 2/3.
 | Flutter formato, analyze y test | Usuario aportó salida: sin cambios, sin problemas, 1 prueba correcta |
 | Android | APK debug presente; usuario confirmó pantalla de Mysic en emulator-5554 |
 | Revisión de secretos y exclusiones | Revisados archivos publicables y reglas Git; sin credenciales detectadas |
-| CI remota | Configurada; pendiente de publicación y ejecución |
-| Publicación y etiqueta | Pendientes; no se declara cerrado el Sprint |
+| CI remota | Quality #1: backend y mobile correctos, incluido APK debug |
+| Publicación y etiqueta | Commit 934f236 publicado en main; etiqueta sprint-01-v0.1.0 pendiente |
 
 Las pruebas HTTP del agente están bloqueadas por EPERM al abrir sockets; los
 siete casos de configuración pasan. Flutter no puede escribir en su caché ni el
@@ -52,17 +52,20 @@ El usuario confirmó lint, typecheck, las 11 pruebas, build y format:check corre
 El aviso de script esbuild omitido no bloqueó tests, desarrollo ni compilación;
 no se autorizaron scripts de paquetes indiscriminadamente.
 
-1. Crear commit, publicar y comprobar GitHub Actions. `git add` fue intentado y
-   falló al crear `.git/index.lock` porque `.git` está montado como solo lectura.
-   No se creó commit, no se ejecutó push ni se generó etiqueta desde el agente.
-   La autorización de publicación fue otorgada por el usuario en esta sesión.
-2. Solo con CI correcta, publicar etiqueta anotada sprint-01-v0.1.0 sobre el commit
-   integrado en main y registrar el resultado.
+El usuario publicó el commit `934f236d0faf172d820e8305b634f195a2676ffa` en `main`.
+GitHub Actions Quality #1 terminó correctamente en ambos jobs, backend y mobile.
+La compilación APK debug también finalizó correctamente.
 
-El remoto es git@github.com:MarckDL/Mysic_App.git y la rama local es main.
-SSH falla desde el ejecutor por permisos de la configuración global. El conector
-GitHub consultado devuelve pull=true y push=false para este repositorio: no se
-utiliza para publicar sin permisos. No se modifica configuración del sistema.
+Evidencia: https://github.com/MarckDL/Mysic_App/actions/runs/40130270914
+
+Versión de cierre prevista: `sprint-01-v0.1.0`, mediante etiqueta anotada sobre
+ese commit validado. Falta publicar esta actualización documental y la etiqueta,
+y comprobar su referencia remota. No se declara publicada antes de verificarla.
+
+La autorización de publicación fue otorgada por el usuario. El ejecutor no puede
+escribir en `.git` y su conector GitHub tiene solo lectura; los comandos Git de
+publicación los ejecuta el usuario desde su terminal normal. El remoto es
+`git@github.com:MarckDL/Mysic_App.git` y la rama de integración es `main`.
 
 ## Emulador
 
