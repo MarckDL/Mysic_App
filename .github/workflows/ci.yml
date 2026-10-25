@@ -41,4 +41,5 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed lib test
       - run: flutter analyze
       - run: flutter test
+      - run: python3 -m unittest discover -s tool -p 'test_*.py'
       - run: flutter build apk --debug

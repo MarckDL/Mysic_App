@@ -274,3 +274,11 @@ backups/
 !**/pubspec.yaml
 !**/pubspec.lock
 !**/.gitignore
+
+# Configuración local de autenticación (sin credenciales en Git)
+/mobile/config/firebase.android.json
+/backend/secrets/
+
+# Caché de herramientas Python locales
+__pycache__/
+*.pyc

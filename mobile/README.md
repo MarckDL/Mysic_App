@@ -1,8 +1,11 @@
 # Mysic mobile
 
-Base Flutter del Sprint 01 con plataforma Android generada y pantalla inicial.
-No implementa autenticación ni acceso a datos privados. Riverpod, go_router, Dio
-y las integraciones se añadirán con sus funcionalidades.
+Base Flutter Android del Sprint 01 e incremento de autenticación del Sprint 02.
+Google Sign-In, Firebase Auth, Riverpod y Dio separan presentación, aplicación y datos.
+El inicio solo se muestra después de verificar la sesión en Express.
+
+Configurar el proyecto Firebase y las credenciales conforme a
+[la guía del Sprint 2](../docs/06-sprint-02-autenticacion.md). No hay perfil local ficticio.
 
 ## Ejecutar
 
@@ -26,13 +29,22 @@ Flutter gestiona los archivos Gradle wrapper que su plantilla excluye de Git.
 
 ## Estado y configuración
 
-Se demostró el arranque en emulator-5554, Android API 37, mostrando Mysic y
-el mensaje de bienvenida. CI compila un APK debug adicionalmente a los tests.
+La ejecución de la pantalla inicial fue demostrada en Sprint 01. Este incremento
+requiere repetir análisis, tests y arranque con Firebase configurado.
 
-`com.mysic.mysic` es el identificador provisional y debe confirmarse antes de
-registrar Android en Firebase (Sprint 02). La firma release sigue usando la clave
-debug de la plantilla: no es una configuración de distribución.
+```bash
+python3 tool/configure_firebase.py /ruta/google-services.json
+flutter run --dart-define-from-file=config/firebase.android.json
+```
 
-`ApiConfig` lee `API_BASE_URL` mediante `--dart-define`; no existe cliente HTTP
-ni comunicación de red en esta pantalla. La configuración HTTP de desarrollo
-se añadirá con esa integración. No hay credenciales en la aplicación inicial.
+Los identificadores cliente se cargan explícitamente con FirebaseOptions y el
+client ID OAuth web con GoogleSignIn.initialize. No se requiere Google Services
+Gradle para esta modalidad. CI compila sin configuración real y prueba estados
+con dobles; no demuestra login real.
+
+El paquete Android sigue siendo com.mysic.mysic. La firma release de la plantilla
+usa claves debug y no está lista para distribución. Configuración real y credenciales
+administrativas no se versionan. Nunca colocar Firebase Admin credentials en mobile/.
+
+ApiConfig lee API_BASE_URL. HTTP está limitado a hosts locales de desarrollo y solo
+se permite en debug; usar HTTPS para un backend remoto.

@@ -376,3 +376,33 @@ El plan gratuito de hosting puede presentar suspensión por inactividad, cuotas 
 - Compatibilidad futura con iOS.
 
 Cualquier cambio arquitectónico relevante debe documentarse antes de implementarse.
+
+## 15. Incremento Sprint 02: sesión verificada
+
+`GET /api/v1/auth/session` es la ruta privada inicial de comprobación. Devuelve
+solo Firebase UID y proveedor; no crea perfiles ni UUID internos. `/auth/sync`
+y `/users/me` se mantienen en Sprint 03 con PostgreSQL. La identidad de Firebase
+no se presenta como un usuario ya persistido.
+
+Flutter usa Firebase Auth y Google Sign-In nativo, Riverpod para sesión/acciones
+y Dio para consultar el backend. El gate muestra el inicio solo después de validar
+la sesión en Express. El SDK renueva ID tokens; ante 401 se fuerza una renovación
+y se reintenta una sola vez el GET de sesión. Un segundo 401 o un 403 cierra
+la sesión local. No se reintentan operaciones de escritura.
+
+Firebase Admin comprueba firma, expiración, proyecto y revocación mediante
+`verifyIdToken(token, true)`. Solo se admite el proveedor google.com. No se aceptan
+identidades del body, query ni tokens de emulador Firebase sin firma. Los fallos
+operativos devuelven 503; un token inválido devuelve 401 y otro proveedor 403.
+
+La configuración cliente se carga con FirebaseOptions y un client ID OAuth web
+explícito (`serverClientId`), sin depender de archivos generados ignorados en CI.
+Un conversor local obtiene esos identificadores de google-services.json. El SDK
+Google documenta esta modalidad sin el plugin Gradle de Google Services. CI puede
+compilar sin un proyecto real; no demuestra login real. Credenciales Admin van
+fuera del repositorio y se cargan mediante ADC.
+
+HTTP solo se admite en debug hacia localhost, 127.0.0.1 y 10.0.2.2. Android tiene
+una excepción de red limitada a esos hosts solo en debug. Remotos usan HTTPS;
+Dio no sigue redirecciones con el token. Configuración y pruebas reales pendientes
+se registran en docs/06-sprint-02-autenticacion.md.

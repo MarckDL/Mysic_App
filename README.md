@@ -9,7 +9,7 @@ Permite explorar un catálogo musical, gestionar playlists, guardar favoritos, c
 
 La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 
-> Estado: fundamentos del Sprint 1 verificados localmente y en GitHub Actions; etiqueta de cierre pendiente.
+> Estado: Sprint 1 cerrado (`sprint-01-v0.1.0`). Sprint 2 con autenticación Google/Firebase validada localmente; CI y cierre pendientes.
 >
 > El catálogo experimental utiliza `youtubei.js` desde el backend. La disponibilidad de metadatos no garantiza acceso autorizado a streams de audio. La reproducción se valida por separado mediante fuentes compatibles y permitidas.
 
@@ -169,25 +169,19 @@ Crear archivo de entorno a partir de la plantilla:
 cp .env.example .env
 ```
 
-Variables previstas:
+Variables actuales:
 
 ```dotenv
 NODE_ENV=development
 PORT=3000
-
-DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DATABASE
-DIRECT_URL=postgresql://USER:PASSWORD@HOST:5432/DATABASE
-
 FIREBASE_PROJECT_ID=your-project-id
-FIREBASE_CLIENT_EMAIL=your-service-account-email
-FIREBASE_PRIVATE_KEY=your-private-key
+GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/outside-repository/service-account.json
 ```
 
-Los valores anteriores son ejemplos, no credenciales reales.
-
-Las variables exactas dependerán de la configuración de Firebase Admin y Prisma.
-
-Nunca subir `.env` a Git.
+Los valores anteriores son ejemplos, no credenciales reales. El JSON administrativo
+se guarda fuera del repositorio. En infraestructura administrada se puede usar ADC
+sin archivo de clave. `DATABASE_URL` y Prisma se añadirán en el Sprint 3.
+Nunca subir `.env` ni credenciales administrativas a Git.
 
 ### Inicializar Prisma
 
@@ -228,32 +222,20 @@ Ejemplo de respuesta:
 
 ## 3. Configurar Firebase
 
-1. Crear un proyecto en Firebase Console.
-2. Habilitar Firebase Authentication.
-3. Habilitar el proveedor Google.
-4. Registrar la aplicación Android.
-5. Configurar el identificador de paquete.
-6. Registrar las huellas SHA necesarias.
-7. Configurar FlutterFire.
-8. Configurar Firebase Admin SDK en backend.
+Consultar la guía paso a paso del [Sprint 2](docs/06-sprint-02-autenticacion.md).
 
-Instalar Firebase CLI y FlutterFire CLI siguiendo la documentación oficial.
+1. Crear un proyecto Firebase y habilitar Authentication con Google.
+2. Registrar Android con paquete `com.mysic.mysic` y las huellas SHA del equipo.
+3. Descargar `google-services.json` de esa app después de habilitar Google.
+4. Desde `mobile/`, convertirlo con `python3 tool/configure_firebase.py /ruta/google-services.json`.
+5. Configurar el mismo proyecto y ADC en el backend.
+6. Ejecutar `flutter run --dart-define-from-file=config/firebase.android.json`.
 
-Desde el directorio de Flutter:
-
-```bash
-flutterfire configure
-```
-
-Este comando requiere FlutterFire CLI instalado y autenticación previa.
-
-### Archivos de Firebase
-
-El proyecto utiliza archivos generados y configuración específica del entorno.
-
-No publicar credenciales administrativas ni claves privadas.
-
-La configuración cliente de Firebase contiene identificadores que normalmente no son secretos, pero debe manejarse conforme a la política del repositorio.
+La configuración cliente se carga mediante `FirebaseOptions` y un `serverClientId`
+OAuth web explícito. No se necesita aplicar Google Services en Gradle para esta
+modalidad ni importar un archivo `firebase_options.dart`. CI compila sin datos de
+un proyecto real; el login real requiere configuración y verificación independientes.
+Los archivos de configuración locales están excluidos de Git.
 
 ## 4. Configurar Flutter
 
@@ -315,7 +297,8 @@ flutter run \
   --dart-define=API_BASE_URL=http://10.0.2.2:3000
 ```
 
-`ApiConfig` ya lee esta variable, pero la pantalla inicial todavía no hace solicitudes HTTP.
+`ApiConfig` lee esta variable y el cliente de sesión solicita `/api/v1/auth/session`
+con un Firebase ID token. Se requiere Firebase configurado y el backend activo.
 
 El tráfico HTTP local requiere configuración de desarrollo apropiada. Los despliegues remotos deben utilizar HTTPS.
 

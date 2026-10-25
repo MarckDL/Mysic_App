@@ -1,7 +1,7 @@
 # Sprint 01 — Fundamentos
 
 Fecha de revisión: 24 de octubre de 2026.
-Estado al registrar la revisión: **validación local y CI completadas; publicación de etiqueta pendiente**.
+Estado: **cerrado y verificado**.
 Historia: US-001. Requisitos habilitados: RNF-004, RNF-013, RNF-014,
 RNF-021, RNF-022 y RNF-023. Firebase y PostgreSQL se implementan en sprints 2/3.
 
@@ -30,7 +30,7 @@ RNF-021, RNF-022 y RNF-023. Firebase y PostgreSQL se implementan en sprints 2/3.
 | Android | APK debug presente; usuario confirmó pantalla de Mysic en emulator-5554 |
 | Revisión de secretos y exclusiones | Revisados archivos publicables y reglas Git; sin credenciales detectadas |
 | CI remota | Quality #1: backend y mobile correctos, incluido APK debug |
-| Publicación y etiqueta | Commit 934f236 publicado en main; etiqueta sprint-01-v0.1.0 pendiente |
+| Publicación y etiqueta | Commit 934f236 en main; etiqueta anotada sprint-01-v0.1.0 publicada y verificada |
 
 Las pruebas HTTP del agente están bloqueadas por EPERM al abrir sockets; los
 siete casos de configuración pasan. Flutter no puede escribir en su caché ni el
@@ -58,9 +58,10 @@ La compilación APK debug también finalizó correctamente.
 
 Evidencia: https://github.com/MarckDL/Mysic_App/actions/runs/40130270914
 
-Versión de cierre prevista: `sprint-01-v0.1.0`, mediante etiqueta anotada sobre
-ese commit validado. Falta publicar esta actualización documental y la etiqueta,
-y comprobar su referencia remota. No se declara publicada antes de verificarla.
+Versión de cierre: `sprint-01-v0.1.0`, mediante etiqueta anotada sobre ese commit
+validado. Se verificó la referencia remota y el objeto de etiqueta
+`9663905c13bd9271a01a9f0248ebb9772e08e974`, que apunta a `934f236`.
+La documentación de validación se publicó en `2c434c4`.
 
 La autorización de publicación fue otorgada por el usuario. El ejecutor no puede
 escribir en `.git` y su conector GitHub tiene solo lectura; los comandos Git de
