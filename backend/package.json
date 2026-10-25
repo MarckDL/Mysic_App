@@ -20,7 +20,8 @@
     "db:validate": "node --env-file-if-exists=.env node_modules/prisma/build/index.js validate",
     "db:deploy": "node --env-file-if-exists=.env node_modules/prisma/build/index.js migrate deploy",
     "db:status": "node --env-file-if-exists=.env node_modules/prisma/build/index.js migrate status",
-    "db:check": "tsx --env-file-if-exists=.env tool/check-database.ts"
+    "db:check": "tsx --env-file-if-exists=.env tool/check-database.ts",
+    "catalog:check": "node --import tsx tool/check-catalog.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",
