@@ -420,3 +420,19 @@ Flutter exige sync antes de mostrar inicio. Un fallo de persistencia permite
 reintentar sin borrar la identidad Firebase; el cambio de cuenta invalida los datos
 anteriores. /auth/session y /health siguen funcionando sin base de datos disponible.
 Las pruebas PostgreSQL usan una base desechable independiente en CI.
+
+## 17. Incremento Sprint 04: catálogo experimental
+
+Búsqueda y detalle son autenticados. YoutubeProvider encapsula youtubei.js 18.3.0;
+Flutter solo recibe Track de Mysic. El ID de catálogo es youtube:<sourceId>, distinto
+de los UUID de tablas persistidas. Todavía no se persisten tracks ni audio.
+
+CatalogService limita, coalesce y cachea metadatos: LRU de 100 búsquedas (10 min)
+y 500 detalles (1 hora); no cachea fallos. Máximo 8 operaciones externas distintas
+en vuelo y 10 segundos por operación con abort. Límite por UID de 30 solicitudes
+por minuto, aplicado después de auth y antes de la caché. Son límites de un proceso.
+
+Flutter usa go_router 18.1.1 dentro del gate de perfil verificado (Dart >=3.12),
+GET autenticados con renovación única y pantallas de búsqueda/detalle. Cambio de
+cuenta elimina navegación y solicitudes anteriores. No se habilita reproducción.
+La evidencia y los pendientes se registran en docs/08-sprint-04-plan.md.

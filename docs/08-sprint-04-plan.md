@@ -1,7 +1,7 @@
 # Sprint 04 — Plan de catálogo experimental
 
 Fecha: 25 de octubre de 2026.
-Estado: iniciado; contrato, normalización y prueba técnica preparados.
+Estado: pruebas locales y aceptación manual completadas; CI y cierre pendientes.
 Historia: US-004. Versión prevista: sprint-04-v0.4.0.
 
 ## Objetivo
@@ -221,3 +221,95 @@ Fuentes consultadas:
 - https://ytjs.dev/api/youtubei.js/namespaces/Clients/classes/Music
 - https://ytjs.dev/api/youtubei.js/namespaces/YTMusic/classes/Search
 - https://ytjs.dev/api/youtubei.js/namespaces/YTNodes/classes/MusicResponsiveListItem
+
+## Incremento de API y Flutter
+
+La instalación en el equipo quedó confirmada: youtubei.js 18.3.0 en backend y
+lockfile actualizado. El usuario ejecutó catalog:check con búsqueda y detalle
+normalizados correctos. La comprobación ahora reutiliza YoutubeProvider y
+CatalogService, los mismos componentes de la API; también pasó desde el agente.
+
+### Decisiones aplicadas
+
+- GET /api/v1/search?q y GET /api/v1/tracks/:id requieren Firebase Google verificado,
+  incluso al servir caché. No dependen de PostgreSQL ni aceptan IDs de propietario.
+- q: cadena de 2–120 caracteres después de trim/colapsar espacios; máximo bruto
+  1024, sin controles, arrays ni parámetros ajenos. ID youtube:<videoId de 11 chars>.
+- Resultado de búsqueda: { items: Track[] }, máximo 20. Detalle devuelve Track.
+- Respuestas no-store. Códigos 400/401/403/404/429/503/504 controlados.
+  El adaptador no convierte restricciones o metadata incompleta en 404: cuando no
+  puede confirmar inexistencia devuelve indisponibilidad. No confunde metadata
+  válida con disponibilidad de audio ni expone streaming_data.
+- LRU propia pequeña y probada, sin otra dependencia: 100 búsquedas/10 min,
+  500 detalles/1 hora. No hay caché de fallos; no se implementa enfriamiento de 30 s.
+- Coalescing por clave, copias de resultados cacheados, máximo 8 operaciones
+  externas distintas simultáneas y timeout total de 10 s por operación.
+- Timeout aborta fetch y una respuesta tardía no entra en caché. SDK se inicializa
+  por operación con retrieve_player:false, sin cookies ni caché de sesión.
+  La opción de versión instalada es fail_fast; se corrigió la discrepancia de docs.
+- Limitador de proceso por UID: 30 solicitudes/minuto para catálogo, incluidos
+  cache hits, máximo 10.000 ventanas retenidas; 429 con Retry-After.
+- No hay migración ni tabla tracks en este incremento, solo metadatos temporales.
+
+### Aplicación móvil
+
+- Botón Buscar música desde el inicio verificado; búsqueda y detalle con go_router
+  18.1.1. El navegador vive dentro de AuthGate y se elimina al cerrar/cambiar cuenta.
+- go_router requiere Dart 3.12: se elevó el mínimo del proyecto a 3.12, compatible
+  con el toolchain actual Flutter 3.47.8/Dart 3.13.7. Lockfile actualizado.
+- El cambio de versión de lenguaje requiere nuevo formato Dart en archivos previos;
+  se aplicó y verificó. No modifica el comportamiento de autenticación.
+- Cliente Dio GET autenticado compartido para catálogo; configuración de seguridad
+  común con el cliente de sesión. No sigue redirects ni acepta HTTP remoto.
+- Renueva token una sola vez ante 401. 503/504/429 no cierran la sesión.
+- Debounce 400 ms, cancelación y descarte de respuestas de consultas anteriores.
+  Respuestas tardías de otra cuenta no se muestran.
+- Estados inicial/carga/vacío/error, reintento, imágenes con fallback y duración
+  opcional. Detalle muestra metadatos y reproducción aún no disponible, sin play.
+
+### Verificación del incremento
+
+- Backend: 85 pruebas correctas (incluyen 25 nuevas de servicio/rutas/adaptador),
+  3 PostgreSQL omitidas localmente por falta de TEST_DATABASE_URL desechable.
+- Lint, typecheck, build y formato backend correctos. git diff --check correcto.
+- Prueba real con nuevo adaptador/servicio: 20 canciones y detalle confirmado.
+- Dart analyze ejecutado directamente con SDK: sin problemas. Formato aplicado.
+- Pruebas Flutter preparadas para cliente autenticado, errores, debounce,
+  cancelación, navegación y eliminación de rutas al salir. Ejecución bloqueada
+  en el agente por lockfile de caché del SDK en filesystem de solo lectura.
+- Pendiente flutter test desde terminal normal, prueba UI real, APK y CI.
+- No se ha hecho commit, push ni etiqueta del Sprint 04.
+
+### Corrección de prueba de navegación
+
+El usuario ejecutó pub get/análisis sin problemas: 20 tests correctos y uno falló.
+El doble SearchFake mantenía detail() sin implementar y lanzaba UnimplementedError;
+por ello el detalle mostraba estado de error. Se implementó el dato de prueba y se
+agregó comprobación del ID solicitado y artista. Se conserva la expectativa de
+metadatos y cierre de rutas tras logout. Dart analyze vuelve a pasar. Pendiente
+repetir flutter test; no se declara validada aún toda la suite móvil.
+La comprobación real catalog:check volvió a pasar en el equipo del usuario.
+
+## Validación final local y aceptación manual
+
+El usuario repitió flutter test tras la corrección: 21 pruebas correctas.
+Después confirmó que las pruebas propuestas en el emulador funcionan: búsqueda
+por título/artista, detalle, cambio rápido de consulta y uso con las dos cuentas.
+Esta es evidencia manual comunicada por el usuario; no una observación directa
+del agente ni una prueba de reproducción de audio.
+
+Revisión final: lint, tipos, formato, 85 pruebas y build backend correctos;
+los 3 casos PostgreSQL se ejecutarán en CI con la base desechable. Formato Dart
+verificado: 28 archivos sin cambios; análisis Dart sin problemas. Revisión de diff
+sin errores. Escaneo de archivos candidatos a Git sin patrones de claves privadas
+o API keys Google. .env, Firebase cliente real y cliente Prisma generado ignorados.
+El escaneo por patrones complementa la revisión y no garantiza detectar todo secreto.
+
+Revisados autenticación antes de caché, límite por UID, cancelación/timeout,
+invalidación al cambiar cuenta y contratos de proveedor: sin hallazgos bloqueantes.
+CI existente cubre lockfiles, migraciones, pruebas de PostgreSQL y compilación APK.
+Las pruebas deterministas no dependen de acceso a YouTube; catalog:check y la
+aceptación manual aportan la comprobación externa separada.
+
+Pendiente publicar el commit y verificar Quality, incluido APK debug, antes de
+crear la etiqueta sprint-04-v0.4.0. No se ha publicado ni cerrado este Sprint aún.

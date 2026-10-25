@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../home/presentation/home_screen.dart';
+import '../../../app/router/catalog_navigator.dart';
 import '../application/auth_providers.dart';
 import 'login_screen.dart';
 
@@ -22,9 +22,13 @@ class AuthGate extends ConsumerWidget {
     if (verified.isLoading) return const _LoadingScreen();
     if (verified.hasError) {
       return _SessionError(
-          onRetry: () => ref.invalidate(verifiedSessionProvider));
+        onRetry: () => ref.invalidate(verifiedSessionProvider),
+      );
     }
-    return HomeScreen(profile: verified.requireValue);
+    return CatalogNavigator(
+      key: ValueKey(user.uid),
+      profile: verified.requireValue,
+    );
   }
 }
 
@@ -32,10 +36,10 @@ class _LoadingScreen extends StatelessWidget {
   const _LoadingScreen();
   @override
   Widget build(BuildContext context) => const Scaffold(
-        body: Center(
-            child: CircularProgressIndicator(
-                semanticsLabel: 'Verificando sesión')),
-      );
+    body: Center(
+      child: CircularProgressIndicator(semanticsLabel: 'Verificando sesión'),
+    ),
+  );
 }
 
 class _SessionError extends ConsumerWidget {

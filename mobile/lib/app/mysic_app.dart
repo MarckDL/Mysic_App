@@ -23,15 +23,16 @@ class _SetupPendingScreen extends StatelessWidget {
   const _SetupPendingScreen();
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Mysic')),
-        body: const SafeArea(
-          child: Center(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                  'El inicio de sesión todavía no está disponible en esta instalación.'),
-            ),
+    appBar: AppBar(title: const Text('Mysic')),
+    body: const SafeArea(
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'El inicio de sesión todavía no está disponible en esta instalación.',
           ),
         ),
-      );
+      ),
+    ),
+  );
 }

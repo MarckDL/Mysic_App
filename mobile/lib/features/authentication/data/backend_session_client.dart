@@ -1,31 +1,12 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
+import '../../../core/network/api_dio.dart';
 
 import '../domain/auth_repository.dart';
 import '../domain/mysic_profile.dart';
 
 class BackendSessionClient {
   BackendSessionClient(this._auth, {required String baseUrl, Dio? dio})
-      : _dio = dio ?? Dio() {
-    final uri = Uri.parse(baseUrl);
-    final localDevelopment =
-        kDebugMode && ['10.0.2.2', '127.0.0.1', 'localhost'].contains(uri.host);
-    if (uri.host.isEmpty ||
-        uri.userInfo.isNotEmpty ||
-        uri.query.isNotEmpty ||
-        uri.fragment.isNotEmpty ||
-        (uri.scheme != 'https' &&
-            !(uri.scheme == 'http' && localDevelopment))) {
-      throw const AuthFailure('La dirección del servidor no es válida.');
-    }
-    _dio.options = BaseOptions(
-      baseUrl: baseUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
-      sendTimeout: const Duration(seconds: 10),
-      followRedirects: false,
-    );
-  }
+    : _dio = configureApiDio(baseUrl, dio);
 
   final AuthRepository _auth;
   final Dio _dio;
@@ -38,13 +19,15 @@ class BackendSessionClient {
     for (var attempt = 0; attempt < 2; attempt++) {
       if (_auth.currentUser?.uid != expectedUid) {
         throw const AuthFailure(
-            'La cuenta cambió. Verifica tu sesión de nuevo.');
+          'La cuenta cambió. Verifica tu sesión de nuevo.',
+        );
       }
       try {
         final token = await _auth.getIdToken(forceRefresh: attempt == 1);
         if (_auth.currentUser?.uid != expectedUid) {
           throw const AuthFailure(
-              'La cuenta cambió. Verifica tu sesión de nuevo.');
+            'La cuenta cambió. Verifica tu sesión de nuevo.',
+          );
         }
         if (token == null || token.isEmpty) {
           await _auth.signOut();
@@ -63,7 +46,8 @@ class BackendSessionClient {
       } on DioException catch (error) {
         if (_auth.currentUser?.uid != expectedUid) {
           throw const AuthFailure(
-              'La cuenta cambió. Verifica tu sesión de nuevo.');
+            'La cuenta cambió. Verifica tu sesión de nuevo.',
+          );
         }
         final status = error.response?.statusCode;
         if (status == 401 && attempt == 0) continue;
@@ -72,7 +56,8 @@ class BackendSessionClient {
           throw const AuthFailure('Tu sesión terminó. Inicia sesión de nuevo.');
         }
         throw const AuthFailure(
-            'No se pudo conectar con Mysic. Inténtalo de nuevo.');
+          'No se pudo conectar con Mysic. Inténtalo de nuevo.',
+        );
       }
     }
   }
@@ -103,13 +88,15 @@ class BackendSessionClient {
       if (_auth.currentUser?.uid != expectedUid ||
           profile.firebaseUid != expectedUid) {
         throw const AuthFailure(
-            'La cuenta cambió. Verifica tu sesión de nuevo.');
+          'La cuenta cambió. Verifica tu sesión de nuevo.',
+        );
       }
       return profile;
     } on DioException catch (error) {
       if (_auth.currentUser?.uid != expectedUid) {
         throw const AuthFailure(
-            'La cuenta cambió. Verifica tu sesión de nuevo.');
+          'La cuenta cambió. Verifica tu sesión de nuevo.',
+        );
       }
       if (error.response?.statusCode == 401 ||
           error.response?.statusCode == 403) {
@@ -118,7 +105,8 @@ class BackendSessionClient {
       }
       // Una caída de PostgreSQL no elimina una sesión Firebase válida.
       throw const AuthFailure(
-          'No se pudo cargar tu perfil. Inténtalo de nuevo.');
+        'No se pudo cargar tu perfil. Inténtalo de nuevo.',
+      );
     }
   }
 

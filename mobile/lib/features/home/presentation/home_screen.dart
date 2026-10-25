@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../authentication/application/auth_providers.dart';
 import '../../authentication/domain/mysic_profile.dart';
@@ -36,9 +37,16 @@ class HomeScreen extends ConsumerWidget {
                 const Text('Tu sesión con Google está verificada.'),
                 const SizedBox(height: 12),
                 const Text('Tu perfil está guardado en Mysic.'),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: () => context.push('/search'),
+                  icon: const Icon(Icons.search),
+                  label: const Text('Buscar música'),
+                ),
                 if (action.hasError)
                   const Text(
-                      'No se pudo cerrar la sesión. Inténtalo de nuevo.'),
+                    'No se pudo cerrar la sesión. Inténtalo de nuevo.',
+                  ),
               ],
             ),
           ),

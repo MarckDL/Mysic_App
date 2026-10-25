@@ -30,19 +30,23 @@ class FirebaseAuthRepository implements AuthRepository {
       final idToken = account.authentication.idToken;
       if (idToken == null) {
         throw const AuthFailure(
-            'Google no pudo completar el inicio de sesión.');
+          'Google no pudo completar el inicio de sesión.',
+        );
       }
       await _auth.signInWithCredential(
-          GoogleAuthProvider.credential(idToken: idToken));
+        GoogleAuthProvider.credential(idToken: idToken),
+      );
     } on GoogleSignInException catch (error) {
       if (error.code == GoogleSignInExceptionCode.canceled) {
         throw const AuthFailure('Inicio de sesión cancelado.', cancelled: true);
       }
       throw const AuthFailure(
-          'No se pudo iniciar sesión con Google. Inténtalo de nuevo.');
+        'No se pudo iniciar sesión con Google. Inténtalo de nuevo.',
+      );
     } on FirebaseAuthException {
       throw const AuthFailure(
-          'No se pudo completar el inicio de sesión. Revisa tu conexión.');
+        'No se pudo completar el inicio de sesión. Revisa tu conexión.',
+      );
     }
   }
 
@@ -55,13 +59,14 @@ class FirebaseAuthRepository implements AuthRepository {
         'user-disabled',
         'user-token-expired',
         'invalid-user-token',
-        'user-not-found'
+        'user-not-found',
       ].contains(error.code)) {
         await signOut();
         throw const AuthFailure('Tu sesión terminó. Inicia sesión de nuevo.');
       }
       throw const AuthFailure(
-          'No se pudo renovar tu sesión. Revisa tu conexión.');
+        'No se pudo renovar tu sesión. Revisa tu conexión.',
+      );
     }
   }
 

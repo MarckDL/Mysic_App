@@ -27,7 +27,8 @@
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "express": "^5.1.0",
-    "firebase-admin": "^14.5.0"
+    "firebase-admin": "^14.5.0",
+    "youtubei.js": "18.3.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

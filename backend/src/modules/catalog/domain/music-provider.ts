@@ -16,8 +16,8 @@ export interface PlaybackResult {
 }
 
 export interface MusicProvider {
-  search(query: string): Promise<Track[]>;
-  getTrack(sourceId: string): Promise<Track | null>;
+  search(query: string, signal?: AbortSignal): Promise<Track[]>;
+  getTrack(sourceId: string, signal?: AbortSignal): Promise<Track | null>;
   resolvePlayback(sourceId: string): Promise<PlaybackResult>;
 }
 

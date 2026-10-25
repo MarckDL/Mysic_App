@@ -17,21 +17,25 @@ final authStateProvider = StreamProvider<AuthUser?>((ref) {
 }, retry: (retryCount, error) => null);
 
 final backendSessionClientProvider = Provider<BackendSessionClient>((ref) {
-  final client = BackendSessionClient(ref.watch(authRepositoryProvider),
-      baseUrl: ApiConfig.baseUrl);
+  final client = BackendSessionClient(
+    ref.watch(authRepositoryProvider),
+    baseUrl: ApiConfig.baseUrl,
+  );
   ref.onDispose(client.close);
   return client;
 });
 
-final verifiedSessionProvider =
-    FutureProvider.autoDispose<MysicProfile>((ref) async {
+final verifiedSessionProvider = FutureProvider.autoDispose<MysicProfile>((
+  ref,
+) async {
   final user = ref.watch(authStateProvider).asData?.value;
   if (user == null) throw const AuthFailure('Inicia sesión con Google.');
   return ref.watch(backendSessionClientProvider).syncProfile();
 }, retry: (retryCount, error) => null);
 
-final authActionsProvider =
-    NotifierProvider<AuthActions, AsyncValue<void>>(AuthActions.new);
+final authActionsProvider = NotifierProvider<AuthActions, AsyncValue<void>>(
+  AuthActions.new,
+);
 
 class AuthActions extends Notifier<AsyncValue<void>> {
   @override

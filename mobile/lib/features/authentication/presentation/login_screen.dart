@@ -19,8 +19,10 @@ class LoginScreen extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('Tu espacio musical',
-                    style: Theme.of(context).textTheme.headlineMedium),
+                Text(
+                  'Tu espacio musical',
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
                 const SizedBox(height: 12),
                 const Text('Inicia sesión con Google para acceder a Mysic.'),
                 const SizedBox(height: 24),
@@ -28,14 +30,18 @@ class LoginScreen extends ConsumerWidget {
                   onPressed: action.isLoading
                       ? null
                       : () => ref.read(authActionsProvider.notifier).signIn(),
-                  child: Text(action.isLoading
-                      ? 'Iniciando sesión…'
-                      : 'Continuar con Google'),
+                  child: Text(
+                    action.isLoading
+                        ? 'Iniciando sesión…'
+                        : 'Continuar con Google',
+                  ),
                 ),
                 if (action.hasError) ...[
                   const SizedBox(height: 16),
-                  Text((action.error as AuthFailure).message,
-                      semanticsLabel: 'Error de autenticación'),
+                  Text(
+                    (action.error as AuthFailure).message,
+                    semanticsLabel: 'Error de autenticación',
+                  ),
                 ],
               ],
             ),

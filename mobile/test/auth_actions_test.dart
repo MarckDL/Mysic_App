@@ -12,7 +12,8 @@ void main() {
     final completion = Completer<void>();
     final repository = FakeAuthRepository()..onSignIn = () => completion.future;
     final container = ProviderContainer(
-        overrides: [authRepositoryProvider.overrideWithValue(repository)]);
+      overrides: [authRepositoryProvider.overrideWithValue(repository)],
+    );
     addTearDown(container.dispose);
     final actions = container.read(authActionsProvider.notifier);
     final first = actions.signIn();
@@ -29,7 +30,8 @@ void main() {
         throw const AuthFailure('Cancelado', cancelled: true);
       };
     final container = ProviderContainer(
-        overrides: [authRepositoryProvider.overrideWithValue(repository)]);
+      overrides: [authRepositoryProvider.overrideWithValue(repository)],
+    );
     addTearDown(container.dispose);
     await container.read(authActionsProvider.notifier).signIn();
     expect(container.read(authActionsProvider).hasError, isFalse);

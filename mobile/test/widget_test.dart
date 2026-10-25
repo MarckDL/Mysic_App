@@ -10,21 +10,25 @@ import 'package:mysic/features/authentication/domain/mysic_profile.dart';
 
 void main() {
   testWidgets(
-      'sin configuración Firebase no permite entrar con identidad ficticia',
-      (tester) async {
-    await tester.pumpWidget(const ProviderScope(child: MysicApp()));
-    expect(find.text('Mysic'), findsOneWidget);
-    expect(find.textContaining('todavía no está disponible'), findsOneWidget);
-    expect(find.text('Cerrar sesión'), findsNothing);
-  });
+    'sin configuración Firebase no permite entrar con identidad ficticia',
+    (tester) async {
+      await tester.pumpWidget(const ProviderScope(child: MysicApp()));
+      expect(find.text('Mysic'), findsOneWidget);
+      expect(find.textContaining('todavía no está disponible'), findsOneWidget);
+      expect(find.text('Cerrar sesión'), findsNothing);
+    },
+  );
 
-  testWidgets('sin sesión muestra Google y permite iniciar el flujo',
-      (tester) async {
+  testWidgets('sin sesión muestra Google y permite iniciar el flujo', (
+    tester,
+  ) async {
     final repository = FakeAuthRepository();
-    await tester.pumpWidget(ProviderScope(
-      overrides: [authRepositoryProvider.overrideWithValue(repository)],
-      child: const MysicApp(firebaseReady: true),
-    ));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [authRepositoryProvider.overrideWithValue(repository)],
+        child: const MysicApp(firebaseReady: true),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Continuar con Google'), findsOneWidget);
     expect(find.text('Cerrar sesión'), findsNothing);
@@ -33,18 +37,21 @@ void main() {
     expect(repository.signInCount, 1);
   });
 
-  testWidgets('una cuenta Firebase no entra si el backend rechaza su sesión',
-      (tester) async {
+  testWidgets('una cuenta Firebase no entra si el backend rechaza su sesión', (
+    tester,
+  ) async {
     final repository = FakeAuthRepository(user: const AuthUser(uid: 'a'));
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        authRepositoryProvider.overrideWithValue(repository),
-        verifiedSessionProvider.overrideWith((ref) async {
-          throw const AuthFailure('Sesión rechazada');
-        }),
-      ],
-      child: const MysicApp(firebaseReady: true),
-    ));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(repository),
+          verifiedSessionProvider.overrideWith((ref) async {
+            throw const AuthFailure('Sesión rechazada');
+          }),
+        ],
+        child: const MysicApp(firebaseReady: true),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('No pudimos verificar tu sesión.'), findsOneWidget);
     expect(find.text('Tu sesión con Google está verificada.'), findsNothing);
@@ -52,19 +59,25 @@ void main() {
   });
 
   testWidgets('la sesión verificada muestra inicio y logout', (tester) async {
-    final repository =
-        FakeAuthRepository(user: const AuthUser(uid: 'a', displayName: 'Ana'));
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        authRepositoryProvider.overrideWithValue(repository),
-        verifiedSessionProvider.overrideWith((ref) async => const MysicProfile(
-            id: '00000000-0000-4000-8000-000000000001',
-            firebaseUid: 'a',
-            displayName: 'Ana',
-            email: 'ana@example.test')),
-      ],
-      child: const MysicApp(firebaseReady: true),
-    ));
+    final repository = FakeAuthRepository(
+      user: const AuthUser(uid: 'a', displayName: 'Ana'),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(repository),
+          verifiedSessionProvider.overrideWith(
+            (ref) async => const MysicProfile(
+              id: '00000000-0000-4000-8000-000000000001',
+              firebaseUid: 'a',
+              displayName: 'Ana',
+              email: 'ana@example.test',
+            ),
+          ),
+        ],
+        child: const MysicApp(firebaseReady: true),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Bienvenido, Ana'), findsOneWidget);
     expect(find.text('ana@example.test'), findsOneWidget);
