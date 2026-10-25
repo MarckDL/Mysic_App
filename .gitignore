@@ -282,3 +282,6 @@ backups/
 # Caché de herramientas Python locales
 __pycache__/
 *.pyc
+
+# Cliente Prisma regenerado a partir del esquema versionado
+/backend/src/generated/prisma/

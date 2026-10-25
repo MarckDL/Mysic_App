@@ -2,7 +2,13 @@ import { Router } from 'express';
 import { requireAuth } from '../../../middleware/auth.middleware.js';
 import type { AuthIdentity, TokenVerifier } from '../domain/token-verifier.js';
 
-export function createAuthRouter(verifier: TokenVerifier) {
+import type { UserService } from '../../users/application/user-service.js';
+import {
+  profileHandler,
+  rejectProfileInput,
+} from '../../users/presentation/user.routes.js';
+
+export function createAuthRouter(verifier: TokenVerifier, users: UserService) {
   const router = Router();
   router.use((_request, response, next) => {
     response.setHeader('Cache-Control', 'no-store');
@@ -15,5 +21,11 @@ export function createAuthRouter(verifier: TokenVerifier) {
       provider: identity.provider,
     });
   });
+  router.post(
+    '/sync',
+    requireAuth(verifier),
+    rejectProfileInput,
+    profileHandler(users, 'sync'),
+  );
   return router;
 }

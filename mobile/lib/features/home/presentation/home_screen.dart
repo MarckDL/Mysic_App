@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../authentication/application/auth_providers.dart';
+import '../../authentication/domain/mysic_profile.dart';
 
 class HomeScreen extends ConsumerWidget {
-  const HomeScreen({super.key, this.displayName});
-  final String? displayName;
+  const HomeScreen({super.key, required this.profile});
+  final MysicProfile profile;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -29,11 +30,12 @@ class HomeScreen extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(displayName == null
-                    ? 'Bienvenido a Mysic'
-                    : 'Bienvenido, $displayName'),
+                Text('Bienvenido, ${profile.displayName}'),
+                if (profile.email != null) Text(profile.email!),
                 const SizedBox(height: 12),
                 const Text('Tu sesión con Google está verificada.'),
+                const SizedBox(height: 12),
+                const Text('Tu perfil está guardado en Mysic.'),
                 if (action.hasError)
                   const Text(
                       'No se pudo cerrar la sesión. Inténtalo de nuevo.'),

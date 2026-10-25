@@ -6,6 +6,7 @@ import 'package:mysic/features/authentication/application/auth_providers.dart';
 import 'package:mysic/features/authentication/domain/auth_repository.dart';
 
 import 'support/fake_auth_repository.dart';
+import 'package:mysic/features/authentication/domain/mysic_profile.dart';
 
 void main() {
   testWidgets(
@@ -56,12 +57,18 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       overrides: [
         authRepositoryProvider.overrideWithValue(repository),
-        verifiedSessionProvider.overrideWith((ref) async {}),
+        verifiedSessionProvider.overrideWith((ref) async => const MysicProfile(
+            id: '00000000-0000-4000-8000-000000000001',
+            firebaseUid: 'a',
+            displayName: 'Ana',
+            email: 'ana@example.test')),
       ],
       child: const MysicApp(firebaseReady: true),
     ));
     await tester.pumpAndSettle();
     expect(find.text('Bienvenido, Ana'), findsOneWidget);
+    expect(find.text('ana@example.test'), findsOneWidget);
+    expect(find.text('Tu perfil está guardado en Mysic.'), findsOneWidget);
     await tester.tap(find.text('Cerrar sesión'));
     await tester.pumpAndSettle();
     expect(repository.signOutCount, 1);

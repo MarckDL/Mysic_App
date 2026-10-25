@@ -406,3 +406,17 @@ HTTP solo se admite en debug hacia localhost, 127.0.0.1 y 10.0.2.2. Android tien
 una excepción de red limitada a esos hosts solo en debug. Remotos usan HTTPS;
 Dio no sigue redirecciones con el token. Configuración y pruebas reales pendientes
 se registran en docs/06-sprint-02-autenticacion.md.
+
+## 16. Incremento Sprint 03: perfiles persistentes
+
+El perfil se sincroniza mediante POST /api/v1/auth/sync, con identidad y datos de
+Google verificados en Firebase ID token; no acepta propietario desde Flutter.
+GET /api/v1/users/me resuelve por Firebase UID y devuelve el UUID interno de users.
+Prisma 7 utiliza adapter-pg y un cliente generado ESM. La tabla reside en el esquema
+privado mysic, sin políticas RLS de acceso cliente. No exponer este esquema en la
+Data API de Supabase. El backend usa PostgreSQL; Supabase Auth no se incorpora.
+
+Flutter exige sync antes de mostrar inicio. Un fallo de persistencia permite
+reintentar sin borrar la identidad Firebase; el cambio de cuenta invalida los datos
+anteriores. /auth/session y /health siguen funcionando sin base de datos disponible.
+Las pruebas PostgreSQL usan una base desechable independiente en CI.

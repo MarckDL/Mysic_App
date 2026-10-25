@@ -6,6 +6,7 @@ import '../../../core/network/api_config.dart';
 import '../data/backend_session_client.dart';
 import '../data/firebase_auth_repository.dart';
 import '../domain/auth_repository.dart';
+import '../domain/mysic_profile.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return FirebaseAuthRepository(FirebaseAuth.instance, GoogleSignIn.instance);
@@ -22,10 +23,11 @@ final backendSessionClientProvider = Provider<BackendSessionClient>((ref) {
   return client;
 });
 
-final verifiedSessionProvider = FutureProvider.autoDispose<void>((ref) async {
+final verifiedSessionProvider =
+    FutureProvider.autoDispose<MysicProfile>((ref) async {
   final user = ref.watch(authStateProvider).asData?.value;
   if (user == null) throw const AuthFailure('Inicia sesión con Google.');
-  await ref.watch(backendSessionClientProvider).verifySession();
+  return ref.watch(backendSessionClientProvider).syncProfile();
 }, retry: (retryCount, error) => null);
 
 final authActionsProvider =

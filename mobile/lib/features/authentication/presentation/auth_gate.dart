@@ -24,7 +24,7 @@ class AuthGate extends ConsumerWidget {
       return _SessionError(
           onRetry: () => ref.invalidate(verifiedSessionProvider));
     }
-    return HomeScreen(displayName: user.displayName);
+    return HomeScreen(profile: verified.requireValue);
   }
 }
 

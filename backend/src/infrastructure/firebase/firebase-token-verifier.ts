@@ -7,6 +7,9 @@ import {
 
 export interface VerifiedFirebaseToken {
   uid: string;
+  email?: unknown;
+  name?: unknown;
+  picture?: unknown;
   firebase: {
     sign_in_provider: string;
     identities?: Record<string, unknown>;
@@ -56,6 +59,14 @@ async function loadFirebaseAuth(): Promise<FirebaseAuthClient> {
   return getAuth(app);
 }
 
+function boundedText(value: unknown, limit: number): string | undefined {
+  return typeof value === 'string' &&
+    value.trim() &&
+    value.trim().length <= limit
+    ? value.trim()
+    : undefined;
+}
+
 export function createFirebaseTokenVerifier(
   loadAuth: () => Promise<FirebaseAuthClient> = loadFirebaseAuth,
 ): TokenVerifier {
@@ -69,10 +80,28 @@ export function createFirebaseTokenVerifier(
           throw new InvalidTokenError();
         }
         const googleIds = decoded.firebase.identities?.['google.com'];
+        const email = boundedText(decoded.email, 320);
+        const displayName = boundedText(decoded.name, 150);
+        let photoUrl = boundedText(decoded.picture, 2048);
+        if (photoUrl) {
+          try {
+            const url = new URL(photoUrl);
+            if (url.protocol !== 'https:' || url.username || url.password)
+              photoUrl = undefined;
+          } catch {
+            photoUrl = undefined;
+          }
+        }
         return {
+          ...(email ? { email } : {}),
+          ...(displayName ? { displayName } : {}),
+          ...(photoUrl ? { photoUrl } : {}),
           firebaseUid: decoded.uid,
           provider: decoded.firebase.sign_in_provider,
-          ...(Array.isArray(googleIds) && typeof googleIds[0] === 'string'
+          ...(Array.isArray(googleIds) &&
+          typeof googleIds[0] === 'string' &&
+          googleIds[0].length > 0 &&
+          googleIds[0].length <= 255
             ? { googleId: googleIds[0] }
             : {}),
         };

@@ -339,3 +339,10 @@ npx prisma migrate deploy
 `migrate deploy` se utiliza para aplicar migraciones existentes en entornos desplegados.
 
 No ejecutar migraciones destructivas sin respaldo y revisión.
+
+## 14. Implementación inicial Sprint 03
+
+La tabla users se preparó en el esquema PostgreSQL dedicado `mysic` mediante
+Prisma multi-schema. Este esquema no debe exponerse en la Data API de Supabase;
+Flutter consulta únicamente Express. El cliente se genera en el backend y no se
+versiona. La primera migración y la verificación de permisos están pendientes.

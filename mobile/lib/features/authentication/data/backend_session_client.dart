@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../domain/auth_repository.dart';
+import '../domain/mysic_profile.dart';
 
 class BackendSessionClient {
   BackendSessionClient(this._auth, {required String baseUrl, Dio? dio})
@@ -73,6 +74,51 @@ class BackendSessionClient {
         throw const AuthFailure(
             'No se pudo conectar con Mysic. Inténtalo de nuevo.');
       }
+    }
+  }
+
+  Future<MysicProfile> syncProfile() async {
+    final expectedUid = _auth.currentUser?.uid;
+    await verifySession();
+    if (expectedUid == null || _auth.currentUser?.uid != expectedUid) {
+      throw const AuthFailure('La cuenta cambió. Verifica tu sesión de nuevo.');
+    }
+    try {
+      final token = await _auth.getIdToken();
+      if (_auth.currentUser?.uid != expectedUid ||
+          token == null ||
+          token.isEmpty) {
+        throw const AuthFailure('No se pudo confirmar tu sesión.');
+      }
+      // Sync es idempotente. No se reintenta automáticamente una escritura.
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/api/v1/auth/sync',
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+      final data = response.data;
+      if (data == null) {
+        throw const AuthFailure('No se pudo confirmar tu perfil.');
+      }
+      final profile = MysicProfile.fromJson(data);
+      if (_auth.currentUser?.uid != expectedUid ||
+          profile.firebaseUid != expectedUid) {
+        throw const AuthFailure(
+            'La cuenta cambió. Verifica tu sesión de nuevo.');
+      }
+      return profile;
+    } on DioException catch (error) {
+      if (_auth.currentUser?.uid != expectedUid) {
+        throw const AuthFailure(
+            'La cuenta cambió. Verifica tu sesión de nuevo.');
+      }
+      if (error.response?.statusCode == 401 ||
+          error.response?.statusCode == 403) {
+        await _auth.signOut();
+        throw const AuthFailure('Tu sesión terminó. Inicia sesión de nuevo.');
+      }
+      // Una caída de PostgreSQL no elimina una sesión Firebase válida.
+      throw const AuthFailure(
+          'No se pudo cargar tu perfil. Inténtalo de nuevo.');
     }
   }
 

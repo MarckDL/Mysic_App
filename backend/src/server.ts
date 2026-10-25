@@ -1,4 +1,5 @@
 import { createApp } from './app.js';
+import { disconnectDatabase } from './infrastructure/database/prisma.js';
 import { readPort } from './config/env.js';
 
 const port = readPort();
@@ -15,8 +16,16 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     const timeout = setTimeout(() => process.exit(1), 10_000);
     timeout.unref();
     server.close((error) => {
-      clearTimeout(timeout);
-      process.exit(error ? 1 : 0);
+      void disconnectDatabase().then(
+        () => {
+          clearTimeout(timeout);
+          process.exit(error ? 1 : 0);
+        },
+        () => {
+          clearTimeout(timeout);
+          process.exit(1);
+        },
+      );
     });
   });
 }

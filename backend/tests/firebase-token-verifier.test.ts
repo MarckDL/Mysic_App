@@ -13,7 +13,7 @@ describe('Firebase TokenVerifier', () => {
         sign_in_provider: 'google.com',
         identities: { 'google.com': ['google-a'] },
       },
-      email: 'not-returned@example.test',
+      email: 'verified@example.test',
     });
     const verifier = createFirebaseTokenVerifier(async () => ({
       verifyIdToken,
@@ -22,8 +22,26 @@ describe('Firebase TokenVerifier', () => {
       firebaseUid: 'firebase-a',
       provider: 'google.com',
       googleId: 'google-a',
+      email: 'verified@example.test',
     });
     expect(verifyIdToken).toHaveBeenCalledWith('id-token', true);
+  });
+
+  it('solo conserva claims de perfil válidos y fotos HTTPS', async () => {
+    const verifier = createFirebaseTokenVerifier(async () => ({
+      verifyIdToken: async () => ({
+        uid: 'a',
+        firebase: { sign_in_provider: 'google.com' },
+        email: 123,
+        name: '  Nombre Google  ',
+        picture: 'javascript:alert(1)',
+      }),
+    }));
+    await expect(verifier.verify('token')).resolves.toEqual({
+      firebaseUid: 'a',
+      provider: 'google.com',
+      displayName: 'Nombre Google',
+    });
   });
 
   it.each([
