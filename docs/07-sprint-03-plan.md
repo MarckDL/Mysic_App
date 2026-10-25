@@ -1,6 +1,6 @@
 # Sprint 03 — Plan de PostgreSQL y usuarios
 
-Fecha: 25 de octubre de 2026. Estado: implementación y prueba manual de persistencia completadas; CI y cierre pendientes.
+Fecha: 25 de octubre de 2026. Estado: validación local y CI completadas; publicación de etiqueta pendiente.
 Historia: US-003. Versión prevista: sprint-03-v0.3.0.
 
 ## Objetivo y alcance
@@ -239,3 +239,18 @@ No se declara cerrado el Sprint ni publicada su etiqueta.
 El usuario confirmó formato de 16 archivos sin cambios y flutter analyze sin
 problemas después de corregir el aviso de llaves. Las 13 pruebas ya habían pasado.
 Pendiente publicar el incremento y ejecutar Quality con PostgreSQL desechable.
+
+## Validación remota final
+
+Commit probado: `26f69aca2a41349e55e96dc47ef933ebd1cac2bc`.
+GitHub Actions Quality: https://github.com/MarckDL/Mysic_App/actions/runs/40191284274
+
+Backend y mobile completados con success. Se verificó el log backend: 53 pruebas
+correctas, incluidos los tres casos de PostgreSQL real, sin omisiones. Migración
+desde cero, validación/generación Prisma, lint, tipos, formato y build correctos.
+Flutter pasó formato, análisis, pruebas, conversor Python y compilación APK debug.
+
+Esta sección actualiza los pendientes históricos de integración y CI descritos
+anteriormente. Permanece pendiente publicar el registro y la etiqueta anotada
+`sprint-03-v0.3.0` sobre el commit probado. La referencia remota debe verificarse
+antes de declarar cerrado el Sprint.
