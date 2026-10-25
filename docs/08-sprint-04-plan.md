@@ -1,7 +1,7 @@
 # Sprint 04 — Plan de catálogo experimental
 
 Fecha: 25 de octubre de 2026.
-Estado: pruebas locales y aceptación manual completadas; CI y cierre pendientes.
+Estado: validación local, manual y CI completadas; etiqueta pendiente.
 Historia: US-004. Versión prevista: sprint-04-v0.4.0.
 
 ## Objetivo
@@ -313,3 +313,18 @@ aceptación manual aportan la comprobación externa separada.
 
 Pendiente publicar el commit y verificar Quality, incluido APK debug, antes de
 crear la etiqueta sprint-04-v0.4.0. No se ha publicado ni cerrado este Sprint aún.
+
+## Validación remota final
+
+Commit probado: `5e4f8667000cfdd7c43fcedd76b92b2dcb5e0990`.
+Quality: https://github.com/MarckDL/Mysic_App/actions/runs/40196450276
+
+Workflow completado con success. Backend: 88 pruebas correctas, incluidos los tres
+casos PostgreSQL sin omisiones, migraciones, generación Prisma, lint, tipos, formato
+y build. Mobile: formato, análisis, pruebas, conversor Firebase y APK debug correctos.
+La disponibilidad externa del catálogo fue comprobada por separado mediante
+catalog:check y pruebas manuales del usuario; CI usa dobles de proveedor.
+
+Este resultado actualiza los pendientes históricos de CI de este documento.
+Falta publicar este registro y la etiqueta anotada sprint-04-v0.4.0 sobre el commit
+probado, y verificar la referencia remota antes de declarar cerrado el Sprint.
