@@ -1,6 +1,6 @@
 # Sprint 02 — Autenticación Google
 
-Fecha de revisión: 25 de octubre de 2026. Estado: **validación funcional local completada; CI y publicación pendientes**.
+Fecha de revisión: 25 de octubre de 2026. Estado: **validación local y CI completadas; etiqueta pendiente**.
 Historia: US-002. Requisitos: RF-001, RF-002, RF-004, RF-005; soporte inicial de
 RF-008 y RNF-002/003/004/018/025. RF-003 y la identidad UUID interna quedan en Sprint 03.
 
@@ -205,14 +205,19 @@ rechazo de auth/id-token-revoked. No se capturó el HTTP de un token real revoca
   Advertencias Gradle/Kotlin observadas: no bloquearon el build; requieren seguimiento
   de compatibilidad en futuras actualizaciones del toolchain.
 
-## Aceptación pendiente
+## Validación remota y cierre pendiente
 
-- El usuario completó la verificación final Flutter: 15 archivos sin cambios de
-  formato, flutter analyze sin problemas y 10 pruebas correctas.
-- Ejecutar CI sobre el commit que se publicará.
-- Confirmar backend y mobile correctos en GitHub Actions, incluido APK debug.
-- Publicar commit y etiqueta sprint-02-v0.2.0 después de verificar CI.
-  No se declara el Sprint cerrado ni etiquetado en este registro.
+Commit publicado: `be8b81968b8370ea43e6b17ef9ef424144baf14e`.
+GitHub Actions Quality #4: backend y mobile completados con success, incluidos
+formato, análisis, pruebas, conversor Python y compilación APK debug.
+
+Evidencia: https://github.com/MarckDL/Mysic_App/actions/runs/40176723434
+
+El usuario completó la última verificación Flutter: 15 archivos sin cambios de
+formato, análisis sin problemas y 10 pruebas correctas.
+
+Falta publicar este registro documental y la etiqueta anotada `sprint-02-v0.2.0`
+sobre el commit verificado. No se declara publicada hasta verificar su referencia.
 
 ## Fuentes oficiales
 
