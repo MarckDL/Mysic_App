@@ -1,7 +1,7 @@
 # Sprint 05 — Plan y ejecución de viabilidad de reproducción
 
 Fecha: 25 de octubre de 2026. Historia: US-005.
-Estado: demo validada por el usuario; revisión final, CI y etiqueta pendientes.
+Estado: demo y CI verificadas; publicación de etiqueta pendiente.
 Versión prevista: sprint-05-v0.5.0.
 
 ## Objetivo
@@ -136,3 +136,21 @@ flutter test --no-enable-impeller se intentó desde el ejecutor y quedó bloquea
 antes de ejecutar por caché del SDK en filesystem de solo lectura. No se declara
 la suite móvil completa pasada a partir de ese intento; la CI será obligatoria.
 La validación manual de la demo fue confirmada por el usuario.
+
+## Validación remota final
+
+Commit probado: `912823e209fddafd4f0ba9094f2dea40a7249a3b`.
+Quality: https://github.com/MarckDL/Mysic_App/actions/runs/40612971829
+
+Workflow completado con success. Backend: 104 pruebas correctas, incluidas las
+3 de PostgreSQL sin omisiones; migración, generación Prisma, lint, tipos, formato
+y build correctos. Mobile: formato, análisis, suite Flutter con backend de shaders
+consistente, 5 pruebas Python y compilación APK debug correctos. El fallo anterior
+de ink_sparkle no se reprodujo en esta CI. La demo real fue validada por el usuario.
+
+Este resultado actualiza los pendientes históricos de pruebas y CI del documento.
+La resolución real de audio de youtubei.js sigue trasladada al Sprint 06 por acuerdo
+expreso; este cierre no afirma reproducción de pistas YouTube ni streaming remoto.
+
+Falta publicar el registro y la etiqueta anotada sprint-05-v0.5.0 sobre el commit
+probado. Verificar la referencia remota antes de declarar cerrado el Sprint.
