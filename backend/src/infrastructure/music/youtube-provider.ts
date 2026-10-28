@@ -94,7 +94,8 @@ export class YoutubeProvider implements MusicProvider {
   async resolvePlayback() {
     return {
       mode: 'unavailable' as const,
-      reason: 'La reproducción se valida en Sprint 05',
+      reason:
+        'No hay una fuente de audio autorizada y compatible configurada para esta pista de YouTube.',
     };
   }
 }

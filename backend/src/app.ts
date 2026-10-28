@@ -15,6 +15,10 @@ import { CatalogLimiter } from './modules/catalog/application/catalog-limiter.js
 import type { MusicProvider } from './modules/catalog/domain/music-provider.js';
 import { createCatalogRouter } from './modules/catalog/presentation/catalog.routes.js';
 
+import { AuthorizedDemoProvider } from './infrastructure/music/authorized-demo-provider.js';
+import { PlaybackService } from './modules/playback/application/playback-service.js';
+import { createPlaybackRouter } from './modules/playback/presentation/playback.routes.js';
+
 export function createApp(
   options: {
     tokenVerifier?: TokenVerifier;
@@ -22,6 +26,7 @@ export function createApp(
     musicProvider?: MusicProvider;
     catalogService?: CatalogService;
     catalogLimiter?: CatalogLimiter;
+    playbackService?: PlaybackService;
   } = {},
 ) {
   const app = express();
@@ -39,12 +44,25 @@ export function createApp(
   );
   app.use('/api/v1/auth', createAuthRouter(verifier, users));
   app.use('/api/v1/users', createUsersRouter(verifier, users));
+  const music = options.musicProvider ?? new YoutubeProvider();
+  app.use(
+    '/api/v1/playback',
+    createPlaybackRouter(
+      verifier,
+      options.playbackService ??
+        new PlaybackService(
+          new Map([
+            ['youtube', music],
+            ['demo', new AuthorizedDemoProvider()],
+          ]),
+        ),
+    ),
+  );
   app.use(
     '/api/v1',
     createCatalogRouter(
       verifier,
-      options.catalogService ??
-        new CatalogService(options.musicProvider ?? new YoutubeProvider()),
+      options.catalogService ?? new CatalogService(music),
       options.catalogLimiter,
     ),
   );

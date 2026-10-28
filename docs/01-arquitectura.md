@@ -436,3 +436,20 @@ Flutter usa go_router 18.1.1 dentro del gate de perfil verificado (Dart >=3.12),
 GET autenticados con renovación única y pantallas de búsqueda/detalle. Cambio de
 cuenta elimina navegación y solicitudes anteriores. No se habilita reproducción.
 La evidencia y los pendientes se registran en docs/08-sprint-04-plan.md.
+
+## 18. Incremento Sprint 05: reproducción de prueba
+
+POST /api/v1/playback/resolve verifica Firebase Google, valida source/sourceId y
+limita 30 resoluciones por UID/minuto. Registro explícito de MusicProvider:
+YoutubeProvider (unavailable) y AuthorizedDemoProvider (asset sintético propio).
+
+PlaybackResult es una unión discriminada: direct con delivery=asset, assetPath,
+contentType y duración; embedded con URL (no habilitado); unavailable con motivo.
+El servicio solo permite el asset registrado. No recibe URLs arbitrarias ni devuelve
+credenciales. Resoluciones no-store, con timeout/abort y errores controlados.
+
+Flutter utiliza just_audio 0.10.6 y audio_session 0.2.4 en una pantalla de prueba,
+sin autoplay. Maneja foco, desconexión de auriculares, pausa al fondo y limpieza
+al salir/cambiar de cuenta. No hay servicio de reproducción en segundo plano.
+El asset no demuestra streaming HTTPS ni reproducción de YouTube. La validación
+real de ese proveedor se trasladó expresamente a Sprint 06 por acuerdo del usuario.

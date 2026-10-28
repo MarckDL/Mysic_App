@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../features/playback/presentation/demo_audio_screen.dart';
 import '../../features/authentication/domain/mysic_profile.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/search/presentation/search_screen.dart';
@@ -17,6 +18,10 @@ class CatalogNavigator extends StatefulWidget {
 class _CatalogNavigatorState extends State<CatalogNavigator> {
   late final GoRouter _router = GoRouter(
     routes: [
+      GoRoute(
+        path: '/audio-test',
+        builder: (context, state) => const DemoAudioScreen(),
+      ),
       GoRoute(
         path: '/',
         builder: (context, state) => HomeScreen(profile: widget.profile),

@@ -43,6 +43,12 @@ class HomeScreen extends ConsumerWidget {
                   icon: const Icon(Icons.search),
                   label: const Text('Buscar música'),
                 ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () => context.push('/audio-test'),
+                  icon: const Icon(Icons.volume_up),
+                  label: const Text('Prueba de audio'),
+                ),
                 if (action.hasError)
                   const Text(
                     'No se pudo cerrar la sesión. Inténtalo de nuevo.',

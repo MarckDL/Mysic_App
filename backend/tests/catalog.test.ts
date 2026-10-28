@@ -27,7 +27,7 @@ function provider() {
     getTrack: vi.fn<MusicProvider['getTrack']>().mockResolvedValue(track),
     resolvePlayback: vi
       .fn<MusicProvider['resolvePlayback']>()
-      .mockResolvedValue({ mode: 'unavailable' }),
+      .mockResolvedValue({ mode: 'unavailable', reason: 'No source' }),
   };
 }
 function fixture(music = provider()) {

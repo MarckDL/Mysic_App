@@ -19,10 +19,24 @@ class AuthenticatedApiClient {
     String path, {
     Map<String, dynamic>? query,
     CancelToken? cancelToken,
+  }) => _request('GET', path, query: query, cancelToken: cancelToken);
+
+  Future<Map<String, dynamic>> post(
+    String path, {
+    required Map<String, dynamic> body,
+    CancelToken? cancelToken,
+  }) => _request('POST', path, body: body, cancelToken: cancelToken);
+
+  Future<Map<String, dynamic>> _request(
+    String method,
+    String path, {
+    Map<String, dynamic>? query,
+    Map<String, dynamic>? body,
+    CancelToken? cancelToken,
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw const AuthFailure('Inicia sesión con Google.');
-    for (var attempt = 0; attempt < 2; attempt++) {
+    for (var attempt = 0; attempt < (method == 'GET' ? 2 : 1); attempt++) {
       try {
         final token = await _auth.getIdToken(forceRefresh: attempt == 1);
         if (_auth.currentUser?.uid != uid) {
@@ -32,11 +46,15 @@ class AuthenticatedApiClient {
           await _auth.signOut();
           throw const AuthFailure('Tu sesión terminó.');
         }
-        final response = await _dio.get<Map<String, dynamic>>(
+        final response = await _dio.request<Map<String, dynamic>>(
           path,
           queryParameters: query,
+          data: body,
           cancelToken: cancelToken,
-          options: Options(headers: {'Authorization': 'Bearer $token'}),
+          options: Options(
+            method: method,
+            headers: {'Authorization': 'Bearer $token'},
+          ),
         );
         if (_auth.currentUser?.uid != uid) {
           throw const AuthFailure('La cuenta cambió.');
@@ -51,7 +69,7 @@ class AuthenticatedApiClient {
           throw const AuthFailure('La cuenta cambió.');
         }
         final status = error.response?.statusCode;
-        if (status == 401 && attempt == 0) continue;
+        if (method == 'GET' && status == 401 && attempt == 0) continue;
         if (status == 401 || status == 403) {
           await _auth.signOut();
           throw const AuthFailure('Tu sesión terminó. Inicia sesión de nuevo.');

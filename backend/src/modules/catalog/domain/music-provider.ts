@@ -1,6 +1,6 @@
 export interface Track {
   id: string;
-  source: 'youtube';
+  source: 'youtube' | 'demo';
   sourceId: string;
   title: string;
   artistName: string;
@@ -8,17 +8,16 @@ export interface Track {
   thumbnailUrl: string | null;
 }
 
-export interface PlaybackResult {
-  mode: 'direct' | 'embedded' | 'unavailable';
-  url?: string;
-  expiresAt?: string;
-  reason?: string;
-}
+export type { PlaybackResult } from '../../playback/domain/playback-result.js';
+import type { PlaybackResult } from '../../playback/domain/playback-result.js';
 
 export interface MusicProvider {
   search(query: string, signal?: AbortSignal): Promise<Track[]>;
   getTrack(sourceId: string, signal?: AbortSignal): Promise<Track | null>;
-  resolvePlayback(sourceId: string): Promise<PlaybackResult>;
+  resolvePlayback(
+    sourceId: string,
+    signal?: AbortSignal,
+  ): Promise<PlaybackResult>;
 }
 
 export class ProviderUnavailableError extends Error {}

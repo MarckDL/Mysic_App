@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/catalog_providers.dart';
 import 'catalog_widgets.dart';
+import '../../playback/presentation/playback_availability_panel.dart';
 
 class TrackDetailScreen extends ConsumerWidget {
   const TrackDetailScreen({super.key, required this.id});
@@ -35,6 +36,10 @@ class TrackDetailScreen extends ConsumerWidget {
                 const Text('Fuente: YouTube Music · Catálogo experimental'),
                 const SizedBox(height: 8),
                 const Text('Reproducción aún no disponible en Mysic.'),
+                PlaybackAvailabilityPanel(
+                  key: ValueKey(track.id),
+                  sourceId: track.id.substring(8),
+                ),
               ],
             ),
           ),

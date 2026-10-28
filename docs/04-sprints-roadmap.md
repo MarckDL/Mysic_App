@@ -276,6 +276,13 @@ Aceptación:
 
 Etiqueta: `sprint-05-v0.5.0`
 
+### Ajuste de alcance acordado
+
+El usuario validó la demo del Sprint 05 y acordó trasladar la prueba de resolución
+real de audio de youtubei.js al Sprint 06. Sprint 05 verifica audio sintético propio
+con just_audio y el contrato de disponibilidad; no acredita reproducción del catálogo.
+La decisión y los límites de evidencia se registran en docs/09-sprint-05-viabilidad.md.
+
 ## 10. Sprint 06 — Reproductor
 
 ### Objetivo
@@ -288,6 +295,12 @@ Como usuario, quiero controlar la reproducción incluso cuando la app está en s
 
 Tareas:
 
+- Primero probar resolución real de audio de youtubei.js con contenido propio o
+  autorizado, sin eludir restricciones, y comprobar reproducción en Android.
+- Registrar viabilidad y limitaciones. No asumir que cualquier pista del catálogo
+  se puede reproducir ni prometer su disponibilidad antes de verificarla.
+- Si no hay una fuente compatible, mantener la demo autorizada y documentar
+  la alternativa antes de ampliar reproducción sobre ese proveedor.
 - Crear PlayerController.
 - Implementar play/pause.
 - Implementar seek cuando corresponda.
