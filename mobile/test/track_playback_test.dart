@@ -48,7 +48,7 @@ void main() {
       await controller.start('aqz-KE-bpKQ');
       expect(engine.sourceId, 'aqz-KE-bpKQ');
       expect(engine.token, 'firebase-id-token-for-test');
-      expect(auth.refreshes, [true]);
+      expect(auth.refreshes, [false]);
       expect(controller.phase, TrackAudioPhase.playing);
       await controller.pause();
       expect(controller.phase, TrackAudioPhase.paused);

@@ -140,7 +140,10 @@ class TrackPlaybackController extends ChangeNotifier {
       await _preparation;
       if (!_valid(generation)) return;
       stage = 'session';
-      final token = await _auth.getIdToken(forceRefresh: true);
+      // Firebase renueva automáticamente tokens vencidos. Usar el token válido
+      // en caché evita una solicitud de red adicional al iniciar cada canción;
+      // los clientes HTTP conservan su reintento con refresh ante un 401.
+      final token = await _auth.getIdToken();
       if (!_valid(generation)) return;
       if (token == null || token.isEmpty) throw StateError('Sesión inválida');
       stage = 'audio-load';

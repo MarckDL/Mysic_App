@@ -145,7 +145,7 @@ void main() {
     await tester.tap(find.text('Reproducir audio'));
     await tester.pumpAndSettle();
     expect(audio.sourceId, 'abcdefghijk');
-    expect(auth.refreshes, contains(true));
+    expect(auth.refreshes, contains(false));
     expect(find.text('Detalle de canción'), findsOneWidget);
     expect(audio.disposals, 0);
     expect(find.text('Pausar'), findsOneWidget);

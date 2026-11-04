@@ -118,8 +118,12 @@ try {
     enabledTrackTypes: EnabledTrackTypes.AUDIO_ONLY,
     audioPreferences: { container: 'mp4', preferredAudioCodec: 'aac' },
     isPostLiveDvr: false,
-    maxRetries: 0,
-    stallDetectionMs: 10000,
+    // Un fallo transitorio de un segmento no debe terminar una canción. Tres
+    // reintentos mantienen el límite acotado sin convertir un rechazo real en
+    // un bucle. El umbral normal de 30 s evita confundir el backoff indicado
+    // por SABR con tres stalls consecutivos alrededor del primer minuto.
+    maxRetries: 3,
+    stallDetectionMs: 30000,
   });
   const reader = result.audioStream.getReader();
   const cancelled = new Promise((_, reject) =>
