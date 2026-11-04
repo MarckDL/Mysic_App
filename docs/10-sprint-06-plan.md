@@ -1,7 +1,7 @@
 # Sprint 06 — Audio del catálogo y reproductor
 
 Fecha de planificación: 27 de octubre de 2026.
-Estado: escucha del catálogo confirmada por el usuario; cola/mini reproductor/servicio implementados, validación Android de fondo pendiente.
+Estado: escucha del catálogo confirmada por el usuario; cola/mini reproductor/servicio implementados y CI aprobada, validación Android de fondo pendiente.
 Historia: US-006 y continuación explícita de viabilidad US-005.
 Versión prevista: sprint-06-v0.6.0.
 
@@ -480,10 +480,15 @@ Verificación local del 3 de noviembre de 2026: 42 pruebas Flutter y las 5 prueb
 Python de configuración aprobadas, análisis sin problemas, formato de 47 archivos
 sin cambios y APK debug compilado con la configuración Firebase local. Backend:
 116 pruebas aprobadas, lint, tipos, formato y build correctos; 3 pruebas PostgreSQL
-se omitieron porque Docker estaba inactivo y no había servidor PostgreSQL local.
+se omitieron localmente porque Docker estaba inactivo y no había servidor PostgreSQL.
 Se corrigió la carrera de dos restricciones únicas durante sync concurrente y la
-prueba de integración ahora repite cinco altas simultáneas; su validación con
-PostgreSQL real queda obligatoriamente a cargo de la CI antes del cierre.
+prueba de integración ahora repite cinco altas simultáneas.
+
+GitHub Actions Quality 41767903575 aprobó la rama de cierre: backend con migraciones,
+PostgreSQL real, 13 archivos y 119 pruebas aprobadas sin omisiones, además de lint,
+tipos, formato y build; mobile con análisis, pruebas Flutter, 5 pruebas Python y APK
+debug correctos. Las advertencias del runner sobre acciones basadas en Node 20 y la
+futura imagen Ubuntu 26 no afectaron el resultado y quedan como mantenimiento de CI.
 
 El diagnóstico autorizado SABR tuvo un primer `stream-error` transitorio y pasó al
 repetirlo: 486303 bytes MP4/AAC de Big Buck Bunny, con `moof`/`mdat`; FFprobe detectó
