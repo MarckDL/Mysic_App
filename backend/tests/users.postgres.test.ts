@@ -26,15 +26,25 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       }
     });
     it('resuelve sync concurrente conservando un único UUID y persiste cambios', async () => {
-      const profile = {
-        firebaseUid: `${prefix}-a`,
-        googleId: `${prefix}-google`,
+      let profile = {
+        firebaseUid: `${prefix}-concurrent-0`,
+        googleId: `${prefix}-google-0`,
         displayName: 'Cuenta A',
       };
-      const users = await Promise.all(
-        Array.from({ length: 8 }, () => repository.sync(profile)),
-      );
-      expect(new Set(users.map((u) => u.id)).size).toBe(1);
+      let users = [] as Awaited<ReturnType<typeof repository.sync>>[];
+      // Repite el alta real para que la prueba no dependa de que una sola carrera
+      // alcance a solapar las dos restricciones únicas en PostgreSQL.
+      for (let attempt = 0; attempt < 5; attempt++) {
+        profile = {
+          ...profile,
+          firebaseUid: `${prefix}-concurrent-${attempt}`,
+          googleId: `${prefix}-google-${attempt}`,
+        };
+        users = await Promise.all(
+          Array.from({ length: 8 }, () => repository.sync(profile)),
+        );
+        expect(new Set(users.map((u) => u.id)).size).toBe(1);
+      }
       const updated = await repository.sync({
         ...profile,
         displayName: 'Cuenta actualizada',
