@@ -1,3 +1,7 @@
+import '../data/mysic_audio_handler.dart';
+import '../data/just_audio_track_engine.dart';
+import '../domain/track_audio_engine.dart';
+import 'track_playback_controller.dart';
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -47,3 +51,29 @@ final playbackAvailabilityProvider = FutureProvider.autoDispose
           .watch(playbackRepositoryProvider)
           .resolve('youtube', sourceId, cancelToken: cancel);
     }, retry: (count, error) => null);
+
+final mediaHandlerProvider = Provider<MysicAudioHandler?>((ref) => null);
+
+final trackAudioEngineFactoryProvider = Provider<TrackAudioEngine Function()>(
+  (ref) =>
+      () => JustAudioTrackEngine(ApiConfig.baseUrl),
+);
+final trackPlaybackControllerProvider =
+    Provider.autoDispose<TrackPlaybackController>((ref) {
+      // El controlador escucha logout; no reconstruirlo sin usuario al salir.
+      final auth = ref.watch(authRepositoryProvider);
+      final uid = auth.currentUser?.uid;
+      if (uid == null) throw const AuthFailure('Inicia sesión con Google.');
+      final controller = TrackPlaybackController(
+        auth,
+        ref.watch(trackAudioEngineFactoryProvider)(),
+        uid,
+      );
+      final handler = ref.watch(mediaHandlerProvider);
+      handler?.bind(controller);
+      ref.onDispose(() {
+        handler?.unbind(controller);
+        controller.dispose();
+      });
+      return controller;
+    });

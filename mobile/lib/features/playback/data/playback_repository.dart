@@ -26,7 +26,13 @@ class ApiPlaybackRepository implements PlaybackRepository {
         cancelToken: cancelToken,
       ),
     );
-    if (source != 'demo' && result.available) {
+    if (result.available &&
+        !((source == 'demo' &&
+                sourceId == PlaybackResolution.demoId &&
+                result.assetPath != null) ||
+            (source == 'youtube' &&
+                result.sourceId == sourceId &&
+                result.streamPath != null))) {
       throw const PlaybackFailure('Esta fuente no está habilitada.');
     }
     return result;

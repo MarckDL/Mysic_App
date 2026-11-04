@@ -1,3 +1,6 @@
+import 'package:audio_service/audio_service.dart';
+import 'features/playback/data/mysic_audio_handler.dart';
+import 'features/playback/application/playback_providers.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -20,5 +23,39 @@ Future<void> main() async {
       firebaseReady = false;
     }
   }
-  runApp(ProviderScope(child: MysicApp(firebaseReady: firebaseReady)));
+  MysicAudioHandler? handler;
+  if (firebaseReady) {
+    try {
+      handler = MysicAudioHandler();
+      await AudioService.init(
+        builder: () => handler!,
+        config: const AudioServiceConfig(
+          androidNotificationChannelId: 'com.mysic.mysic.playback',
+          androidNotificationChannelName: 'Reproducción de Mysic',
+          androidStopForegroundOnPause: false,
+          androidNotificationIcon: 'drawable/ic_stat_music',
+        ),
+      );
+    } catch (_) {
+      debugPrint('audio_service_start_failed');
+      runApp(
+        const MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: Text(
+                'No se pudo iniciar el servicio de audio. Cierra y vuelve a abrir Mysic.',
+              ),
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+  }
+  runApp(
+    ProviderScope(
+      overrides: [mediaHandlerProvider.overrideWithValue(handler)],
+      child: MysicApp(firebaseReady: firebaseReady),
+    ),
+  );
 }

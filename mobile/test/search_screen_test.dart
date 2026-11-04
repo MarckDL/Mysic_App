@@ -1,3 +1,5 @@
+import 'package:mysic/features/playback/application/playback_providers.dart';
+import 'support/fake_track_audio_engine.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -52,6 +54,9 @@ void main() {
           authRepositoryProvider.overrideWithValue(
             FakeAuthRepository(user: const AuthUser(uid: 'a')),
           ),
+          trackAudioEngineFactoryProvider.overrideWithValue(
+            FakeTrackAudioEngine.new,
+          ),
           catalogRepositoryProvider.overrideWithValue(repository),
         ],
         child: const MaterialApp(home: SearchScreen()),
@@ -99,19 +104,26 @@ void main() {
   testWidgets('navega al detalle y elimina las rutas al cerrar sesión', (
     tester,
   ) async {
-    final auth = FakeAuthRepository(user: const AuthUser(uid: 'a'));
+    final auth = FakeAuthRepository(user: const AuthUser(uid: 'a'))
+      ..emitOnTokenRefresh = true;
+    final audio = FakeTrackAudioEngine();
     final repository = SearchFake();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(auth),
-          verifiedSessionProvider.overrideWith(
-            (ref) async => const MysicProfile(
+          verifiedSessionProvider.overrideWith((ref) async {
+            // Reproducir la dependencia real: antes, un evento de token de
+            // la misma cuenta invalidaba el perfil y desmontaba el audio.
+            final uid = ref.watch(authStateProvider).asData?.value?.uid;
+            if (uid == null) throw const AuthFailure('Sesión terminada');
+            return MysicProfile(
               id: '00000000-0000-4000-8000-000000000001',
-              firebaseUid: 'a',
+              firebaseUid: uid,
               displayName: 'Ana',
-            ),
-          ),
+            );
+          }),
+          trackAudioEngineFactoryProvider.overrideWithValue(() => audio),
           catalogRepositoryProvider.overrideWithValue(repository),
         ],
         child: const MysicApp(firebaseReady: true),
@@ -128,14 +140,51 @@ void main() {
     expect(find.text('Detalle de canción'), findsOneWidget);
     expect(repository.detailCalls, ['youtube:abcdefghijk']);
     expect(find.text('Artist'), findsOneWidget);
-    expect(
-      find.text('Reproducción aún no disponible en Mysic.'),
-      findsOneWidget,
-    );
+    expect(find.text('Reproducir audio'), findsOneWidget);
+    await tester.ensureVisible(find.text('Reproducir audio'));
+    await tester.tap(find.text('Reproducir audio'));
+    await tester.pumpAndSettle();
+    expect(audio.sourceId, 'abcdefghijk');
+    expect(auth.refreshes, contains(true));
+    expect(find.text('Detalle de canción'), findsOneWidget);
+    expect(audio.disposals, 0);
+    expect(find.text('Pausar'), findsOneWidget);
+    // Navegar ya no destruye el motor: la sesión mantiene el mini reproductor.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Buscar música'), findsOneWidget);
+    expect(audio.disposals, 0);
+    await tester.tap(find.byTooltip('Pausar audio'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Continuar audio'));
+    await tester.pumpAndSettle();
+    final stops = audio.stops;
+    for (final state in [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+    ]) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+    }
+    await tester.pump();
+    expect(audio.stops, stops);
+    for (final state in [
+      AppLifecycleState.hidden,
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ]) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+    }
+    await tester.pump();
+    await tester.tap(find.byTooltip('Abrir reproductor'));
+    await tester.pumpAndSettle();
+    expect(find.text('Reproductor'), findsOneWidget);
+    expect(find.text('Cola (1/100)'), findsOneWidget);
     await auth.signOut();
     await tester.pumpAndSettle();
     expect(find.text('Continuar con Google'), findsOneWidget);
     expect(find.text('Detalle de canción'), findsNothing);
     expect(find.text('Song'), findsNothing);
+    expect(audio.disposals, 1);
   });
 }

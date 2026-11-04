@@ -35,10 +35,14 @@ class TrackDetailScreen extends ConsumerWidget {
                 const SizedBox(height: 24),
                 const Text('Fuente: YouTube Music · Catálogo experimental'),
                 const SizedBox(height: 8),
-                const Text('Reproducción aún no disponible en Mysic.'),
+                const Text('Reproducción de audio experimental'),
+                if (track.id == 'youtube:aqz-KE-bpKQ')
+                  const Text(
+                    'Big Buck Bunny · © 2008 Blender Foundation · bigbuckbunny.org · CC BY 3.0',
+                  ),
                 PlaybackAvailabilityPanel(
                   key: ValueKey(track.id),
-                  sourceId: track.id.substring(8),
+                  track: track,
                 ),
               ],
             ),

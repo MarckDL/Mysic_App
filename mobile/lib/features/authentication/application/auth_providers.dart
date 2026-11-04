@@ -13,7 +13,12 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
 });
 
 final authStateProvider = StreamProvider<AuthUser?>((ref) {
-  return ref.watch(authRepositoryProvider).authStateChanges();
+  // Renovar un token de la misma cuenta no desmonta navegación ni audio.
+  // Logout y cambio de UID sí deben invalidar la sesión verificada.
+  return ref
+      .watch(authRepositoryProvider)
+      .authStateChanges()
+      .distinct((previous, next) => previous?.uid == next?.uid);
 }, retry: (retryCount, error) => null);
 
 final backendSessionClientProvider = Provider<BackendSessionClient>((ref) {

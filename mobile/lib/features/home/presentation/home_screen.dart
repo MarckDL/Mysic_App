@@ -49,6 +49,11 @@ class HomeScreen extends ConsumerWidget {
                   icon: const Icon(Icons.volume_up),
                   label: const Text('Prueba de audio'),
                 ),
+                TextButton.icon(
+                  onPressed: () => context.push('/youtube-audio-test'),
+                  icon: const Icon(Icons.headphones),
+                  label: const Text('Probar audio de YouTube'),
+                ),
                 if (action.hasError)
                   const Text(
                     'No se pudo cerrar la sesión. Inténtalo de nuevo.',

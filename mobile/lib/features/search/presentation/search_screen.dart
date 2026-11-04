@@ -1,3 +1,4 @@
+import '../../playback/application/playback_providers.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -75,11 +76,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                               ),
                             )
                           : ListView.separated(
-                              itemCount: tracks.length,
+                              itemCount: tracks.length + 1,
                               separatorBuilder: (context, index) =>
                                   const Divider(height: 1),
                               itemBuilder: (context, index) {
-                                final track = tracks[index];
+                                if (index == 0) {
+                                  return TextButton.icon(
+                                    onPressed: () => unawaited(
+                                      ref
+                                          .read(trackPlaybackControllerProvider)
+                                          .playQueue(tracks),
+                                    ),
+                                    icon: const Icon(Icons.playlist_play),
+                                    label: const Text('Reproducir resultados'),
+                                  );
+                                }
+                                final track = tracks[index - 1];
                                 return ListTile(
                                   leading: TrackArtwork(
                                     url: track.thumbnailUrl,
@@ -94,7 +106,41 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                                  trailing: Text(track.durationLabel ?? '—'),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        tooltip: 'Reproducir canción',
+                                        icon: const Icon(Icons.play_arrow),
+                                        onPressed: () => unawaited(
+                                          ref
+                                              .read(
+                                                trackPlaybackControllerProvider,
+                                              )
+                                              .playTrack(track),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Añadir a la cola',
+                                        icon: const Icon(Icons.queue_music),
+                                        onPressed: () {
+                                          ref
+                                              .read(
+                                                trackPlaybackControllerProvider,
+                                              )
+                                              .enqueue(track);
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Cola actualizada'),
+                                              duration: Duration(seconds: 1),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  ),
                                   onTap: () => context.push(
                                     '/tracks/${Uri.encodeComponent(track.id)}',
                                   ),

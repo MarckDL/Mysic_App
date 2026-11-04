@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../features/authentication/domain/auth_repository.dart';
 
-Dio configureApiDio(String baseUrl, [Dio? dio]) {
+Uri validatedApiUri(String baseUrl) {
   final uri = Uri.parse(baseUrl);
   final local =
       kDebugMode && ['10.0.2.2', '127.0.0.1', 'localhost'].contains(uri.host);
@@ -14,6 +14,11 @@ Dio configureApiDio(String baseUrl, [Dio? dio]) {
       (uri.scheme != 'https' && !(uri.scheme == 'http' && local))) {
     throw const AuthFailure('La dirección del servidor no es válida.');
   }
+  return uri;
+}
+
+Dio configureApiDio(String baseUrl, [Dio? dio]) {
+  validatedApiUri(baseUrl);
   final client = dio ?? Dio();
   client.options = BaseOptions(
     baseUrl: baseUrl,
