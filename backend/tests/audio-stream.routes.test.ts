@@ -92,7 +92,7 @@ describe('audio nativo autenticado', () => {
     expect(response.status).toBe(503);
     expect(JSON.stringify(response.body)).not.toContain('secret');
   });
-  it('limita streams simultáneos por UID y libera el cupo al desconectar', async () => {
+  it('reemplaza el stream previo del mismo UID para anterior/siguiente', async () => {
     const signals: AbortSignal[] = [];
     const { app, transport } = setup(async (_id, signal) => {
       signals.push(signal);
@@ -112,21 +112,52 @@ describe('audio nativo autenticado', () => {
         signal: abort.signal,
       });
       expect(response.status).toBe(200);
-      expect(
-        (await fetch(url, { headers: { Authorization: 'Bearer a' } })).status,
-      ).toBe(429);
-      expect(transport.open).toHaveBeenCalledTimes(1);
-      abort.abort();
-      await vi.waitFor(() => expect(signals[0]?.aborted).toBe(true));
       const secondAbort = new AbortController();
       const second = await fetch(url, {
         headers: { Authorization: 'Bearer a' },
         signal: secondAbort.signal,
       });
       expect(second.status).toBe(200);
+      expect(transport.open).toHaveBeenCalledTimes(2);
+      await vi.waitFor(() => expect(signals[0]?.aborted).toBe(true));
       secondAbort.abort();
     } finally {
       abort.abort();
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+  it('mantiene el límite global al reemplazar solo por UID', async () => {
+    const { app, transport } = setup(async () => {
+      const audio = new PassThrough();
+      audio.write('init');
+      return audio;
+    });
+    const server = app.listen(0);
+    await once(server, 'listening');
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error();
+    const url = `http://127.0.0.1:${address.port}${path}`;
+    const firstAbort = new AbortController();
+    const secondAbort = new AbortController();
+    try {
+      const first = await fetch(url, {
+        headers: { Authorization: 'Bearer a' },
+        signal: firstAbort.signal,
+      });
+      const second = await fetch(url, {
+        headers: { Authorization: 'Bearer b' },
+        signal: secondAbort.signal,
+      });
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+      expect(
+        (await fetch(url, { headers: { Authorization: 'Bearer c' } })).status,
+      ).toBe(429);
+      expect(transport.open).toHaveBeenCalledTimes(2);
+    } finally {
+      firstAbort.abort();
+      secondAbort.abort();
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

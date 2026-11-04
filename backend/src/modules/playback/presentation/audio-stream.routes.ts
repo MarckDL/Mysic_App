@@ -13,7 +13,7 @@ export function createAudioStreamRouter(
   transport: AudioStreamTransport,
 ) {
   const router = Router();
-  const active = new Set<string>();
+  const active = new Map<string, AbortController>();
   const limiter = new CatalogLimiter();
   router.get(
     '/audio/:sourceId',
@@ -39,7 +39,8 @@ export function createAudioStreamRouter(
         return;
       }
       const wait = limiter.consume(uid);
-      if (wait !== null || active.has(uid) || active.size >= 2) {
+      const previous = active.get(uid);
+      if (wait !== null || (!previous && active.size >= 2)) {
         response.setHeader('Retry-After', wait ?? 2);
         response.status(429).json({
           error: {
@@ -53,8 +54,13 @@ export function createAudioStreamRouter(
         response.status(416).end();
         return;
       }
-      active.add(uid);
       const controller = new AbortController();
+      // Los controles siguiente/anterior abren la nueva pista apenas just_audio
+      // termina stop(). El cierre HTTP anterior puede llegar unos milisegundos
+      // después: se reemplaza solo el stream del mismo usuario en vez de fallar
+      // con 429, sin ampliar el límite global de usuarios concurrentes.
+      previous?.abort();
+      active.set(uid, controller);
       const cancel = () => controller.abort();
       response.once('close', cancel);
       try {
@@ -78,7 +84,7 @@ export function createAudioStreamRouter(
         } else if (!response.destroyed) response.destroy();
       } finally {
         cancel();
-        active.delete(uid);
+        if (active.get(uid) === controller) active.delete(uid);
         response.off('close', cancel);
       }
     },
