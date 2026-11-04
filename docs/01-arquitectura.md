@@ -453,3 +453,88 @@ sin autoplay. Maneja foco, desconexión de auriculares, pausa al fondo y limpiez
 al salir/cambiar de cuenta. No hay servicio de reproducción en segundo plano.
 El asset no demuestra streaming HTTPS ni reproducción de YouTube. La validación
 real de ese proveedor se trasladó expresamente a Sprint 06 por acuerdo del usuario.
+
+## 19. Incremento Sprint 06: audio nativo experimental
+
+La preferencia confirmada del usuario es audio nativo de YouTube, sin reproductor
+visible embebido. SABR no ofrece en este entorno una URL de archivo compatible con
+just_audio. Se adapta la entrega mediante un puente de medios en el backend para
+esta prueba; sustituye la hipótesis de entrega directa del plan inicial.
+
+- POST /api/v1/playback/resolve conserva la demo y devuelve para YouTube una ruta
+  candidata api-stream, ligada al mismo sourceId, seekable:false y
+  availabilityVerified:false. Resolver una ruta no acredita escucha ni disponibilidad.
+- GET /api/v1/playback/audio/:sourceId verifica Firebase/Google antes de abrir el
+  proveedor. Devuelve MP4/AAC fragmentado sin URLs de CDN ni Firebase en el destino
+  externo. No se admiten URLs arbitrarias, query params ni rangos distintos del inicio.
+- youtubei.js y googlevideo permanecen en backend. El transporte funciona en un
+  proceso hijo Node 24 con entorno de red limitado, sin variables Firebase/DB,
+  sin permisos Node de escritura, procesos, addons o workers. El evaluador normal
+  del SDK usa contexto VM con plazo de 500 ms, dentro de ese proceso. Ni VM ni los
+  permisos Node se presentan como aislamiento de sistema operativo para código hostil.
+- Se limitan destinos HTTPS del proveedor y se rechazan redirecciones de fetch.
+  No hay cookies de usuario, generadores de tokens, cambios de identidad ni evasión
+  de restricciones. Un rechazo del proveedor detiene la entrega.
+- Máximo dos streams por instancia de backend, uno por UID; límite de aperturas,
+  30 s de preparación, 20 min/100 MB por conexión. Hay backpressure y cancelación
+  al desconectar. No se escriben archivos de audio ni URLs en BD/caché.
+- Android utiliza just_audio con Authorization directo al backend (sin proxy local).
+  Token renovado antes de cada apertura, controles play/pause/stop, sin seek. Se
+  detiene al salir del detalle, cerrar/cambiar cuenta o ir al fondo. AudioSession
+  pausa ante pérdida de foco o desconexión de auriculares, sin reanudación automática.
+- Inicio incluye una prueba abierta de Big Buck Bunny con atribución. Los detalles
+  del catálogo usan el ID exacto seleccionado. No se garantiza disponibilidad de
+  todas las pistas ni se presume autorización a partir de sus metadatos.
+
+Este incremento requiere Node 24, backend/tool/ además de dist/ y node_modules/.
+El servicio multimedia de segundo plano, mini player y cola siguen pendientes.
+Pruebas de escucha en Android y suites Flutter pendientes de ejecución del usuario.
+
+## 20. Reproductor de sesión, cola y servicio multimedia — Sprint 06
+
+Este incremento sustituye la pausa al navegar/ir al fondo descrita en la sección
+19. El usuario confirmó escucha real desde búsqueda de «Unravel» y «Ravensky» de
+Ado y los controles/cancelación del primer incremento. No se recibieron sus IDs,
+por lo que no se inventan identificadores ni una matriz de disponibilidad universal.
+
+CatalogNavigator mantiene un solo TrackPlaybackController mientras exista la sesión
+verificada. Las pantallas, el mini reproductor, la vista /player y MysicAudioHandler
+comparten ese controlador y su motor just_audio; ninguna vista crea otro reproductor.
+Cerrar/cambiar cuenta elimina el navegador, detiene el motor y vacía cola y metadatos.
+Renovar el token del mismo UID conserva la navegación y el audio.
+
+La cola vive en memoria, máximo 100 elementos, sin duplicados al añadir. Reproducir
+resultados sustituye la cola por los resultados actuales; reproducir una pista la
+selecciona o añade a la cola existente. Añadir a la cola no inicia reproducción.
+Hay anterior/siguiente, salto a un elemento, eliminación de elementos no actuales y
+vaciar. El final avanza una sola vez; una pista fallida conserva un error y permite
+reintentar o saltar manualmente, sin recorrer indefinidamente elementos fallidos.
+La cola no es una playlist persistida ni genera historial en este sprint.
+
+AudioService 0.18.19 se inicializa una vez en main. Su handler publica título,
+artista, portada, duración y estado, y delega los controles al controlador activo.
+No se incluyen ID tokens, headers ni URLs temporales de audio en MediaItem/cola.
+El sistema extrapola la posición: no se reenvían cola/portada en cada tick del motor.
+El mini reproductor y pantalla completa muestran progreso sin slider de seek.
+
+Android usa AudioServiceActivity, servicio mediaPlayback, MediaButtonReceiver,
+WAKE_LOCK, FOREGROUND_SERVICE y FOREGROUND_SERVICE_MEDIA_PLAYBACK e icono propio.
+androidStopForegroundOnPause:false permite continuar desde la notificación tras
+pausar en segundo plano sin volver a iniciar el servicio desde una app oculta.
+No se solicitan exclusiones de batería. Detener publica idle; retirar la tarea
+solicita detener y vaciar la cola. No se promete supervivencia a muerte forzada del
+proceso ni restauración automática de una cola perdida.
+
+AudioSession pausa por foco/auriculares sin auto-resume; una interrupción durante
+carga cancela la intención de reproducción. La demo local antigua limpia la cola
+principal antes de cargar su diagnóstico para evitar audio simultáneo.
+
+El transporte SABR secuencial del backend permanece igual: no admite rangos/seek.
+No se habilita un control de adelantar ficticio. Soportarlo requiere otro incremento
+que acepte posición inicial y sincronice un flujo nuevo/compatible con el motor.
+Los límites de 20 min/100 MB y una conexión por UID siguen vigentes; no se garantiza
+escucha de pistas superiores a esos límites. No se añade precarga de otras canciones.
+
+Referencias de implementación: https://pub.dev/packages/audio_service y su ejemplo
+Android. Validación de notificación, bloqueo de pantalla y ciclo de tarea en un
+Android real/emulado sigue pendiente de la prueba manual del usuario.

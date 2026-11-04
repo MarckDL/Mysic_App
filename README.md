@@ -9,7 +9,7 @@ Permite explorar un catálogo musical, gestionar playlists, guardar favoritos, c
 
 La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 
-> Estado: Sprint 1 cerrado (`sprint-01-v0.1.0`). Sprint 2 cerrado (`sprint-02-v0.2.0`). Sprint 3 cerrado (`sprint-03-v0.3.0`). Sprint 4 cerrado (`sprint-04-v0.4.0`). Sprint 5: demo de audio y CI verificadas; etiqueta pendiente. Prueba de audio de YouTube trasladada al Sprint 6.
+> Estado: Sprint 1 cerrado (`sprint-01-v0.1.0`). Sprint 2 cerrado (`sprint-02-v0.2.0`). Sprint 3 cerrado (`sprint-03-v0.3.0`). Sprint 4 cerrado (`sprint-04-v0.4.0`). Sprint 5 cerrado (`sprint-05-v0.5.0`). Sprint 6: escucha del catálogo confirmada; cola, mini reproductor y servicio implementados, prueba Android de fondo pendiente. Prueba de audio de YouTube trasladada al Sprint 6.
 >
 > El catálogo experimental utiliza `youtubei.js` desde el backend. La disponibilidad de metadatos no garantiza acceso autorizado a streams de audio. La reproducción se valida por separado mediante fuentes compatibles y permitidas.
 
@@ -414,3 +414,15 @@ Proyecto académico y de portafolio.
 En desarrollo.
 
 La documentación describe el diseño objetivo; no implica que todos los módulos estén implementados.
+
+
+### Audio nativo experimental — Sprint 6
+
+Inicio → **Probar audio de YouTube** abre una fuente de prueba abierta (Big Buck
+Bunny). Los detalles de búsqueda incluyen **Reproducir audio** para el mismo ID.
+El backend adapta SABR a MP4/AAC para just_audio; requiere Node 24 y conservar
+`backend/tool/` al ejecutar el build. No garantiza disponibilidad de todas las pistas.
+El reproductor se mantiene durante la sesión al navegar e incluye cola en memoria,
+mini reproductor y servicio multimedia Android; falta validar el segundo plano
+en dispositivo. No incluye seek ni persistencia de cola. Pasos de ejecución y pruebas pendientes en
+[el plan del Sprint 6](docs/10-sprint-06-plan.md).
