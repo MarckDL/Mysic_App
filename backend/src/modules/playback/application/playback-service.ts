@@ -33,6 +33,27 @@ export class PlaybackService {
       // Lista explícita de entrega habilitada. No devolver URLs/arbitrary assets del proveedor.
       if (result.mode === 'direct') {
         if (
+          source === 'youtube' &&
+          result.delivery === 'api-stream' &&
+          /^[A-Za-z0-9_-]{11}$/.test(sourceId) &&
+          result.sourceId === sourceId &&
+          result.path === `/api/v1/playback/audio/${sourceId}` &&
+          result.contentType === 'audio/mp4' &&
+          result.seekable === false &&
+          result.availabilityVerified === false
+        ) {
+          return {
+            mode: 'direct',
+            delivery: 'api-stream',
+            sourceId,
+            path: result.path,
+            contentType: 'audio/mp4',
+            seekable: false,
+            availabilityVerified: false,
+          };
+        }
+
+        if (
           source !== 'demo' ||
           sourceId !== demoSourceId ||
           result.delivery !== 'asset' ||

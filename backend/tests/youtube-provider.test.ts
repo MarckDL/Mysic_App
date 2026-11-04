@@ -41,7 +41,9 @@ describe('adaptador YoutubeProvider', () => {
     expect((await provider.getTrack('abcdefghijk'))?.title).toBe('Song');
     expect(getInfo).toHaveBeenCalledWith('abcdefghijk');
     expect(search).not.toHaveBeenCalled();
-    expect((await provider.resolvePlayback()).mode).toBe('unavailable');
+    expect(
+      (await provider.resolvePlayback('abcdefghijk')).availabilityVerified,
+    ).toBe(false);
   });
   it('rechaza respuestas malformadas sin convertirlas en vacíos válidos', async () => {
     const { provider, search } = fixture();

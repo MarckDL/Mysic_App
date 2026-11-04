@@ -20,6 +20,9 @@ importers:
       firebase-admin:
         specifier: ^14.5.0
         version: 14.5.0
+      googlevideo:
+        specifier: 5.0.1
+        version: 5.0.1
       youtubei.js:
         specifier: 18.3.0
         version: 18.3.0
@@ -1570,6 +1573,9 @@ packages:
   google-logging-utils@2.1.0:
     resolution: {integrity: sha512-1R6uiq6XhXW2ZrcGtZpGgVDsYGzSmveVOn8Pp37qe1fbThHZ34e3t3eXj5mVu6PFSVx9fvB1KNVnYgVtq/BRcA==}
     engines: {node: '>=22'}
+
+  googlevideo@5.0.1:
+    resolution: {integrity: sha512-jbQtretPuwNXUJzjUUaIap6z8cFGMu1tnUi02bhCgcENPoAUQvi4KRRVKFvseZSiDVJ0ocU7gCY2cAfWrwDS9g==}
 
   gopd@1.2.0:
     resolution: {integrity: sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==}
@@ -4180,6 +4186,10 @@ snapshots:
     optional: true
 
   google-logging-utils@2.1.0: {}
+
+  googlevideo@5.0.1:
+    dependencies:
+      '@bufbuild/protobuf': 2.16.0
 
   gopd@1.2.0: {}
 
