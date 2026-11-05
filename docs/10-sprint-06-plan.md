@@ -517,8 +517,14 @@ de reemplazo y del límite global. Commit `742ab1f`.
 
 GitHub Actions Quality 41774836469 aprobó este cambio: backend con migraciones y
 PostgreSQL, 120 pruebas totales sin omisiones, lint, tipos, formato y build; mobile
-con análisis, pruebas Flutter/Python y APK debug. Falta repetir anterior/siguiente
-en el teléfono cuando ADB vuelva a reconocerlo.
+con análisis, pruebas Flutter/Python y APK debug.
+
+Prueba manual del 4 de noviembre de 2026: se restableció ADB y el reenvío USB,
+se abrió la app instalada y se publicó una cola de cinco pistas. El comando de
+MediaSession equivalente al control de notificación cambió a la pista siguiente
+y permaneció en PLAYING; anterior regresó al índice previo y también permaneció
+en PLAYING. Los metadatos cambiaron con cada índice. La corrección de navegación
+queda validada en el dispositivo; el corte de transporte a 1:09 no queda resuelto.
 
 ### Evaluación de URL directa sugerida
 
