@@ -262,17 +262,17 @@ Tareas:
 - Crear endpoint `/api/v1/playback/resolve`.
 - Evaluar límites de youtubei.js.
 - Documentar restricciones de acceso.
-- Integrar audio autorizado de prueba.
+- Integrar audio de prueba y validar que el stream alcance el final.
 - Validar just_audio en Android.
 - Probar interrupciones y errores.
 - Documentar decisión de viabilidad.
 
 Aceptación:
 
-- Audio autorizado reproducible.
+- Audio completo reproducible.
 - Fallos del proveedor se manejan correctamente.
 - Existe decisión técnica documentada sobre streaming.
-- No se implementan mecanismos de evasión de restricciones.
+- La prueba detecta streams limitados al primer minuto y no los declara completos.
 
 Etiqueta: `sprint-05-v0.5.0`
 
@@ -295,12 +295,12 @@ Como usuario, quiero controlar la reproducción incluso cuando la app está en s
 
 Tareas:
 
-- Primero probar resolución real de audio de youtubei.js con contenido propio o
-  autorizado, sin eludir restricciones, y comprobar reproducción en Android.
+- Probar resolución real de audio de youtubei.js, atestación, URL completa y
+  reproducción Android más allá del primer minuto.
 - Registrar viabilidad y limitaciones. No asumir que cualquier pista del catálogo
   se puede reproducir ni prometer su disponibilidad antes de verificarla.
-- Si no hay una fuente compatible, mantener la demo autorizada y documentar
-  la alternativa antes de ampliar reproducción sobre ese proveedor.
+- Si una URL solo entrega el primer segmento, descartarla y continuar con otro
+  cliente/proveedor antes de iniciar la reproducción.
 - Crear PlayerController.
 - Implementar play/pause.
 - Implementar seek cuando corresponda.
@@ -318,6 +318,17 @@ Aceptación:
 - Reproducción en segundo plano funciona con fuente compatible.
 
 Etiqueta: `sprint-06-v0.6.0`
+
+### Ajuste de alcance del 4 de noviembre de 2026
+
+R-007 fue retirada por decisión del propietario. El corte a 1:09 se abordará con
+un spike de PoToken/atestación, resolvedor multi-cliente, validación del rango final
+y proxy HTTP Range aislado. El detalle, fases, riesgos y criterios medibles están en
+`docs/11-plan-resolucion-audio-letras.md`.
+
+Letras simples/sincronizadas pasan a alcance deseable, pero no bloquean la etiqueta
+del Sprint 6. Se implementan después de estabilizar el transporte mediante una
+interfaz `LyricsProvider`, inicialmente LRCLIB y YouTube Music como fallback.
 
 ## 11. Sprint 07 — Playlists
 
@@ -506,7 +517,7 @@ Tareas:
 - Pruebas end-to-end.
 - Pruebas con dos cuentas Google.
 - Pruebas de permisos.
-- Pruebas de reproducción autorizada.
+- Pruebas de reproducción completa, rangos y caducidad.
 - Pruebas de regresión.
 - Pruebas de conectividad.
 - Revisión de seguridad.
@@ -549,7 +560,7 @@ Aceptación:
 - Google Sign-In funcional.
 - Backend accesible.
 - Datos centralizados.
-- Demo reproducible con fuente autorizada.
+- Demo reproducible sin corte al primer minuto.
 - Documentación completa.
 
 Etiqueta: `sprint-14-v1.0.0`
@@ -559,7 +570,7 @@ Etiqueta: `sprint-14-v1.0.0`
 | Riesgo | Impacto | Mitigación |
 |---|---|---|
 | Cambios en youtubei.js | Alto | Adaptador MusicProvider |
-| Restricciones de reproducción | Crítico | Validación temprana y audio autorizado |
+| Rotación de atestación/streams | Crítico | Worker aislado, fallback y pruebas de rango final |
 | Errores de Firebase | Alto | Pruebas desde Sprint 2 |
 | Acceso entre usuarios | Crítico | Autorización y pruebas multiusuario |
 | Cuotas gratuitas | Medio | Monitoreo y hosting local alternativo |

@@ -54,10 +54,9 @@ bajo demanda al reproducir o renovar una fuente caducada.
 
 - Revisar la API y código de youtubei.js 18.3.0 instalada: formatos de audio,
   resolución de URL, restricciones, caducidad y requerimientos de ejecución.
-- Crear un diagnóstico reproducible en backend con un ID de contenido propio o
-  autorizado; validar estado real y formatos, sin imprimir URLs firmadas ni cookies.
-- Usar los mecanismos normales de la biblioteca cuando sean compatibles con el
-  acceso permitido; no eludir DRM, autenticación ni restricciones del proveedor.
+- Crear un diagnóstico reproducible en backend con un ID fijo; validar estado real,
+  formatos y rango final sin imprimir URLs firmadas, tokens ni cookies.
+- Evaluar firma, transformación `n` y atestación exclusivamente en un worker aislado.
 - Registrar codec, contenedor y MIME. Probar AAC/M4A u otro formato que Android
   soporte realmente; no asumir compatibilidad solo por tener una URL.
 - Verificar acceso HTTPS desde Android, duración/decodificación, primera reproducción
@@ -162,9 +161,9 @@ una URL de audio nativa. No sustituir silenciosamente la experiencia solicitada.
 
 ### Prueba real Android
 
-- Fuente propia/autorizada obtenida por youtubei.js y audible en Android.
+- Fuente obtenida por youtubei.js, validada hasta el rango final y audible en Android.
 - Búsqueda → selección → audio con los mismos metadatos/ID.
-- Probar varios IDs autorizados y registrar resultados por caso; no concluir
+- Probar varios IDs y registrar resultados por caso; no concluir
   disponibilidad universal a partir de una única pista.
 - Pausa, seek cuando se soporte, anterior/siguiente y orden de cola.
 - Navegar, bloquear pantalla y controlar desde notificación.
@@ -541,14 +540,14 @@ resolvió la sesión completa. No se incorporó ni se dejó código experimental
 
 El mantenedor de YouTube.js identifica los 403 actuales de URLs directas como casos
 en que el proveedor espera un Proof-of-Origin token; la librería puede adjuntarlo,
-pero no lo genera. Automatizar navegador/BotGuard/DroidGuard para obtenerlo sería
-un mecanismo de atestación destinado a desbloquear restricciones y contradice R-007.
+pero no lo genera. En ese momento se descartó automatizar BotGuard porque R-007 lo
+prohibía; esta frase conserva la decisión histórica de la prueba.
 Referencias: https://github.com/LuanRT/YouTube.js/issues/724 y
 https://github.com/LuanRT/YouTube.js/issues/674. SABR también tiene una incidencia
 abierta por `Attestation required`: https://github.com/LuanRT/YouTube.js/issues/947.
 
 El corte a 1:09 queda confirmado como bloqueo de transporte, no como pausa normal
-de just_audio. Para cerrar el Sprint se necesita una fuente de audio autorizada que
-permita la canción completa, o una decisión explícita de producto para usar el
-reproductor oficial visible. No se generará PoToken, no se afirmará reproducción
-completa y no se creará la etiqueta `sprint-06-v0.6.0` mientras esto siga pendiente.
+de just_audio. El 4 de noviembre de 2026 el usuario eliminó R-007 y autorizó evaluar
+atestación/PoToken. La implementación queda sujeta al plan técnico nuevo, aislamiento,
+licencias y pruebas de stream completo. No se afirmará reproducción completa ni se
+creará la etiqueta `sprint-06-v0.6.0` antes de superar esas pruebas.

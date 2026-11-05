@@ -11,7 +11,9 @@ La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 
 > Estado: Sprint 1 cerrado (`sprint-01-v0.1.0`). Sprint 2 cerrado (`sprint-02-v0.2.0`). Sprint 3 cerrado (`sprint-03-v0.3.0`). Sprint 4 cerrado (`sprint-04-v0.4.0`). Sprint 5 cerrado (`sprint-05-v0.5.0`). Sprint 6: escucha del catálogo confirmada; cola, mini reproductor y servicio implementados, prueba Android de fondo pendiente. Prueba de audio de YouTube trasladada al Sprint 6.
 >
-> El catálogo experimental utiliza `youtubei.js` desde el backend. La disponibilidad de metadatos no garantiza acceso autorizado a streams de audio. La reproducción se valida por separado mediante fuentes compatibles y permitidas.
+> El catálogo experimental utiliza `youtubei.js` desde el backend. La disponibilidad
+> de metadatos no garantiza que un stream sea completo o reproducible. La resolución,
+> atestación, caducidad y entrega por rangos se validan por separado.
 
 ## Características previstas
 
@@ -55,7 +57,9 @@ flowchart LR
     API --> DB[("PostgreSQL")]
     API --> Provider["MusicProvider"]
     Provider --> YT["youtubei.js"]
-    Mobile -.-> Player["Audio autorizado"]
+    API --> Playback["Resolvedor de reproducción"]
+    Playback --> Player["Stream temporal"]
+    Mobile --> Player
 ```
 
 El backend gestiona autenticación, autorización, catálogo y persistencia.
@@ -392,6 +396,7 @@ No ejecutar el cierre sin revisar cambios, pruebas y secretos.
 - [Base de datos](docs/02-base-de-datos.md)
 - [Requisitos](docs/03-requisitos.md)
 - [Roadmap](docs/04-sprints-roadmap.md)
+- [Plan de resolución de audio y letras](docs/11-plan-resolucion-audio-letras.md)
 - [Instrucciones para agentes](AGENTS.md)
 
 ## 10. Limitaciones
@@ -401,7 +406,8 @@ No ejecutar el cierre sin revisar cambios, pruebas y secretos.
 - El acceso a streams puede estar restringido.
 - El backend gratuito puede suspenderse por inactividad.
 - Las cuotas de Firebase y Supabase están sujetas a sus condiciones vigentes.
-- La reproducción debe utilizar mecanismos compatibles y autorizados.
+- La reproducción depende de APIs internas, atestación y URLs temporales que pueden
+  cambiar o ser rechazadas sin aviso.
 
 ## 11. Autor
 

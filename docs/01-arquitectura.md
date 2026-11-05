@@ -62,7 +62,9 @@ flowchart TD
     YouTube["youtubei.js"]
     Cache["LRU Metadata Cache"]
     Player["Flutter Audio Player"]
-    Audio["Authorized Audio Source"]
+    Resolver["Playback Resolver"]
+    TokenWorker["Isolated Token/Cipher Worker"]
+    Audio["Temporary Audio Stream"]
 
     Flutter --> Firebase
     Flutter -->|"HTTPS + Firebase ID Token"| API
@@ -73,8 +75,11 @@ flowchart TD
     Services --> Provider
     Provider --> Cache
     Provider --> YouTube
+    Services --> Resolver
+    Resolver --> TokenWorker
+    Resolver --> Audio
     Flutter --> Player
-    Player -.->|"Permitted playback"| Audio
+    Player -->|"Authenticated HTTP Range"| API
 ```
 
 ### 4.1 Flutter
@@ -153,9 +158,8 @@ export interface MusicProvider {
 }
 ```
 
-`resolvePlayback` solamente puede devolver una fuente reproducible cuando exista un mecanismo autorizado y compatible.
-
-Para las pruebas del reproductor se utilizará un conjunto pequeño de archivos de audio propios, libres o expresamente autorizados.
+`resolvePlayback` solamente devuelve una fuente después de validar identidad,
+formato, duración completa, caducidad y capacidad real de entrega por rangos.
 
 ## 5. Flujo de autenticación
 
@@ -225,19 +229,23 @@ Respuesta conceptual:
 ```json
 {
   "mode": "unavailable",
-  "reason": "No authorized playback source configured"
+  "reason": "No complete playback source available"
 }
 ```
 
-Cuando exista una fuente autorizada de reproducción directa, la respuesta podrá incluir una URL temporal y su vencimiento.
+Cuando exista una fuente reproducible, la respuesta podrá incluir una ruta temporal
+del backend y su vencimiento. Las URLs firmadas del proveedor permanecen internas.
 
 ### Restricciones importantes
 
 - No asumir que los enlaces internos de YouTube son permanentes.
 - No almacenar URLs de audio firmadas como datos duraderos.
 - No exponer cookies, credenciales ni tokens privados.
-- No convertir Express en un proxy de retransmisión musical sin autorización.
-- No implementar mecanismos para evadir controles de acceso, DRM o restricciones del proveedor.
+- Ejecutar código dinámico del proveedor solo en un trabajador aislado, sin secretos
+  de Firebase, PostgreSQL ni variables privadas de la aplicación.
+- Validar el último rango del medio antes de aceptar una URL; un primer megabyte
+  accesible no demuestra que la pista completa esté disponible.
+- Limitar concurrencia, bytes, duración, destinos de red y reintentos del proxy.
 - Documentar la viabilidad real de reproducción en el Sprint 5.
 
 ## 8. Estrategia de caché
@@ -364,7 +372,7 @@ El plan gratuito de hosting puede presentar suspensión por inactividad, cuotas 
 - Pruebas de widgets.
 - Pruebas de navegación.
 - Pruebas de estados de autenticación.
-- Pruebas del reproductor con audio autorizado.
+- Pruebas del reproductor con streams iniciales, intermedios y finales.
 - Pruebas de sincronización de datos.
 
 ## 14. Decisiones pendientes
@@ -455,6 +463,11 @@ El asset no demuestra streaming HTTPS ni reproducción de YouTube. La validació
 real de ese proveedor se trasladó expresamente a Sprint 06 por acuerdo del usuario.
 
 ## 19. Incremento Sprint 06: audio nativo experimental
+
+Este apartado describe el puente implementado antes de retirar R-007. Su limitación
+secuencial y ausencia de tokens siguen siendo hechos del código actual, pero su
+política de resolución queda sustituida para trabajo futuro por
+`docs/11-plan-resolucion-audio-letras.md`.
 
 La preferencia confirmada del usuario es audio nativo de YouTube, sin reproductor
 visible embebido. SABR no ofrece en este entorno una URL de archivo compatible con
