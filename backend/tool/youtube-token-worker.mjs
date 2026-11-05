@@ -242,14 +242,24 @@ async function validateTail(url, contentLength) {
     error.status = 403;
     throw error;
   }
-  const body = new Uint8Array(await response.arrayBuffer());
-  if (
-    response.status !== 206 ||
-    body.byteLength === 0 ||
-    body.byteLength > 256 ||
-    !response.headers.get('content-range')
-  )
+  if (response.status !== 206 || !response.headers.get('content-range'))
     throw new Error('tail-invalid');
+  const declaredLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > 256)
+    throw new Error('tail-too-large');
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('tail-empty');
+  let received = 0;
+  while (true) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    received += chunk.value.byteLength;
+    if (received > 256) {
+      await reader.cancel();
+      throw new Error('tail-too-large');
+    }
+  }
+  if (received === 0) throw new Error('tail-empty');
 }
 
 async function resolveClient(context, sourceId, client, token) {
