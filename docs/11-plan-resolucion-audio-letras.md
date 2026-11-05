@@ -1,7 +1,7 @@
 # Plan técnico — Resolución completa de audio y letras
 
 Fecha: 4 de noviembre de 2026.  
-Estado: en ejecución; Fase 0 completada y Fase 1 pendiente.
+Estado: en ejecución; Fases 0 y 1 completadas, Fase 2 pendiente.
 Decisión: R-007 fue eliminada por instrucción del propietario del proyecto.
 
 ## 1. Objetivo
@@ -128,6 +128,15 @@ respaldado por evidencia. El diagnóstico no imprime tokens ni URLs firmadas.
 
 Pruebas: TTL, concurrencia, fallo de bootstrap, reinicio, redacción de logs y
 prohibición de entregar un token para otro visitor/video.
+
+Resultado del 4 de noviembre de 2026: completado. `PlaybackTokenBroker` expone
+solo un lease opaco con pista y vencimiento; visitorData, tokens y sesión caliente
+permanecen en un worker persistente sin acceso a variables privadas de la app. El
+adaptador comparte solicitudes concurrentes, conserva leases por TTL, permite
+invalidación por video, limita tiempos y reinicia el worker tras fallo. Las pruebas
+cubren concurrencia, cancelación, vencimiento, respuesta ligada a otro video y
+recuperación. Una prueba real confirmó bootstrap, IPC y reutilización en memoria
+con latencia de caché inferior a 1 ms, sin exponer el token.
 
 ### Fase 2 — Resolvedor con fallback y validación final
 
