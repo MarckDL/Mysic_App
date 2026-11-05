@@ -1,7 +1,7 @@
 # Plan técnico — Resolución completa de audio y letras
 
 Fecha: 4 de noviembre de 2026.  
-Estado: aprobado para investigación e implementación incremental; no iniciado.  
+Estado: en ejecución; Fase 0 completada y Fase 1 pendiente.
 Decisión: R-007 fue eliminada por instrucción del propietario del proyecto.
 
 ## 1. Objetivo
@@ -44,7 +44,7 @@ aceptan o mitigan por separado; no se presentará el resultado como integración
 - `bgutils-js` 4.x, MIT: candidato Node para BotGuard/PoToken. La versión 4 eliminó
   el generador monolítico; el spike debe usar sus exports actuales, sin copiar ejemplos
   antiguos de la versión 3.
-- `jsdom` o adaptador DOM mínimo compatible: solo dentro del worker de tokens.
+- `jsdom` 26.1.0, MIT y compatible con Node >=18: solo dentro del worker de tokens.
 - `googlevideo` 5.0.1: conservar SABR como fallback hasta validar URL directa completa.
 - LRCLIB: proveedor inicial de letras; API pública, servidor MIT y sin clave obligatoria.
 
@@ -109,6 +109,13 @@ El proceso Express nunca evalúa JavaScript remoto. El worker:
 6. Aceptar el spike solo si los tres rangos responden y la identidad/tokens coinciden.
 
 Criterio de salida: URL completa demostrada sin descargar el archivo entero.
+
+Resultado del 4 de noviembre de 2026: completado. El diagnóstico aislado
+`pnpm playback:probe:potoken` generó tokens ligados a la misma sesión y al video,
+seleccionó VISIONOS con AAC/M4A y recibió `206 Partial Content` con 256 KiB en
+los rangos inicial, posterior a 90 segundos y final. YTMUSIC no fue reproducible
+en este caso y WEB no entregó una URL descifrable, por lo que el fallback quedó
+respaldado por evidencia. El diagnóstico no imprime tokens ni URLs firmadas.
 
 ### Fase 1 — TokenBroker y worker persistente
 

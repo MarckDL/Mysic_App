@@ -23,14 +23,17 @@
     "db:check": "tsx --env-file-if-exists=.env tool/check-database.ts",
     "catalog:check": "node --import tsx tool/check-catalog.mjs",
     "playback:probe": "node --import tsx tool/probe-youtube-audio.ts",
-    "playback:probe:native": "node tool/probe-youtube-native.mjs"
+    "playback:probe:native": "node tool/probe-youtube-native.mjs",
+    "playback:probe:potoken": "node tool/probe-youtube-potoken.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
+    "bgutils-js": "4.0.3",
     "express": "^5.1.0",
     "firebase-admin": "^14.5.0",
     "googlevideo": "5.0.1",
+    "jsdom": "26.1.0",
     "youtubei.js": "18.3.0"
   },
   "devDependencies": {
