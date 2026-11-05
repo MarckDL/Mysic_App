@@ -1,7 +1,9 @@
 # Sprint 06 — Audio del catálogo y reproductor
 
 Fecha de planificación: 27 de octubre de 2026.
-Estado: escucha del catálogo confirmada por el usuario; cola/mini reproductor/servicio implementados y CI aprobada, validación Android de fondo pendiente.
+Estado: APK y controles de fondo probados en Android; la navegación de cola fue
+corregida y CI aprobada. El transporte del proveedor se corta alrededor de 1:09,
+por lo que el Sprint continúa abierto y no se etiqueta.
 Historia: US-006 y continuación explícita de viabilidad US-005.
 Versión prevista: sprint-06-v0.6.0.
 
@@ -497,3 +499,50 @@ disponibilidad universal. El dispositivo Android 16 fue detectado y se configur�
 el reenvío USB del puerto 3000, pero Android rechazó la primera instalación con
 `INSTALL_FAILED_USER_RESTRICTED`; notificación, bloqueo de pantalla y ejecución del
 APK siguen pendientes hasta autorizar la instalación mediante USB en el teléfono.
+
+## Prueba Android posterior y límite del proveedor
+
+La instalación se autorizó después y el APK se ejecutó en el dispositivo Android 16.
+El usuario confirmó que la reproducción, segundo plano y notificación aparecen, pero
+reportó tres problemas: corte reproducible alrededor de 1:09, nueva resolución lenta
+al reintentar y anterior/siguiente sin audio desde la notificación.
+
+Los comandos Android de anterior/siguiente sí llegaron al MediaSession, cambiaron
+el índice y publicaron los metadatos de la pista correspondiente. La causa adicional
+encontrada estaba en Express: la solicitud de la nueva pista podía llegar antes de
+que el cierre HTTP anterior liberase el UID y recibía 429. La ruta ahora reemplaza
+atómicamente solo el stream anterior del mismo usuario, conserva el máximo global
+de dos usuarios y evita que el cierre viejo elimine el registro nuevo. Hay pruebas
+de reemplazo y del límite global. Commit `742ab1f`.
+
+GitHub Actions Quality 41774836469 aprobó este cambio: backend con migraciones y
+PostgreSQL, 120 pruebas totales sin omisiones, lint, tipos, formato y build; mobile
+con análisis, pruebas Flutter/Python y APK debug. Falta repetir anterior/siguiente
+en el teléfono cuando ADB vuelva a reconocerlo.
+
+### Evaluación de URL directa sugerida
+
+No se adoptó `new Function` en Express. El SDK ya evalúa el transformador dentro
+del worker hijo restringido mediante `vm.Script`; moverlo al proceso principal
+ampliaría innecesariamente el riesgo. Se comprobó la versión estable instalada,
+youtubei.js 18.3.0, con la fuente autorizada Big Buck Bunny.
+
+YTMUSIC y TV no entregaron `streaming_data` utilizable en este entorno. IOS y
+TV_SIMPLY entregaron AAC/M4A directo y los rangos iniciales respondieron, pero los
+rangos posteriores recibieron 403 al alcanzar aproximadamente un minuto de audio.
+Cambiar bitrate o tamaño de bloque solo desplazó el límite proporcionalmente; no
+resolvió la sesión completa. No se incorporó ni se dejó código experimental roto.
+
+El mantenedor de YouTube.js identifica los 403 actuales de URLs directas como casos
+en que el proveedor espera un Proof-of-Origin token; la librería puede adjuntarlo,
+pero no lo genera. Automatizar navegador/BotGuard/DroidGuard para obtenerlo sería
+un mecanismo de atestación destinado a desbloquear restricciones y contradice R-007.
+Referencias: https://github.com/LuanRT/YouTube.js/issues/724 y
+https://github.com/LuanRT/YouTube.js/issues/674. SABR también tiene una incidencia
+abierta por `Attestation required`: https://github.com/LuanRT/YouTube.js/issues/947.
+
+El corte a 1:09 queda confirmado como bloqueo de transporte, no como pausa normal
+de just_audio. Para cerrar el Sprint se necesita una fuente de audio autorizada que
+permita la canción completa, o una decisión explícita de producto para usar el
+reproductor oficial visible. No se generará PoToken, no se afirmará reproducción
+completa y no se creará la etiqueta `sprint-06-v0.6.0` mientras esto siga pendiente.
