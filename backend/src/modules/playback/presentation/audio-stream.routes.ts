@@ -5,7 +5,10 @@ import type {
   AuthIdentity,
 } from '../../auth/domain/token-verifier.js';
 import { requireAuth } from '../../../middleware/auth.middleware.js';
-import type { AudioStreamTransport } from '../../../infrastructure/music/youtube-audio-stream.js';
+import {
+  InvalidAudioRangeError,
+  type AudioStreamTransport,
+} from '../../../infrastructure/music/youtube-audio-stream.js';
 import { CatalogLimiter } from '../../catalog/application/catalog-limiter.js';
 
 export function createAudioStreamRouter(
@@ -50,7 +53,8 @@ export function createAudioStreamRouter(
         });
         return;
       }
-      if (request.headers.range && request.headers.range !== 'bytes=0-') {
+      const range = request.headers.range;
+      if (range && !/^bytes=\d*-\d*$/.test(range)) {
         response.status(416).end();
         return;
       }
@@ -64,23 +68,34 @@ export function createAudioStreamRouter(
       const cancel = () => controller.abort();
       response.once('close', cancel);
       try {
-        const audio = await transport.open(sourceId, controller.signal);
+        const audio = await transport.open(sourceId, controller.signal, range);
         if (controller.signal.aborted) {
-          audio.destroy();
+          audio.stream.destroy();
           return;
         }
-        response.status(200);
-        response.setHeader('Content-Type', 'audio/mp4');
-        response.setHeader('Accept-Ranges', 'none');
-        await pipeline(audio, response, { signal: controller.signal });
-      } catch {
+        response.status(audio.status);
+        response.setHeader('Content-Type', audio.contentType);
+        response.setHeader('Content-Length', audio.contentLength);
+        response.setHeader('Accept-Ranges', 'bytes');
+        if (audio.contentRange)
+          response.setHeader('Content-Range', audio.contentRange);
+        await pipeline(audio.stream, response, { signal: controller.signal });
+      } catch (error) {
         if (!response.headersSent && !response.destroyed) {
-          response.status(503).json({
-            error: {
-              code: 'PLAYBACK_UNAVAILABLE',
-              message: 'No se pudo abrir el audio de esta pista',
-            },
-          });
+          if (error instanceof InvalidAudioRangeError) {
+            if (error.contentLength)
+              response.setHeader(
+                'Content-Range',
+                `bytes */${error.contentLength}`,
+              );
+            response.status(416).end();
+          } else
+            response.status(503).json({
+              error: {
+                code: 'PLAYBACK_UNAVAILABLE',
+                message: 'No se pudo abrir el audio de esta pista',
+              },
+            });
         } else if (!response.destroyed) response.destroy();
       } finally {
         cancel();

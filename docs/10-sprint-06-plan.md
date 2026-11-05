@@ -551,3 +551,14 @@ de just_audio. El 4 de noviembre de 2026 el usuario eliminó R-007 y autorizó e
 atestación/PoToken. La implementación queda sujeta al plan técnico nuevo, aislamiento,
 licencias y pruebas de stream completo. No se afirmará reproducción completa ni se
 creará la etiqueta `sprint-06-v0.6.0` antes de superar esas pruebas.
+
+### Sustitución del transporte — 4 de noviembre de 2026
+
+Después de retirar R-007 se completaron las fases 0 a 3 de
+`docs/11-plan-resolucion-audio-letras.md`. El backend genera PoToken dentro de un
+worker persistente, selecciona VISIONOS como fallback probado, valida el final del
+archivo y entrega rangos autenticados con backpressure. La prueba real del proxy
+recibió 256 KiB exactos al inicio, después de 90 segundos y al final de Big Buck
+Bunny. El worker SABR de producción fue retirado y Flutter habilitó seek en pantalla
+y controles del sistema. El corte queda resuelto a nivel de transporte; aún falta la
+prueba Android de más de tres minutos antes de cerrar y etiquetar el Sprint.

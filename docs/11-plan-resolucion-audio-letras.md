@@ -1,7 +1,7 @@
 # Plan técnico — Resolución completa de audio y letras
 
 Fecha: 4 de noviembre de 2026.  
-Estado: en ejecución; Fases 0, 1 y 2 completadas, Fase 3 pendiente.
+Estado: en ejecución; Fases 0 a 3 completadas, Fase 4 pendiente.
 Decisión: R-007 fue eliminada por instrucción del propietario del proyecto.
 
 ## 1. Objetivo
@@ -180,6 +180,17 @@ con 2,8 s en frío y menos de 1 ms desde caché.
 
 Pruebas: rangos inicial/intermedio/final, solicitudes inválidas, cancelación,
 renovación, dos usuarios, reemplazo siguiente/anterior y límite global.
+
+Resultado del 4 de noviembre de 2026: completado. La ruta autenticada conserva
+`/api/v1/playback/audio/:sourceId`, pero reemplaza SABR por un proxy con
+backpressure y rangos simples `start-end`, `start-` y `-suffix`. Responde 200/206
+con tamaño, MIME, `Accept-Ranges` y `Content-Range` normalizados; rechaza rangos
+múltiples o fuera del archivo con 416. El proxy limita estrictamente los bytes,
+cancela al desconectar, conserva el rango tras una única re-resolución por 403 y
+solo sigue redirecciones HTTPS dentro de `googlevideo.com`. La prueba real recibió
+exactamente 256 KiB al inicio, después de 90 segundos y al final. Flutter habilita
+seek en el reproductor y en los controles del sistema. El worker SABR de producción
+fue retirado; el diagnóstico aislado permanece como referencia de regresión.
 
 ### Fase 4 — Latencia y cola
 

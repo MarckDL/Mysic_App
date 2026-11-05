@@ -464,9 +464,9 @@ real de ese proveedor se trasladó expresamente a Sprint 06 por acuerdo del usua
 
 ## 19. Incremento Sprint 06: audio nativo experimental
 
-Este apartado describe el puente implementado antes de retirar R-007. Su limitación
-secuencial y ausencia de tokens siguen siendo hechos del código actual, pero su
-política de resolución queda sustituida para trabajo futuro por
+Este apartado conserva el puente implementado antes de retirar R-007 como registro
+histórico. Su limitación secuencial y ausencia de tokens ya no describen el código
+actual; la política y la implementación vigente se documentan en
 `docs/11-plan-resolucion-audio-letras.md`.
 
 La preferencia confirmada del usuario es audio nativo de YouTube, sin reproductor
@@ -528,7 +528,7 @@ AudioService 0.18.19 se inicializa una vez en main. Su handler publica título,
 artista, portada, duración y estado, y delega los controles al controlador activo.
 No se incluyen ID tokens, headers ni URLs temporales de audio en MediaItem/cola.
 El sistema extrapola la posición: no se reenvían cola/portada en cada tick del motor.
-El mini reproductor y pantalla completa muestran progreso sin slider de seek.
+El mini reproductor muestra progreso y la pantalla completa ofrece slider de seek.
 
 Android usa AudioServiceActivity, servicio mediaPlayback, MediaButtonReceiver,
 WAKE_LOCK, FOREGROUND_SERVICE y FOREGROUND_SERVICE_MEDIA_PLAYBACK e icono propio.
@@ -542,11 +542,12 @@ AudioSession pausa por foco/auriculares sin auto-resume; una interrupción duran
 carga cancela la intención de reproducción. La demo local antigua limpia la cola
 principal antes de cargar su diagnóstico para evitar audio simultáneo.
 
-El transporte SABR secuencial del backend permanece igual: no admite rangos/seek.
-No se habilita un control de adelantar ficticio. Soportarlo requiere otro incremento
-que acepte posición inicial y sincronice un flujo nuevo/compatible con el motor.
-Los límites de 20 min/100 MB y una conexión por UID siguen vigentes; no se garantiza
-escucha de pistas superiores a esos límites. No se añade precarga de otras canciones.
+El transporte SABR secuencial fue sustituido por resolución PoToken multi-cliente y
+un proxy HTTP Range. El backend valida inicio/final, tamaño, MIME, host y caducidad;
+acepta rangos simples, conserva backpressure y re-resuelve una vez ante 403. El seek
+de Flutter y del servicio multimedia usa esos rangos. Se mantienen una conexión por
+UID, dos usuarios simultáneos por instancia y cancelación al desconectar. No se añade
+precarga del cuerpo de otras canciones.
 
 Referencias de implementación: https://pub.dev/packages/audio_service y su ejemplo
 Android. Validación de notificación, bloqueo de pantalla y ciclo de tarea en un

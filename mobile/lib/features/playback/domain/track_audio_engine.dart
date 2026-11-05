@@ -16,6 +16,7 @@ abstract interface class TrackAudioEngine {
   Future<void> load(String sourceId, String token);
   Future<void> play();
   Future<void> pause();
+  Future<void> seek(Duration position);
   Future<void> stop();
   Future<void> dispose();
 }

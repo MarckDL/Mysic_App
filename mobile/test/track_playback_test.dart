@@ -56,6 +56,17 @@ void main() {
       expect(engine.plays, 2);
     },
   );
+  test('seek usa la duración confirmada y limita el destino', () async {
+    engine.duration = const Duration(seconds: 200);
+    await controller.start('aqz-KE-bpKQ');
+    await controller.seek(const Duration(seconds: 90));
+    await controller.seek(const Duration(seconds: 250));
+    expect(engine.seeks, [
+      const Duration(seconds: 90),
+      const Duration(seconds: 200),
+    ]);
+    expect(controller.position, const Duration(seconds: 200));
+  });
   test('detener durante carga impide autoplay tardío', () async {
     engine.pendingLoad = Completer<void>();
     final pending = controller.start('aqz-KE-bpKQ');

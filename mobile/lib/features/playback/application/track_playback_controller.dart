@@ -205,6 +205,25 @@ class TrackPlaybackController extends ChangeNotifier {
     }
   }
 
+  Future<void> seek(Duration target) async {
+    final limit = duration;
+    if (!_active ||
+        current == null ||
+        limit == null ||
+        limit <= Duration.zero ||
+        target.isNegative ||
+        phase == TrackAudioPhase.loading ||
+        phase == TrackAudioPhase.error) {
+      return;
+    }
+    final bounded = target > limit ? limit : target;
+    await _engine.seek(bounded);
+    if (_active) {
+      position = bounded;
+      notifyListeners();
+    }
+  }
+
   Future<void> stop() async {
     ++_generation;
     _eventsEnabled = false;

@@ -122,6 +122,13 @@ class JustAudioTrackEngine implements TrackAudioEngine {
   }
 
   @override
+  Future<void> seek(Duration position) async {
+    if (_disposed || _instance == null || position.isNegative) return;
+    final limit = _player.duration;
+    await _player.seek(limit != null && position > limit ? limit : position);
+  }
+
+  @override
   Future<void> stop() async {
     if (!_disposed) await _instance?.stop();
   }

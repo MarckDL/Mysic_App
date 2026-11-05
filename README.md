@@ -426,9 +426,10 @@ La documentación describe el diseño objetivo; no implica que todos los módulo
 
 Inicio → **Probar audio de YouTube** abre una fuente de prueba abierta (Big Buck
 Bunny). Los detalles de búsqueda incluyen **Reproducir audio** para el mismo ID.
-El backend adapta SABR a MP4/AAC para just_audio; requiere Node 24 y conservar
+El backend resuelve AAC/M4A con PoToken en un worker aislado y lo entrega mediante
+un proxy HTTP Range autenticado; requiere Node LTS compatible y conservar
 `backend/tool/` al ejecutar el build. No garantiza disponibilidad de todas las pistas.
 El reproductor se mantiene durante la sesión al navegar e incluye cola en memoria,
-mini reproductor y servicio multimedia Android; falta validar el segundo plano
-en dispositivo. No incluye seek ni persistencia de cola. Pasos de ejecución y pruebas pendientes en
+mini reproductor, seek y servicio multimedia Android; falta validar el nuevo
+transporte durante más de tres minutos en dispositivo. No incluye persistencia de cola. Pasos de ejecución y pruebas pendientes en
 [el plan del Sprint 6](docs/10-sprint-06-plan.md).

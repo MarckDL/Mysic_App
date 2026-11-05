@@ -33,12 +33,22 @@ class PlayerScreen extends ConsumerWidget {
                   ),
                   Text(track.artistName),
                   const SizedBox(height: 16),
-                  LinearProgressIndicator(
+                  Slider(
                     value: duration == null || duration.inMilliseconds <= 0
                         ? 0
-                        : (controller.position.inMilliseconds /
-                                  duration.inMilliseconds)
-                              .clamp(0.0, 1.0),
+                        : controller.position.inMilliseconds
+                              .clamp(0, duration.inMilliseconds)
+                              .toDouble(),
+                    max: duration == null || duration.inMilliseconds <= 0
+                        ? 1
+                        : duration.inMilliseconds.toDouble(),
+                    onChanged: duration == null || duration.inMilliseconds <= 0
+                        ? null
+                        : (value) => unawaited(
+                            controller.seek(
+                              Duration(milliseconds: value.round()),
+                            ),
+                          ),
                   ),
                   Text(
                     '${audioTime(controller.position)} / ${duration == null ? '—' : audioTime(duration)}',
@@ -52,9 +62,6 @@ class PlayerScreen extends ConsumerWidget {
                   if (controller.phase == TrackAudioPhase.completed)
                     const Text('Fin de la cola.'),
                   PlayerControls(controller: controller),
-                  const Text(
-                    'Este origen todavía no permite adelantar o retroceder.',
-                  ),
                 ] else
                   const Text('Añade canciones desde la búsqueda para empezar.'),
                 const SizedBox(height: 24),

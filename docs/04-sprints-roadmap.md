@@ -326,6 +326,10 @@ un spike de PoToken/atestación, resolvedor multi-cliente, validación del rango
 y proxy HTTP Range aislado. El detalle, fases, riesgos y criterios medibles están en
 `docs/11-plan-resolucion-audio-letras.md`.
 
+Las fases 0 a 3 quedaron implementadas: PoToken, worker persistente, fallback,
+validación final y proxy Range con seek. La aceptación del Sprint sigue pendiente de
+la prueba Android prolongada y de segundo plano definida en la fase 5.
+
 Letras simples/sincronizadas pasan a alcance deseable, pero no bloquean la etiqueta
 del Sprint 6. Se implementan después de estabilizar el transporte mediante una
 interfaz `LyricsProvider`, inicialmente LRCLIB y YouTube Music como fallback.

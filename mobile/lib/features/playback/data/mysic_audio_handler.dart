@@ -93,7 +93,7 @@ class MysicAudioHandler extends BaseAudioHandler {
           controls.length.clamp(0, 3),
           (i) => i,
         ),
-        systemActions: const {}, // El puente secuencial no admite seek.
+        systemActions: current == null ? const {} : const {MediaAction.seek},
         processingState: switch (phase) {
           TrackAudioPhase.idle => AudioProcessingState.idle,
           TrackAudioPhase.loading => AudioProcessingState.loading,
@@ -129,6 +129,13 @@ class MysicAudioHandler extends BaseAudioHandler {
   Future<void> skipToPrevious() async => _controller?.previous();
   @override
   Future<void> skipToQueueItem(int index) async => _controller?.jump(index);
+  @override
+  Future<void> seek(Duration position) async {
+    await _controller?.seek(position);
+    _publishedPhase = null;
+    _publish();
+  }
+
   @override
   Future<void> onTaskRemoved() async {
     await _controller?.clear();

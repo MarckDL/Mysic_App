@@ -10,6 +10,7 @@ class FakeTrackAudioEngine implements TrackAudioEngine {
   int plays = 0;
   int stops = 0;
   int disposals = 0;
+  final seeks = <Duration>[];
   @override
   Duration? duration;
   @override
@@ -35,6 +36,11 @@ class FakeTrackAudioEngine implements TrackAudioEngine {
   @override
   Future<void> pause() async {
     events.add(TrackAudioPhase.paused);
+  }
+
+  @override
+  Future<void> seek(Duration position) async {
+    seeks.add(position);
   }
 
   @override

@@ -4,6 +4,7 @@ import { once } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
 import type { AudioStreamTransport } from '../src/infrastructure/music/youtube-audio-stream.js';
+import { selectAudioRange } from '../src/infrastructure/music/youtube-audio-stream.js';
 import {
   InvalidTokenError,
   type TokenVerifier,
@@ -19,8 +20,22 @@ const verifier: TokenVerifier = {
 };
 const path = '/api/v1/playback/audio/aqz-KE-bpKQ';
 function setup(
-  open: AudioStreamTransport['open'] = async () =>
-    Readable.from([Buffer.from('audio-fixture')]),
+  open: AudioStreamTransport['open'] = async (_id, _signal, range) => {
+    const fixture = Buffer.from('audio-fixture');
+    const selected = selectAudioRange(range, fixture.length);
+    const body = fixture.subarray(selected.start, selected.end + 1);
+    return {
+      stream: Readable.from([body]),
+      status: selected.partial ? 206 : 200,
+      contentType: 'audio/mp4',
+      contentLength: body.length,
+      ...(selected.partial
+        ? {
+            contentRange: `bytes ${selected.start}-${selected.end}/${fixture.length}`,
+          }
+        : {}),
+    };
+  },
 ) {
   const transport = { open: vi.fn(open) };
   return {
@@ -48,7 +63,8 @@ describe('audio nativo autenticado', () => {
     expect(response.status).toBe(200);
     expect(response.headers['content-type']).toBe('audio/mp4');
     expect(response.headers['cache-control']).toBe('no-store');
-    expect(response.headers['accept-ranges']).toBe('none');
+    expect(response.headers['accept-ranges']).toBe('bytes');
+    expect(response.headers['content-length']).toBe('13');
     expect(response.body.toString()).toBe('audio-fixture');
     expect(transport.open.mock.calls[0]?.[0]).toBe('aqz-KE-bpKQ');
     expect(transport.open.mock.calls[0]?.[1].aborted).toBe(true);
@@ -64,25 +80,35 @@ describe('audio nativo autenticado', () => {
     ).toBe(400);
     expect(transport.open).not.toHaveBeenCalled();
   });
-  it('no finge rangos y acepta inicio nativo', async () => {
+  it('acepta rangos iniciales, intermedios y finales', async () => {
     const { app, transport } = setup();
-    expect(
-      (
-        await request(app)
-          .get(path)
-          .auth('a', { type: 'bearer' })
-          .set('Range', 'bytes=100-')
-      ).status,
-    ).toBe(416);
-    expect(transport.open).not.toHaveBeenCalled();
-    expect(
-      (
-        await request(app)
-          .get(path)
-          .auth('a', { type: 'bearer' })
-          .set('Range', 'bytes=0-')
-      ).status,
-    ).toBe(200);
+    const initial = await request(app)
+      .get(path)
+      .auth('a', { type: 'bearer' })
+      .set('Range', 'bytes=0-3');
+    expect(initial.status).toBe(206);
+    expect(initial.headers['content-range']).toBe('bytes 0-3/13');
+    expect(initial.body.toString()).toBe('audi');
+    const middle = await request(app)
+      .get(path)
+      .auth('a', { type: 'bearer' })
+      .set('Range', 'bytes=6-9');
+    expect(middle.status).toBe(206);
+    expect(middle.body.toString()).toBe('fixt');
+    const suffix = await request(app)
+      .get(path)
+      .auth('a', { type: 'bearer' })
+      .set('Range', 'bytes=-4');
+    expect(suffix.status).toBe(206);
+    expect(suffix.headers['content-range']).toBe('bytes 9-12/13');
+    expect(suffix.body.toString()).toBe('ture');
+    const invalid = await request(app)
+      .get(path)
+      .auth('a', { type: 'bearer' })
+      .set('Range', 'bytes=100-');
+    expect(invalid.status).toBe(416);
+    expect(invalid.headers['content-range']).toBe('bytes */13');
+    expect(transport.open).toHaveBeenCalledTimes(4);
   });
   it('oculta errores internos antes de iniciar el medio', async () => {
     const { app } = setup(async () => {
@@ -98,7 +124,12 @@ describe('audio nativo autenticado', () => {
       signals.push(signal);
       const audio = new PassThrough();
       audio.write('init');
-      return audio;
+      return {
+        stream: audio,
+        status: 200,
+        contentType: 'audio/mp4',
+        contentLength: 100,
+      };
     });
     const server = app.listen(0);
     await once(server, 'listening');
@@ -131,7 +162,12 @@ describe('audio nativo autenticado', () => {
     const { app, transport } = setup(async () => {
       const audio = new PassThrough();
       audio.write('init');
-      return audio;
+      return {
+        stream: audio,
+        status: 200,
+        contentType: 'audio/mp4',
+        contentLength: 100,
+      };
     });
     const server = app.listen(0);
     await once(server, 'listening');

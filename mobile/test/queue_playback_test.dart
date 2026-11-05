@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mysic/features/authentication/domain/auth_repository.dart';
 import 'package:mysic/features/playback/application/track_playback_controller.dart';
@@ -135,7 +136,12 @@ void main() {
       await controller.playQueue([a, b]);
       expect(handler.mediaItem.value!.title, a.title);
       expect(handler.queue.value.map((item) => item.id), [a.id, b.id]);
-      expect(handler.playbackState.value.systemActions, isEmpty);
+      expect(
+        handler.playbackState.value.systemActions,
+        contains(MediaAction.seek),
+      );
+      await handler.seek(const Duration(seconds: 90));
+      expect(engine.seeks, [const Duration(seconds: 90)]);
       await handler.pause();
       expect(controller.phase, TrackAudioPhase.paused);
       await handler.play();
