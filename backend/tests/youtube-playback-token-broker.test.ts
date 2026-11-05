@@ -31,6 +31,68 @@ const asChild = (worker: FakeWorker) => worker as unknown as ChildProcess;
 afterEach(() => vi.useRealTimers());
 
 describe('YoutubePlaybackTokenBroker', () => {
+  it('normaliza y reutiliza una fuente validada sin exponerla en logs', async () => {
+    const worker = new FakeWorker();
+    const broker = new YoutubePlaybackTokenBroker(() => asChild(worker));
+    const first = broker.resolve(sourceId);
+    const second = broker.resolve(sourceId);
+    expect(worker.messages).toEqual([
+      { type: 'resolve', requestId: 1, sourceId },
+    ]);
+    worker.reply({
+      type: 'resolved',
+      requestId: 1,
+      sourceId,
+      client: 'VISIONOS',
+      itag: 140,
+      privateUrl:
+        'https://media.googlevideo.com/videoplayback?expire=9999999999',
+      mimeType: 'audio/mp4; codecs="mp4a.40.2"',
+      contentLength: 1024,
+      durationMs: 10_000,
+      expiresAtMs: Date.now() + 120_000,
+    });
+    expect(await first).toEqual(await second);
+    await broker.resolve(sourceId);
+    expect(worker.messages).toHaveLength(1);
+    await broker.close();
+  });
+
+  it('rechaza resoluciones con URL externa o identidad diferente', async () => {
+    const worker = new FakeWorker();
+    const broker = new YoutubePlaybackTokenBroker(() => asChild(worker));
+    const external = broker.resolve(sourceId);
+    worker.reply({
+      type: 'resolved',
+      requestId: 1,
+      sourceId,
+      client: 'VISIONOS',
+      itag: 140,
+      privateUrl: 'https://example.test/audio',
+      mimeType: 'audio/mp4',
+      contentLength: 1024,
+      durationMs: 10_000,
+      expiresAtMs: Date.now() + 120_000,
+    });
+    await expect(external).rejects.toThrow();
+
+    const mismatched = broker.resolve(sourceId);
+    worker.reply({
+      type: 'resolved',
+      requestId: 2,
+      sourceId: 'other000000',
+      client: 'VISIONOS',
+      itag: 140,
+      privateUrl: 'https://media.googlevideo.com/videoplayback',
+      mimeType: 'audio/mp4',
+      contentLength: 1024,
+      durationMs: 10_000,
+      expiresAtMs: Date.now() + 120_000,
+    });
+    await expect(mismatched).rejects.toThrow();
+    await broker.close();
+  });
+
   it('comparte solicitudes concurrentes y reutiliza el lease vigente', async () => {
     const worker = new FakeWorker();
     const broker = new YoutubePlaybackTokenBroker(() => asChild(worker));

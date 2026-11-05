@@ -4,9 +4,26 @@ import type {
   PlaybackAttestationLease,
   PlaybackTokenBroker,
 } from '../../modules/playback/domain/playback-token-broker.js';
+import {
+  playbackClients,
+  type PlaybackSourceResolver,
+  type ResolvedPlaybackSource,
+} from '../../modules/playback/domain/playback-source-resolver.js';
 
 type WorkerMessage =
   | { type: 'ready'; requestId: number; sourceId: string; expiresAtMs: number }
+  | {
+      type: 'resolved';
+      requestId: number;
+      sourceId: string;
+      client: string;
+      itag: number;
+      privateUrl: string;
+      mimeType: string;
+      contentLength: number;
+      durationMs: number;
+      expiresAtMs: number;
+    }
   | { type: 'error'; requestId: number };
 
 type Pending = {
@@ -56,7 +73,9 @@ function defaultWorkerFactory() {
   );
 }
 
-export class YoutubePlaybackTokenBroker implements PlaybackTokenBroker {
+export class YoutubePlaybackTokenBroker
+  implements PlaybackTokenBroker, PlaybackSourceResolver
+{
   private child?: ChildProcess;
   private requestId = 0;
   private readonly pending = new Map<number, Pending>();
@@ -64,6 +83,11 @@ export class YoutubePlaybackTokenBroker implements PlaybackTokenBroker {
   private readonly inFlight = new Map<
     string,
     Promise<PlaybackAttestationLease>
+  >();
+  private readonly resolved = new Map<string, ResolvedPlaybackSource>();
+  private readonly resolving = new Map<
+    string,
+    Promise<ResolvedPlaybackSource>
   >();
 
   constructor(
@@ -90,6 +114,7 @@ export class YoutubePlaybackTokenBroker implements PlaybackTokenBroker {
 
   invalidate(sourceId: string) {
     this.leases.delete(sourceId);
+    this.resolved.delete(sourceId);
     if (this.child?.connected)
       this.child.send({ type: 'invalidate', sourceId }, () => {});
   }
@@ -98,10 +123,27 @@ export class YoutubePlaybackTokenBroker implements PlaybackTokenBroker {
     const child = this.child;
     this.child = undefined;
     this.leases.clear();
+    this.resolved.clear();
     this.rejectAll();
     if (!child) return;
     child.send?.({ type: 'shutdown' }, () => {});
     if (!child.killed) child.kill('SIGTERM');
+  }
+
+  resolve(sourceId: string, signal?: AbortSignal) {
+    if (!/^[A-Za-z0-9_-]{11}$/.test(sourceId) || signal?.aborted)
+      return Promise.reject(new Error('Playback source unavailable'));
+    const cached = this.resolved.get(sourceId);
+    if (cached && cached.expiresAtMs > this.now() + 30_000)
+      return Promise.resolve(cached);
+    const current = this.resolving.get(sourceId);
+    if (current) return this.observeResolution(current, signal);
+    const request = this.requestResolution(sourceId).finally(() => {
+      if (this.resolving.get(sourceId) === request)
+        this.resolving.delete(sourceId);
+    });
+    this.resolving.set(sourceId, request);
+    return this.observeResolution(request, signal);
   }
 
   private request(sourceId: string) {
@@ -131,6 +173,31 @@ export class YoutubePlaybackTokenBroker implements PlaybackTokenBroker {
     });
   }
 
+  private requestResolution(sourceId: string) {
+    const child = this.getWorker();
+    const requestId = ++this.requestId;
+    return new Promise<ResolvedPlaybackSource>((resolve, reject) => {
+      const fail = () => reject(new Error('Playback source unavailable'));
+      const timer = setTimeout(() => {
+        this.pending.delete(requestId);
+        fail();
+        this.restartWorker(child);
+      }, this.timeoutMs);
+      this.pending.set(requestId, {
+        sourceId,
+        resolve: (value) => resolve(value as unknown as ResolvedPlaybackSource),
+        reject: fail,
+        timer,
+      });
+      child.send({ type: 'resolve', requestId, sourceId }, (error) => {
+        if (!error) return;
+        clearTimeout(timer);
+        this.pending.delete(requestId);
+        fail();
+      });
+    });
+  }
+
   private getWorker() {
     if (this.child?.connected) return this.child;
     const child = this.workerFactory();
@@ -149,6 +216,25 @@ export class YoutubePlaybackTokenBroker implements PlaybackTokenBroker {
     if (!pending) return;
     clearTimeout(pending.timer);
     this.pending.delete(message.requestId);
+    if (message.type === 'resolved') {
+      if (!this.validResolution(message, pending.sourceId)) {
+        pending.reject();
+        return;
+      }
+      const resolution: ResolvedPlaybackSource = {
+        sourceId: message.sourceId,
+        client: message.client as ResolvedPlaybackSource['client'],
+        itag: message.itag,
+        privateUrl: message.privateUrl,
+        mimeType: message.mimeType,
+        contentLength: message.contentLength,
+        durationMs: message.durationMs,
+        expiresAtMs: message.expiresAtMs,
+      };
+      this.resolved.set(message.sourceId, resolution);
+      pending.resolve(resolution as unknown as PlaybackAttestationLease);
+      return;
+    }
     if (
       message.type !== 'ready' ||
       message.sourceId !== pending.sourceId ||
@@ -165,6 +251,41 @@ export class YoutubePlaybackTokenBroker implements PlaybackTokenBroker {
     };
     this.leases.set(message.sourceId, lease);
     pending.resolve(lease);
+  }
+
+  private validResolution(
+    message: Extract<WorkerMessage, { type: 'resolved' }>,
+    expectedSourceId: string,
+  ) {
+    if (
+      message.sourceId !== expectedSourceId ||
+      !playbackClients.includes(
+        message.client as (typeof playbackClients)[number],
+      ) ||
+      !Number.isSafeInteger(message.itag) ||
+      message.itag <= 0 ||
+      !/^audio\/(?:mp4|webm)(?:; codecs="[A-Za-z0-9., _-]+")?$/.test(
+        message.mimeType,
+      ) ||
+      !Number.isSafeInteger(message.contentLength) ||
+      message.contentLength <= 0 ||
+      !Number.isFinite(message.durationMs) ||
+      message.durationMs <= 0 ||
+      !Number.isSafeInteger(message.expiresAtMs) ||
+      message.expiresAtMs <= this.now()
+    )
+      return false;
+    try {
+      const url = new URL(message.privateUrl);
+      return (
+        url.protocol === 'https:' &&
+        !url.username &&
+        !url.password &&
+        url.hostname.endsWith('.googlevideo.com')
+      );
+    } catch {
+      return false;
+    }
   }
 
   private restartWorker(child: ChildProcess) {
@@ -194,6 +315,27 @@ export class YoutubePlaybackTokenBroker implements PlaybackTokenBroker {
         (lease) => {
           signal.removeEventListener('abort', abort);
           resolve(lease);
+        },
+        (error: unknown) => {
+          signal.removeEventListener('abort', abort);
+          reject(error);
+        },
+      );
+    });
+  }
+
+  private observeResolution(
+    request: Promise<ResolvedPlaybackSource>,
+    signal?: AbortSignal,
+  ) {
+    if (!signal) return request;
+    return new Promise<ResolvedPlaybackSource>((resolve, reject) => {
+      const abort = () => reject(new Error('Playback source unavailable'));
+      signal.addEventListener('abort', abort, { once: true });
+      void request.then(
+        (source) => {
+          signal.removeEventListener('abort', abort);
+          resolve(source);
         },
         (error: unknown) => {
           signal.removeEventListener('abort', abort);

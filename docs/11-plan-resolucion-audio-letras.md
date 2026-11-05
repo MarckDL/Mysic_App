@@ -1,7 +1,7 @@
 # Plan técnico — Resolución completa de audio y letras
 
 Fecha: 4 de noviembre de 2026.  
-Estado: en ejecución; Fases 0 y 1 completadas, Fase 2 pendiente.
+Estado: en ejecución; Fases 0, 1 y 2 completadas, Fase 3 pendiente.
 Decisión: R-007 fue eliminada por instrucción del propietario del proyecto.
 
 ## 1. Objetivo
@@ -157,6 +157,16 @@ Por cada candidato:
 6. Guardar el fallo video/cliente con TTL corto y continuar.
 
 Resultado normalizado: cliente, itag, MIME, tamaño, caducidad y URL privada.
+
+Resultado del 4 de noviembre de 2026: completado. El resolvedor persistente prueba
+YTMUSIC/WEB_REMIX, WEB, VISIONOS y TV_SIMPLY en orden, exige audio sin DRM con
+tamaño y duración válidos, prefiere AAC/M4A y valida los últimos 256 bytes con
+`206 Partial Content`. Los fallos video/cliente se conservan dos minutos. Un 403
+invalida el token ligado al video y permite exactamente un nuevo intento antes de
+continuar con el siguiente cliente. La URL firmada solo viaja por IPC y memoria
+interna; se valida nuevamente antes de aceptarla y no se registra ni se entrega en
+la API. La prueba real seleccionó VISIONOS, validó 10 271 496 bytes y 634 624 ms,
+con 2,8 s en frío y menos de 1 ms desde caché.
 
 ### Fase 3 — Proxy HTTP Range y seek
 

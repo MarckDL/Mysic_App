@@ -15,8 +15,13 @@ const MAX_REDIRECTS = 4;
 const MIN_TTL_MS = 60_000;
 const DEFAULT_TTL_MS = 10 * 60_000;
 const MAX_TTL_MS = 60 * 60_000;
+const FAILURE_TTL_MS = 2 * 60_000;
+const CLIENTS = ['YTMUSIC', 'WEB', 'VISIONOS', 'TV_SIMPLY'];
 const contentTokens = new Map();
 const contentRequests = new Map();
+const resolutions = new Map();
+const resolutionRequests = new Map();
+const failedCandidates = new Map();
 let bootstrapRequest;
 let botGuard;
 let dom;
@@ -166,7 +171,9 @@ async function bootstrap() {
     typeof ttlSeconds === 'number' && Number.isFinite(ttlSeconds)
       ? ttlSeconds * 1_000 - 60_000
       : DEFAULT_TTL_MS;
-  const ttlMs = Math.max(MIN_TTL_MS, Math.min(MAX_TTL_MS, providerTtl));
+  const ttlMs = Math.floor(
+    Math.max(MIN_TTL_MS, Math.min(MAX_TTL_MS, providerTtl)),
+  );
   return { minter, yt, expiresAtMs: Date.now() + ttlMs };
 }
 
@@ -200,8 +207,147 @@ async function prepare(sourceId) {
   return request;
 }
 
+function candidateFormats(info) {
+  return (info.streaming_data?.adaptive_formats ?? [])
+    .filter(
+      (format) =>
+        format.has_audio &&
+        !format.has_video &&
+        !format.drm_families?.length &&
+        Number.isSafeInteger(format.content_length) &&
+        format.content_length > 0 &&
+        Number.isFinite(format.approx_duration_ms) &&
+        format.approx_duration_ms > 0 &&
+        /^audio\/(?:mp4|webm)(?:; codecs="[A-Za-z0-9., _-]+")?$/.test(
+          format.mime_type,
+        ),
+    )
+    .sort((left, right) => {
+      const leftMp4 = left.mime_type.startsWith('audio/mp4') ? 1 : 0;
+      const rightMp4 = right.mime_type.startsWith('audio/mp4') ? 1 : 0;
+      return rightMp4 - leftMp4 || right.bitrate - left.bitrate;
+    });
+}
+
+async function validateTail(url, contentLength) {
+  const start = Math.max(0, contentLength - 256);
+  const response = await restrictedFetch(url, {
+    headers: {
+      Range: `bytes=${start}-${contentLength - 1}`,
+      'User-Agent': USER_AGENT,
+    },
+  });
+  if (response.status === 403) {
+    const error = new Error('provider-rejected');
+    error.status = 403;
+    throw error;
+  }
+  const body = new Uint8Array(await response.arrayBuffer());
+  if (
+    response.status !== 206 ||
+    body.byteLength === 0 ||
+    body.byteLength > 256 ||
+    !response.headers.get('content-range')
+  )
+    throw new Error('tail-invalid');
+}
+
+async function resolveClient(context, sourceId, client, token) {
+  const info = await context.yt.getBasicInfo(sourceId, {
+    client,
+    po_token: token,
+  });
+  if (
+    info.basic_info.id !== sourceId ||
+    info.basic_info.is_live ||
+    info.playability_status?.status !== 'OK'
+  )
+    throw new Error('not-playable');
+  const formats = candidateFormats(info);
+  if (!formats.length) throw new Error('format-unavailable');
+  for (const format of formats) {
+    try {
+      const rawUrl = await format.decipher(context.yt.session.player);
+      const url = checkedUrl(rawUrl);
+      if (!url.hostname.endsWith('.googlevideo.com'))
+        throw new Error('media-host-invalid');
+      url.searchParams.set('pot', token);
+      await validateTail(url, format.content_length);
+      const urlExpiry = Number(url.searchParams.get('expire')) * 1_000 - 60_000;
+      const expiresAtMs = Math.min(
+        context.expiresAtMs,
+        Number.isSafeInteger(urlExpiry) && urlExpiry > Date.now()
+          ? urlExpiry
+          : context.expiresAtMs,
+      );
+      return {
+        sourceId,
+        client,
+        itag: format.itag,
+        privateUrl: url.href,
+        mimeType: format.mime_type,
+        contentLength: format.content_length,
+        durationMs: format.approx_duration_ms,
+        expiresAtMs,
+      };
+    } catch (error) {
+      if (error?.status === 403) throw error;
+    }
+  }
+  throw new Error('format-validation-failed');
+}
+
+async function resolveSource(sourceId) {
+  const cached = resolutions.get(sourceId);
+  if (cached && cached.expiresAtMs > Date.now() + 30_000) return cached;
+  const active = resolutionRequests.get(sourceId);
+  if (active) return active;
+  const request = (async () => {
+    let content = await prepare(sourceId);
+    const context = await getContext();
+    for (const client of CLIENTS) {
+      const failureKey = `${sourceId}:${client}`;
+      const failedUntil = failedCandidates.get(failureKey) ?? 0;
+      if (failedUntil > Date.now()) continue;
+      try {
+        const resolved = await resolveClient(
+          context,
+          sourceId,
+          client,
+          content.token,
+        );
+        resolutions.set(sourceId, resolved);
+        return resolved;
+      } catch (error) {
+        if (error?.status === 403) {
+          contentTokens.delete(sourceId);
+          content = await prepare(sourceId);
+          try {
+            const resolved = await resolveClient(
+              context,
+              sourceId,
+              client,
+              content.token,
+            );
+            resolutions.set(sourceId, resolved);
+            return resolved;
+          } catch {
+            // El rechazo se registra y el siguiente cliente continúa.
+          }
+        }
+        failedCandidates.set(failureKey, Date.now() + FAILURE_TTL_MS);
+      }
+    }
+    throw new Error('no-client-available');
+  })().finally(() => resolutionRequests.delete(sourceId));
+  resolutionRequests.set(sourceId, request);
+  return request;
+}
+
 async function reset() {
   contentTokens.clear();
+  resolutions.clear();
+  failedCandidates.clear();
   await botGuard?.shutdown().catch(() => {});
   botGuard = undefined;
   dom?.window.close();
@@ -223,22 +369,33 @@ process.on('message', (message) => {
   }
   if (message.type === 'invalidate' && SOURCE_ID.test(message.sourceId ?? '')) {
     contentTokens.delete(message.sourceId);
+    resolutions.delete(message.sourceId);
+    for (const client of CLIENTS)
+      failedCandidates.delete(`${message.sourceId}:${client}`);
     return;
   }
   if (
-    message.type !== 'prepare' ||
+    !['prepare', 'resolve'].includes(message.type) ||
     !Number.isSafeInteger(message.requestId) ||
     !SOURCE_ID.test(message.sourceId ?? '')
   )
     return;
-  void prepare(message.sourceId)
-    .then(({ expiresAtMs }) =>
-      process.send?.({
-        type: 'ready',
-        requestId: message.requestId,
-        sourceId: message.sourceId,
-        expiresAtMs,
-      }),
+  const operation =
+    message.type === 'resolve'
+      ? resolveSource(message.sourceId)
+      : prepare(message.sourceId);
+  void operation
+    .then((result) =>
+      process.send?.(
+        message.type === 'resolve'
+          ? { type: 'resolved', requestId: message.requestId, ...result }
+          : {
+              type: 'ready',
+              requestId: message.requestId,
+              sourceId: message.sourceId,
+              expiresAtMs: result.expiresAtMs,
+            },
+      ),
     )
     .catch(() =>
       process.send?.({ type: 'error', requestId: message.requestId }),
