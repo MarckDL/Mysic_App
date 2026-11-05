@@ -97,6 +97,7 @@ class TrackPlaybackController extends ChangeNotifier {
         _queue.any((item) => item.id == track.id)) {
       return;
     }
+    _engine.cancelPrefetch();
     _queue.add(track);
     notifyListeners();
   }
@@ -121,6 +122,7 @@ class TrackPlaybackController extends ChangeNotifier {
 
   Future<void> jump(int target) async {
     if (!_active || target < 0 || target >= _queue.length) return;
+    _engine.cancelPrefetch();
     final generation = ++_generation;
     _eventsEnabled = false;
     index = target;
@@ -155,6 +157,10 @@ class TrackPlaybackController extends ChangeNotifier {
         duration = actualDuration;
       }
       await _engine.play();
+      if (_valid(generation) && hasNext) {
+        final nextId = _queue[index + 1].id.substring(8);
+        unawaited(_engine.prefetch(nextId, token).catchError((Object _) {}));
+      }
     } catch (_) {
       if (kDebugMode) debugPrint('audio_start_failed stage=$stage');
       if (_valid(generation)) {
@@ -179,6 +185,7 @@ class TrackPlaybackController extends ChangeNotifier {
     if (!_active || target < 0 || target >= _queue.length || target == index) {
       return;
     }
+    _engine.cancelPrefetch();
     _queue.removeAt(target);
     if (target < index) index--;
     notifyListeners();
@@ -239,6 +246,7 @@ class TrackPlaybackController extends ChangeNotifier {
   }
 
   Future<void> clear() async {
+    _engine.cancelPrefetch();
     _queue.clear();
     index = -1;
     sourceId = null;
@@ -251,6 +259,7 @@ class TrackPlaybackController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    _engine.cancelPrefetch();
     ++_generation;
     _queue.clear();
     index = -1;

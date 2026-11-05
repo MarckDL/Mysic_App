@@ -17,7 +17,54 @@ export function createAudioStreamRouter(
 ) {
   const router = Router();
   const active = new Map<string, AbortController>();
+  const prefetching = new Map<string, AbortController>();
   const limiter = new CatalogLimiter();
+  router.post(
+    '/prefetch/:sourceId',
+    requireAuth(verifier),
+    async (request, response) => {
+      response.setHeader('Cache-Control', 'no-store');
+      const uid = (response.locals.auth as AuthIdentity).firebaseUid;
+      const sourceId = request.params.sourceId;
+      if (
+        typeof sourceId !== 'string' ||
+        !/^[A-Za-z0-9_-]{11}$/.test(sourceId) ||
+        Object.keys(request.query).length ||
+        (request.body !== undefined &&
+          (request.body === null ||
+            typeof request.body !== 'object' ||
+            Array.isArray(request.body) ||
+            Object.keys(request.body as object).length > 0))
+      ) {
+        response.status(400).json({
+          error: { code: 'INVALID_REQUEST', message: 'Pista inválida' },
+        });
+        return;
+      }
+      const wait = limiter.consume(uid);
+      const previous = prefetching.get(uid);
+      if (wait !== null || (!previous && prefetching.size >= 2)) {
+        response.setHeader('Retry-After', wait ?? 2);
+        response.status(429).end();
+        return;
+      }
+      const controller = new AbortController();
+      previous?.abort();
+      prefetching.set(uid, controller);
+      const cancel = () => controller.abort();
+      request.once('aborted', cancel);
+      try {
+        await transport.prefetch(sourceId, controller.signal);
+        if (!controller.signal.aborted) response.status(204).end();
+      } catch {
+        if (!response.headersSent && !response.destroyed)
+          response.status(503).end();
+      } finally {
+        if (prefetching.get(uid) === controller) prefetching.delete(uid);
+        request.off('aborted', cancel);
+      }
+    },
+  );
   router.get(
     '/audio/:sourceId',
     requireAuth(verifier),

@@ -547,7 +547,10 @@ un proxy HTTP Range. El backend valida inicio/final, tamaño, MIME, host y caduc
 acepta rangos simples, conserva backpressure y re-resuelve una vez ante 403. El seek
 de Flutter y del servicio multimedia usa esos rangos. Se mantienen una conexión por
 UID, dos usuarios simultáneos por instancia y cancelación al desconectar. No se añade
-precarga del cuerpo de otras canciones.
+precarga del cuerpo reproducible de otras canciones; solo se conserva la prueba final
+acotada a 256 bytes. Al iniciar el backend se calienta el worker
+sin seleccionar pista; la cola puede precargar solo la resolución de su siguiente ID
+y la cancela al cambiar o vaciarse. Las métricas no contienen IDs, URLs ni tokens.
 
 Referencias de implementación: https://pub.dev/packages/audio_service y su ejemplo
 Android. Validación de notificación, bloqueo de pantalla y ciclo de tarea en un

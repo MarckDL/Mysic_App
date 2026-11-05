@@ -23,6 +23,7 @@ const source: ResolvedPlaybackSource = {
 
 function fakeResolver() {
   return {
+    warm: vi.fn(async () => {}),
     resolve: vi.fn(async () => source),
     invalidate: vi.fn(),
     close: vi.fn(async () => {}),
@@ -67,6 +68,7 @@ describe('proxy de rangos de YouTube', () => {
 
   it('transmite un rango sin cargar el archivo completo', async () => {
     const resolver = fakeResolver();
+    const metrics = vi.fn();
     const fetcher = vi.fn(async (_url: URL, init?: RequestInit) => {
       expect(new Headers(init?.headers).get('range')).toBe('bytes=2-5');
       return new Response('2345', {
@@ -80,12 +82,21 @@ describe('proxy de rangos de YouTube', () => {
     const result = await new YoutubeAudioStream(
       resolver,
       fetcher as typeof fetch,
+      metrics,
     ).open(sourceId, new AbortController().signal, 'bytes=2-5');
     expect(result.status).toBe(206);
     expect(result.contentLength).toBe(4);
     expect(result.contentRange).toBe('bytes 2-5/10');
     expect(await read(result.stream)).toBe('2345');
     expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(metrics).toHaveBeenCalledOnce();
+    expect(metrics).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stage: 'first-byte',
+        retry: false,
+        success: true,
+      }),
+    );
   });
 
   it('re-resuelve una sola vez ante 403 y conserva el rango', async () => {

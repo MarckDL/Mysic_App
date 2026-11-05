@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:audio_session/audio_session.dart';
+import 'package:dio/dio.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../../core/network/api_dio.dart';
 import '../domain/track_audio_engine.dart';
@@ -8,6 +9,8 @@ import '../domain/track_audio_engine.dart';
 class JustAudioTrackEngine implements TrackAudioEngine {
   JustAudioTrackEngine(String baseUrl) : _base = validatedApiUri(baseUrl);
   final Uri _base;
+  final Dio _prefetchClient = Dio();
+  CancelToken? _prefetchCancel;
   Future<void>? _configuration;
   // Android envía Authorization directamente a nuestro backend, sin proxy local.
   AudioPlayer? _instance;
@@ -102,6 +105,35 @@ class JustAudioTrackEngine implements TrackAudioEngine {
   }
 
   @override
+  Future<void> prefetch(String sourceId, String token) async {
+    if (_disposed ||
+        !RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(sourceId) ||
+        token.isEmpty) {
+      return;
+    }
+    cancelPrefetch();
+    final cancel = CancelToken();
+    _prefetchCancel = cancel;
+    try {
+      await _prefetchClient.post<void>(
+        _base.resolve('/api/v1/playback/prefetch/$sourceId').toString(),
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+        cancelToken: cancel,
+      );
+    } on DioException catch (error) {
+      if (!CancelToken.isCancel(error)) rethrow;
+    } finally {
+      if (identical(_prefetchCancel, cancel)) _prefetchCancel = null;
+    }
+  }
+
+  @override
+  void cancelPrefetch() {
+    _prefetchCancel?.cancel();
+    _prefetchCancel = null;
+  }
+
+  @override
   Future<void> play() async {
     if (!_disposed) {
       unawaited(
@@ -130,6 +162,7 @@ class JustAudioTrackEngine implements TrackAudioEngine {
 
   @override
   Future<void> stop() async {
+    cancelPrefetch();
     if (!_disposed) await _instance?.stop();
   }
 
@@ -137,6 +170,8 @@ class JustAudioTrackEngine implements TrackAudioEngine {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    cancelPrefetch();
+    _prefetchClient.close(force: true);
     for (final subscription in _subscriptions) {
       await subscription.cancel();
     }

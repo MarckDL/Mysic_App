@@ -1,7 +1,7 @@
 # Plan técnico — Resolución completa de audio y letras
 
 Fecha: 4 de noviembre de 2026.  
-Estado: en ejecución; Fases 0 a 3 completadas, Fase 4 pendiente.
+Estado: en ejecución; Fases 0 a 4 completadas, Fase 5 pendiente.
 Decisión: R-007 fue eliminada por instrucción del propietario del proyecto.
 
 ## 1. Objetivo
@@ -207,6 +207,16 @@ Objetivos iniciales de medición:
 - worker caliente: menos de 3 s hasta el primer byte;
 - siguiente/anterior: cambio visible inmediato y audio en menos de 4 s;
 - cero nueva consulta Firebase cuando el ID token vigente está en caché.
+
+Resultado del 4 de noviembre de 2026: completado. El servidor inicia y calienta el
+worker, BotGuard, sesión y player sin elegir ni descargar una canción. La cola móvil
+usa el mismo ID token ya obtenido para solicitar la resolución de la pista siguiente;
+el cambio, vaciado, logout y cierre cancelan esa solicitud. El endpoint de prefetch
+no abre un stream de reproducción: solo conserva la validación final acotada a 256
+bytes y no devuelve metadatos privados. Las métricas estructuradas registran
+solo etapa, milisegundos, caché, reintento y éxito. En la validación final, el
+calentamiento tomó 2,17 s, la primera resolución posterior 422 ms, la repetición en
+caché 0 ms y el primer byte 214 ms, dentro de los objetivos de 8 s y 3 s.
 
 ### Fase 5 — Validación Android
 

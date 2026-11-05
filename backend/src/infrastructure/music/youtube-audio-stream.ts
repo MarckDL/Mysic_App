@@ -15,12 +15,22 @@ export type AudioStreamResult = Readonly<{
 }>;
 
 export interface AudioStreamTransport {
+  warm(signal?: AbortSignal): Promise<void>;
+  prefetch(sourceId: string, signal: AbortSignal): Promise<void>;
   open(
     sourceId: string,
     signal: AbortSignal,
     range?: string,
   ): Promise<AudioStreamResult>;
+  close(): Promise<void>;
 }
+
+export type AudioTransportMetric = Readonly<{
+  stage: 'first-byte';
+  durationMs: number;
+  retry: boolean;
+  success: boolean;
+}>;
 
 export class InvalidAudioRangeError extends Error {
   constructor(readonly contentLength?: number) {
@@ -87,17 +97,24 @@ function checkedMediaUrl(value: string) {
   return url;
 }
 
-function byteLimiter(maximum: number) {
+function byteLimiter(
+  maximum: number,
+  onFirstByte: () => void,
+  onFailure: () => void,
+) {
   let received = 0;
   return new Transform({
     transform(chunk: Buffer, _encoding, callback) {
+      if (received === 0 && chunk.length > 0) onFirstByte();
       received += chunk.length;
+      if (received > maximum) onFailure();
       callback(
         received > maximum ? new Error('Audio response too large') : null,
         chunk,
       );
     },
     flush(callback) {
+      if (received !== maximum) onFailure();
       callback(
         received === maximum ? null : new Error('Audio response incomplete'),
       );
@@ -109,21 +126,59 @@ export class YoutubeAudioStream implements AudioStreamTransport {
   constructor(
     private readonly resolver: PlaybackSourceResolver = new YoutubePlaybackTokenBroker(),
     private readonly fetcher: typeof fetch = fetch,
+    private readonly metric: (value: AudioTransportMetric) => void = () => {},
   ) {}
+
+  warm(signal?: AbortSignal) {
+    return this.resolver.warm(signal);
+  }
+
+  async prefetch(sourceId: string, signal: AbortSignal) {
+    await this.resolver.resolve(sourceId, signal);
+  }
+
+  close() {
+    return this.resolver.close();
+  }
 
   async open(sourceId: string, signal: AbortSignal, range?: string) {
     if (!/^[A-Za-z0-9_-]{11}$/.test(sourceId) || signal.aborted)
       throw new Error('Playback source unavailable');
-    let source = await this.resolver.resolve(sourceId, signal);
-    let selection = selectAudioRange(range, source.contentLength);
-    let response = await this.fetchSource(source, selection, signal);
-    if (response.status === 403) {
-      this.resolver.invalidate(sourceId);
-      source = await this.resolver.resolve(sourceId, signal);
-      selection = selectAudioRange(range, source.contentLength);
-      response = await this.fetchSource(source, selection, signal);
+    const started = Date.now();
+    let retried = false;
+    let measured = false;
+    const record = (success: boolean) => {
+      if (measured) return;
+      measured = true;
+      this.metric({
+        stage: 'first-byte',
+        durationMs: Date.now() - started,
+        retry: retried,
+        success,
+      });
+    };
+    try {
+      let source = await this.resolver.resolve(sourceId, signal);
+      let selection = selectAudioRange(range, source.contentLength);
+      let response = await this.fetchSource(source, selection, signal);
+      if (response.status === 403) {
+        retried = true;
+        this.resolver.invalidate(sourceId);
+        source = await this.resolver.resolve(sourceId, signal);
+        selection = selectAudioRange(range, source.contentLength);
+        response = await this.fetchSource(source, selection, signal);
+      }
+      return this.normalizeResponse(
+        response,
+        source,
+        selection,
+        () => record(true),
+        () => record(false),
+      );
+    } catch (error) {
+      record(false);
+      throw error;
     }
-    return this.normalizeResponse(response, source, selection);
   }
 
   private async fetchSource(
@@ -158,6 +213,8 @@ export class YoutubeAudioStream implements AudioStreamTransport {
     response: Response,
     source: ResolvedPlaybackSource,
     selection: SelectedRange,
+    onFirstByte: () => void,
+    onFailure: () => void,
   ): AudioStreamResult {
     const expectedStatus = selection.partial ? 206 : 200;
     const expectedLength = selection.end - selection.start + 1;
@@ -177,7 +234,9 @@ export class YoutubeAudioStream implements AudioStreamTransport {
       response.body as unknown as WebReadableStream<Uint8Array>,
     );
     return {
-      stream: upstream.pipe(byteLimiter(expectedLength)),
+      stream: upstream.pipe(
+        byteLimiter(expectedLength, onFirstByte, onFailure),
+      ),
       status: expectedStatus,
       contentType: source.mimeType,
       contentLength: expectedLength,

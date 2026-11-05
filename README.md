@@ -433,3 +433,6 @@ El reproductor se mantiene durante la sesión al navegar e incluye cola en memor
 mini reproductor, seek y servicio multimedia Android; falta validar el nuevo
 transporte durante más de tres minutos en dispositivo. No incluye persistencia de cola. Pasos de ejecución y pruebas pendientes en
 [el plan del Sprint 6](docs/10-sprint-06-plan.md).
+El backend calienta el resolvedor al iniciar y la cola precarga únicamente la
+resolución de la pista siguiente; salvo la validación final de 256 bytes, no precarga
+ni almacena el cuerpo de audio.

@@ -19,6 +19,7 @@ export type ResolvedPlaybackSource = Readonly<{
 }>;
 
 export interface PlaybackSourceResolver {
+  warm(signal?: AbortSignal): Promise<void>;
   resolve(
     sourceId: string,
     signal?: AbortSignal,

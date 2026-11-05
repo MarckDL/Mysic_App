@@ -11,6 +11,7 @@ import {
 } from '../../modules/playback/domain/playback-source-resolver.js';
 
 type WorkerMessage =
+  | { type: 'warmed'; requestId: number }
   | { type: 'ready'; requestId: number; sourceId: string; expiresAtMs: number }
   | {
       type: 'resolved';
@@ -34,6 +35,13 @@ type Pending = {
 };
 
 type WorkerFactory = () => ChildProcess;
+
+export type PlaybackMetric = Readonly<{
+  stage: 'worker-warm' | 'resolution';
+  durationMs: number;
+  cacheHit: boolean;
+  success: boolean;
+}>;
 
 function defaultWorkerFactory() {
   const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -89,12 +97,55 @@ export class YoutubePlaybackTokenBroker
     string,
     Promise<ResolvedPlaybackSource>
   >();
+  private warmRequest?: Promise<void>;
+  private warmed = false;
+  private readonly warmPending = new Map<
+    number,
+    {
+      resolve: () => void;
+      reject: () => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
 
   constructor(
     private readonly workerFactory: WorkerFactory = defaultWorkerFactory,
     private readonly timeoutMs = 15_000,
     private readonly now: () => number = Date.now,
+    private readonly metric: (value: PlaybackMetric) => void = () => {},
   ) {}
+
+  warm(signal?: AbortSignal) {
+    if (signal?.aborted)
+      return Promise.reject(new Error('Playback worker unavailable'));
+    if (this.warmed) return Promise.resolve();
+    if (!this.warmRequest) {
+      const started = this.now();
+      this.warmRequest = this.requestWarm()
+        .then(() => {
+          this.warmed = true;
+          this.metric({
+            stage: 'worker-warm',
+            durationMs: this.now() - started,
+            cacheHit: false,
+            success: true,
+          });
+        })
+        .catch((error: unknown) => {
+          this.metric({
+            stage: 'worker-warm',
+            durationMs: this.now() - started,
+            cacheHit: false,
+            success: false,
+          });
+          throw error;
+        })
+        .finally(() => {
+          this.warmRequest = undefined;
+        });
+    }
+    return this.observeVoid(this.warmRequest, signal);
+  }
 
   prepare(sourceId: string, signal?: AbortSignal) {
     if (!/^[A-Za-z0-9_-]{11}$/.test(sourceId) || signal?.aborted)
@@ -124,6 +175,7 @@ export class YoutubePlaybackTokenBroker
     this.child = undefined;
     this.leases.clear();
     this.resolved.clear();
+    this.warmed = false;
     this.rejectAll();
     if (!child) return;
     child.send?.({ type: 'shutdown' }, () => {});
@@ -134,14 +186,41 @@ export class YoutubePlaybackTokenBroker
     if (!/^[A-Za-z0-9_-]{11}$/.test(sourceId) || signal?.aborted)
       return Promise.reject(new Error('Playback source unavailable'));
     const cached = this.resolved.get(sourceId);
-    if (cached && cached.expiresAtMs > this.now() + 30_000)
+    if (cached && cached.expiresAtMs > this.now() + 30_000) {
+      this.metric({
+        stage: 'resolution',
+        durationMs: 0,
+        cacheHit: true,
+        success: true,
+      });
       return Promise.resolve(cached);
+    }
     const current = this.resolving.get(sourceId);
     if (current) return this.observeResolution(current, signal);
-    const request = this.requestResolution(sourceId).finally(() => {
-      if (this.resolving.get(sourceId) === request)
-        this.resolving.delete(sourceId);
-    });
+    const started = this.now();
+    const request = this.requestResolution(sourceId)
+      .then((value) => {
+        this.metric({
+          stage: 'resolution',
+          durationMs: this.now() - started,
+          cacheHit: false,
+          success: true,
+        });
+        return value;
+      })
+      .catch((error: unknown) => {
+        this.metric({
+          stage: 'resolution',
+          durationMs: this.now() - started,
+          cacheHit: false,
+          success: false,
+        });
+        throw error;
+      })
+      .finally(() => {
+        if (this.resolving.get(sourceId) === request)
+          this.resolving.delete(sourceId);
+      });
     this.resolving.set(sourceId, request);
     return this.observeResolution(request, signal);
   }
@@ -168,6 +247,26 @@ export class YoutubePlaybackTokenBroker
         if (!error) return;
         clearTimeout(timer);
         this.pending.delete(requestId);
+        fail();
+      });
+    });
+  }
+
+  private requestWarm() {
+    const child = this.getWorker();
+    const requestId = ++this.requestId;
+    return new Promise<void>((resolve, reject) => {
+      const fail = () => reject(new Error('Playback worker unavailable'));
+      const timer = setTimeout(() => {
+        this.warmPending.delete(requestId);
+        fail();
+        this.restartWorker(child);
+      }, this.timeoutMs);
+      this.warmPending.set(requestId, { resolve, reject: fail, timer });
+      child.send({ type: 'warm', requestId }, (error) => {
+        if (!error) return;
+        clearTimeout(timer);
+        this.warmPending.delete(requestId);
         fail();
       });
     });
@@ -212,6 +311,23 @@ export class YoutubePlaybackTokenBroker
     if (!value || typeof value !== 'object' || !('type' in value)) return;
     const message = value as WorkerMessage;
     if (!Number.isSafeInteger(message.requestId)) return;
+    if (message.type === 'warmed') {
+      const warm = this.warmPending.get(message.requestId);
+      if (!warm) return;
+      clearTimeout(warm.timer);
+      this.warmPending.delete(message.requestId);
+      warm.resolve();
+      return;
+    }
+    if (message.type === 'error') {
+      const warm = this.warmPending.get(message.requestId);
+      if (warm) {
+        clearTimeout(warm.timer);
+        this.warmPending.delete(message.requestId);
+        warm.reject();
+        return;
+      }
+    }
     const pending = this.pending.get(message.requestId);
     if (!pending) return;
     clearTimeout(pending.timer);
@@ -291,6 +407,7 @@ export class YoutubePlaybackTokenBroker
   private restartWorker(child: ChildProcess) {
     if (this.child !== child) return;
     this.child = undefined;
+    this.warmed = false;
     if (!child.killed) child.kill('SIGKILL');
     this.rejectAll();
   }
@@ -301,6 +418,11 @@ export class YoutubePlaybackTokenBroker
       pending.reject();
     }
     this.pending.clear();
+    for (const pending of this.warmPending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject();
+    }
+    this.warmPending.clear();
   }
 
   private observe(
@@ -336,6 +458,24 @@ export class YoutubePlaybackTokenBroker
         (source) => {
           signal.removeEventListener('abort', abort);
           resolve(source);
+        },
+        (error: unknown) => {
+          signal.removeEventListener('abort', abort);
+          reject(error);
+        },
+      );
+    });
+  }
+
+  private observeVoid(request: Promise<void>, signal?: AbortSignal) {
+    if (!signal) return request;
+    return new Promise<void>((resolve, reject) => {
+      const abort = () => reject(new Error('Playback worker unavailable'));
+      signal.addEventListener('abort', abort, { once: true });
+      void request.then(
+        () => {
+          signal.removeEventListener('abort', abort);
+          resolve();
         },
         (error: unknown) => {
           signal.removeEventListener('abort', abort);

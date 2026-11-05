@@ -11,6 +11,8 @@ class FakeTrackAudioEngine implements TrackAudioEngine {
   int stops = 0;
   int disposals = 0;
   final seeks = <Duration>[];
+  final prefetched = <String>[];
+  int prefetchCancellations = 0;
   @override
   Duration? duration;
   @override
@@ -25,6 +27,16 @@ class FakeTrackAudioEngine implements TrackAudioEngine {
     this.token = token;
     if (fail) throw StateError('Unavailable');
     await pendingLoad?.future;
+  }
+
+  @override
+  Future<void> prefetch(String sourceId, String token) async {
+    prefetched.add(sourceId);
+  }
+
+  @override
+  void cancelPrefetch() {
+    prefetchCancellations++;
   }
 
   @override

@@ -38,15 +38,40 @@ function setup(
   },
 ) {
   const transport = { open: vi.fn(open) };
+  const completeTransport = {
+    ...transport,
+    warm: vi.fn<AudioStreamTransport['warm']>(async () => {}),
+    prefetch: vi.fn<AudioStreamTransport['prefetch']>(async () => {}),
+    close: vi.fn<AudioStreamTransport['close']>(async () => {}),
+  };
   return {
     app: createApp({
       tokenVerifier: verifier,
-      audioStreamTransport: transport,
+      audioStreamTransport: completeTransport,
     }),
-    transport,
+    transport: completeTransport,
   };
 }
 describe('audio nativo autenticado', () => {
+  it('precarga solo la resolución autenticada de la siguiente pista', async () => {
+    const { app, transport } = setup();
+    const response = await request(app)
+      .post('/api/v1/playback/prefetch/aqz-KE-bpKQ')
+      .auth('a', { type: 'bearer' });
+    expect(response.status).toBe(204);
+    expect(transport.prefetch).toHaveBeenCalledOnce();
+    expect(transport.open).not.toHaveBeenCalled();
+    expect(transport.prefetch.mock.calls[0]?.[0]).toBe('aqz-KE-bpKQ');
+    expect(transport.prefetch.mock.calls[0]?.[1].aborted).toBe(false);
+    expect(
+      (
+        await request(app).post(
+          '/api/v1/playback/prefetch/aqz-KE-bpKQ?url=evil',
+        )
+      ).status,
+    ).toBe(401);
+  });
+
   it.each([null, 'bad', 'other'])(
     'rechaza sesión %s antes de consultar el proveedor',
     async (token) => {

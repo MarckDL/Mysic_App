@@ -41,6 +41,7 @@ void main() {
       await controller.playQueue([a, b, c], initialIndex: 1);
       expect(controller.current!.title, 'Segunda');
       expect(engine.sourceId, '12345678901');
+      expect(engine.prefetched, [c.id.substring(8)]);
       await controller.next();
       expect(controller.current!.id, c.id);
       expect(controller.hasNext, false);

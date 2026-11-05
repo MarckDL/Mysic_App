@@ -377,6 +377,16 @@ process.on('message', (message) => {
     void shutdown();
     return;
   }
+  if (message.type === 'warm' && Number.isSafeInteger(message.requestId)) {
+    void getContext()
+      .then(() =>
+        process.send?.({ type: 'warmed', requestId: message.requestId }),
+      )
+      .catch(() =>
+        process.send?.({ type: 'error', requestId: message.requestId }),
+      );
+    return;
+  }
   if (message.type === 'invalidate' && SOURCE_ID.test(message.sourceId ?? '')) {
     contentTokens.delete(message.sourceId);
     resolutions.delete(message.sourceId);

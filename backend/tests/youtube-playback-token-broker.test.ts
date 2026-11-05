@@ -31,6 +31,32 @@ const asChild = (worker: FakeWorker) => worker as unknown as ChildProcess;
 afterEach(() => vi.useRealTimers());
 
 describe('YoutubePlaybackTokenBroker', () => {
+  it('calienta una sola sesión sin resolver ni descargar canciones', async () => {
+    const worker = new FakeWorker();
+    const metrics = vi.fn();
+    const broker = new YoutubePlaybackTokenBroker(
+      () => asChild(worker),
+      15_000,
+      Date.now,
+      metrics,
+    );
+    const first = broker.warm();
+    const second = broker.warm();
+    expect(worker.messages).toEqual([{ type: 'warm', requestId: 1 }]);
+    worker.reply({ type: 'warmed', requestId: 1 });
+    await Promise.all([first, second]);
+    await broker.warm();
+    expect(worker.messages).toHaveLength(1);
+    expect(metrics).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stage: 'worker-warm',
+        cacheHit: false,
+        success: true,
+      }),
+    );
+    await broker.close();
+  });
+
   it('normaliza y reutiliza una fuente validada sin exponerla en logs', async () => {
     const worker = new FakeWorker();
     const broker = new YoutubePlaybackTokenBroker(() => asChild(worker));
