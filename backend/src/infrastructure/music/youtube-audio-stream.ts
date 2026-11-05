@@ -233,10 +233,15 @@ export class YoutubeAudioStream implements AudioStreamTransport {
     const upstream = Readable.fromWeb(
       response.body as unknown as WebReadableStream<Uint8Array>,
     );
+    const limited = byteLimiter(expectedLength, onFirstByte, onFailure);
+    // pipe() no reenvía por sí solo los errores del origen. El body de fetch
+    // puede emitir AbortError después de que el consumidor ya cerró el stream;
+    // se mantiene este listener durante toda la vida del origen y se entrega
+    // el error al stream público, que la ruta/pipeline controla.
+    upstream.on('error', (error: Error) => limited.destroy(error));
+    limited.on('close', () => upstream.destroy());
     return {
-      stream: upstream.pipe(
-        byteLimiter(expectedLength, onFirstByte, onFailure),
-      ),
+      stream: upstream.pipe(limited),
       status: expectedStatus,
       contentType: source.mimeType,
       contentLength: expectedLength,

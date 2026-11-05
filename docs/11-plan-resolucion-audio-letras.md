@@ -1,7 +1,7 @@
 # Plan técnico — Resolución completa de audio y letras
 
 Fecha: 4 de noviembre de 2026.  
-Estado: en ejecución; Fases 0 a 4 completadas, Fase 5 pendiente.
+Estado: en ejecución; Fases 0 a 4 completadas, Fase 5 en validación.
 Decisión: R-007 fue eliminada por instrucción del propietario del proyecto.
 
 ## 1. Objetivo
@@ -228,6 +228,24 @@ caché 0 ms y el primer byte 214 ms, dentro de los objetivos de 8 s y 3 s.
 5. Caducidad simulada, desconexión USB/red y reintento único.
 6. Logout: detener proxy, worker asociado y metadatos de sesión.
 
+Evidencia parcial del 4 de noviembre de 2026 en el dispositivo físico
+`23117RA68G`:
+
+- La sesión Google volvió a verificarse después de restaurar el reenvío USB del
+  puerto 3000. Se detectó que una desconexión HTTP podía publicar un `AbortError`
+  tardío sin listener y terminar Express; se corrigió tanto en la ruta como en el
+  stream interno de `fetch`, con dos regresiones automatizadas.
+- `Luma` de Esperón reprodujo 1:18 sin el corte de 1:09 y continuó en segundo
+  plano durante más de 3:02. Express permaneció disponible durante la prueba.
+- Pausa y reanudación conservaron pista y posición. Los comandos multimedia
+  `next` y `previous` cambiaron `Luma` → `Almanautas` → `Luma` desde una cola de
+  cuatro pistas, sin detener el backend.
+- La suite backend quedó en 133 pruebas aprobadas y 3 pruebas PostgreSQL omitidas
+  por entorno; tipos, lint, build y formato aprobaron.
+
+La fase sigue abierta: falta repetir con tres IDs registrados, seek intermedio,
+bloqueo de pantalla, cola de cinco, caducidad/desconexión/reintento y logout.
+
 El Sprint 6 solo puede cerrarse si la prueba real supera el límite temporal y CI
 permanece verde. Después: commit de cierre, integración en `main` y etiqueta.
 
@@ -256,17 +274,17 @@ contrato, la sincronización y la UI antes de ampliar fuentes.
 
 ## 6. Riesgos y mitigaciones
 
-| Riesgo | Mitigación |
-|---|---|
-| Rotación de BotGuard/player | Versiones fijadas, worker reemplazable, pruebas de humo |
-| Bloqueo de IP/429 | Límites, caché, backoff y observabilidad por etapa |
-| Token ligado a identidad incorrecta | Una sesión coherente y pruebas visitor/video |
-| Ejecución de JS remoto | Proceso hijo sin secretos, permisos y destinos acotados |
-| Consumo de ancho de banda | Rango bajo demanda, cancelación y cuotas por UID |
-| URL caducada durante seek | Re-resolución única del mismo rango |
-| Dependencia GPL de Limusic | No copiar ni enlazar su código; implementación propia |
-| Letras de versión incorrecta | Coincidencia estricta por duración y atribución |
-| Cambio de API LRCLIB | Adaptador aislado, timeout, Retry-After y fixtures |
+| Riesgo                              | Mitigación                                              |
+| ----------------------------------- | ------------------------------------------------------- |
+| Rotación de BotGuard/player         | Versiones fijadas, worker reemplazable, pruebas de humo |
+| Bloqueo de IP/429                   | Límites, caché, backoff y observabilidad por etapa      |
+| Token ligado a identidad incorrecta | Una sesión coherente y pruebas visitor/video            |
+| Ejecución de JS remoto              | Proceso hijo sin secretos, permisos y destinos acotados |
+| Consumo de ancho de banda           | Rango bajo demanda, cancelación y cuotas por UID        |
+| URL caducada durante seek           | Re-resolución única del mismo rango                     |
+| Dependencia GPL de Limusic          | No copiar ni enlazar su código; implementación propia   |
+| Letras de versión incorrecta        | Coincidencia estricta por duración y atribución         |
+| Cambio de API LRCLIB                | Adaptador aislado, timeout, Retry-After y fixtures      |
 
 ## 7. Definition of Done del incremento
 

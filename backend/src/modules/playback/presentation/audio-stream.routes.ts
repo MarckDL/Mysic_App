@@ -116,6 +116,12 @@ export function createAudioStreamRouter(
       response.once('close', cancel);
       try {
         const audio = await transport.open(sourceId, controller.signal, range);
+        // El cuerpo de fetch puede publicar AbortError un tick después de que
+        // pipeline() ya retiró sus listeners al cerrarse el cliente. Mantener
+        // este listener durante toda la vida del stream evita que una
+        // desconexión normal derribe el proceso; pipeline() sigue propagando
+        // los errores mientras está activo.
+        audio.stream.on('error', () => {});
         if (controller.signal.aborted) {
           audio.stream.destroy();
           return;

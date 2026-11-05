@@ -240,6 +240,7 @@ cancelación, seek y compatibilidad antes de habilitarse. No se ha añadido un p
 ni desafíos de autenticación, ni reproducción YouTube ficticia en este incremento.
 
 Fuentes técnicas:
+
 - https://ytjs.dev/api/classes/Player
 - https://github.com/LuanRT/YouTube.js/blob/main/src/Innertube.ts
 - https://ytjs.dev/googlevideo/
@@ -267,6 +268,7 @@ rejected (3). No permite concluir que el proveedor impidiera la entrega de audio
 La repetición y sus resultados se describen abajo. El Sprint 06 sigue abierto.
 
 Referencias técnicas revisadas:
+
 - https://github.com/LuanRT/googlevideo/blob/main/examples/downloader/vod-example.ts
 - https://github.com/LuanRT/googlevideo/blob/main/examples/downloader/utils/sabr-stream-factory.ts
 - https://ytjs.dev/googlevideo/api/exports/sabr-stream/classes/SabrStream
@@ -284,7 +286,6 @@ confirmaba que se solicitó verificación, no el código final concreto. Se repi
 registro de estados numéricos, plazo acotado y sin generadores de tokens. Pending
 se deja evolucionar de manera normal; rejected detiene la prueba. No se fuerza
 ninguna aprobación. El resultado se registrará sin revelar endpoints ni credenciales.
-
 
 ## Resultado de la prueba de audio nativo
 
@@ -393,7 +394,6 @@ flutter pub get &&
 
 No existe garantía universal para todo el catálogo. Si una pista falla, registrar
 su ID y el mensaje de la app sin compartir tokens, .env ni URLs firmadas.
-
 
 ## Corrección tras prueba de usuario: renovación de token
 
@@ -560,5 +560,8 @@ worker persistente, selecciona VISIONOS como fallback probado, valida el final d
 archivo y entrega rangos autenticados con backpressure. La prueba real del proxy
 recibió 256 KiB exactos al inicio, después de 90 segundos y al final de Big Buck
 Bunny. El worker SABR de producción fue retirado y Flutter habilitó seek en pantalla
-y controles del sistema. El corte queda resuelto a nivel de transporte; aún falta la
-prueba Android de más de tres minutos antes de cerrar y etiquetar el Sprint.
+y controles del sistema. La validación Android posterior superó 1:09 y 3 minutos en
+segundo plano, y verificó pausa/reanudación y controles anterior/siguiente. Durante
+esa prueba se corrigió además un `AbortError` tardío que podía terminar Express al
+cerrar el cliente. Aún faltan bloqueo de pantalla, seek documentado, la matriz de
+tres IDs, desconexión/reintento y logout antes de cerrar y etiquetar el Sprint.

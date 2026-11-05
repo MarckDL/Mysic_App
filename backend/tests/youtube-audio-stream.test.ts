@@ -158,6 +158,34 @@ describe('proxy de rangos de YouTube', () => {
     await expect(read(result.stream)).rejects.toThrow();
   });
 
+  it('controla el AbortError tardío del body aunque el consumidor ya cerró', async () => {
+    let bodyController!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        bodyController = controller;
+      },
+    });
+    const proxy = new YoutubeAudioStream(
+      fakeResolver(),
+      vi.fn(
+        async () =>
+          new Response(body, {
+            status: 200,
+            headers: { 'content-length': '10' },
+          }),
+      ) as typeof fetch,
+    );
+    const result = await proxy.open(sourceId, new AbortController().signal);
+    result.stream.on('error', () => {});
+    result.stream.destroy();
+
+    bodyController.error(
+      new DOMException('This operation was aborted', 'AbortError'),
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(result.stream.destroyed).toBe(true);
+  });
+
   it('no sigue redirecciones fuera del CDN permitido', async () => {
     const proxy = new YoutubeAudioStream(
       fakeResolver(),

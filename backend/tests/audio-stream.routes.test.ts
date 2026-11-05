@@ -183,6 +183,41 @@ describe('audio nativo autenticado', () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+  it('mantiene controlado un AbortError tardío al desconectarse el cliente', async () => {
+    const audio = new PassThrough();
+    audio.write('init');
+    const { app } = setup(async () => ({
+      stream: audio,
+      status: 200,
+      contentType: 'audio/mp4',
+      contentLength: 100,
+    }));
+    const server = app.listen(0);
+    await once(server, 'listening');
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error();
+    const abort = new AbortController();
+    try {
+      const response = await fetch(`http://127.0.0.1:${address.port}${path}`, {
+        headers: { Authorization: 'Bearer a' },
+        signal: abort.signal,
+      });
+      expect(response.status).toBe(200);
+      abort.abort();
+      await vi.waitFor(() => expect(audio.destroyed).toBe(true));
+
+      expect(() =>
+        audio.emit(
+          'error',
+          new DOMException('This operation was aborted', 'AbortError'),
+        ),
+      ).not.toThrow();
+    } finally {
+      abort.abort();
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
   it('mantiene el límite global al reemplazar solo por UID', async () => {
     const { app, transport } = setup(async () => {
       const audio = new PassThrough();
