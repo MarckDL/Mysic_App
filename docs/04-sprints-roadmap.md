@@ -354,14 +354,19 @@ Tareas:
 - Crear pantallas Flutter.
 - Validar propiedad del recurso.
 - Crear pruebas de integración.
+- Desplegar una instancia preliminar del backend con HTTPS.
+- Configurar el APK contra la URL remota y probarlo fuera de la red local.
 
 Aceptación:
 
 - Playlists persistidas en PostgreSQL.
 - Solo el propietario puede modificarlas.
 - La información se recupera después de reinstalar la app.
+- El backend es accesible por HTTPS y la app funciona mediante datos móviles.
 
 Etiqueta: `sprint-07-v0.7.0`
+
+Plan de ejecución: `docs/12-plan-sprint-07.md`.
 
 ## 12. Sprint 08 — Favoritos y ratings
 

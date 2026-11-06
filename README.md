@@ -8,9 +8,9 @@ Permite explorar un catálogo musical, gestionar playlists, guardar favoritos, c
 
 La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 
-> Estado: Sprints 1 a 6 cerrados y verificados. Sprint 6 corresponde a
-> `sprint-06-v0.6.0`: reproducción del catálogo, seek, cola, mini reproductor,
-> controles del sistema y segundo plano Android.
+> Estado: Sprints 1 a 6 cerrados y verificados. Sprint 7 está en ejecución:
+> playlists multiusuario, privacidad, orden transaccional, persistencia en Supabase
+> y preparación del backend HTTPS.
 >
 > El catálogo experimental utiliza `youtubei.js` desde el backend. La disponibilidad
 > de metadatos no garantiza que un stream sea completo o reproducible. La resolución,
@@ -23,7 +23,7 @@ La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 - Búsqueda musical.
 - Reproductor de audio.
 - Reproducción en segundo plano.
-- Playlists personales.
+- Playlists personales persistidas, privadas o públicas.
 - Favoritos.
 - Calificaciones.
 - Comentarios.
