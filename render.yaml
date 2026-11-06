@@ -10,7 +10,6 @@ services:
     startCommand: pnpm start
     healthCheckPath: /api/v1/health
     autoDeployTrigger: checksPass
-    maxShutdownDelaySeconds: 120
     buildFilter:
       paths:
         - backend/**
