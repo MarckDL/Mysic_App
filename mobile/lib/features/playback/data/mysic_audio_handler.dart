@@ -31,7 +31,7 @@ class MysicAudioHandler extends BaseAudioHandler {
     _publishedIndex = null;
     _publishedDuration = null;
     queue.add(const []);
-    mediaItem.add(null);
+    _clearMediaItem();
     playbackState.add(
       PlaybackState(processingState: AudioProcessingState.idle, playing: false),
     );
@@ -50,6 +50,15 @@ class MysicAudioHandler extends BaseAudioHandler {
         ? null
         : Uri.tryParse(track.thumbnailUrl!),
   );
+
+  void _clearMediaItem() {
+    // audio_service 0.18 ignora los valores null al sincronizar MediaItem con
+    // Android. Publicar primero un elemento vacío reemplaza título, artista y
+    // portada en la MediaSession; el null posterior conserva el contrato Dart.
+    mediaItem.add(const MediaItem(id: 'mysic:idle', title: ''));
+    mediaItem.add(null);
+  }
+
   void _publish() {
     final controller = _controller;
     if (controller == null) return;
@@ -63,9 +72,11 @@ class MysicAudioHandler extends BaseAudioHandler {
     }
     if (!identical(current, _publishedCurrent) ||
         controller.duration != _publishedDuration) {
-      mediaItem.add(
-        current == null ? null : _item(current, controller.duration),
-      );
+      if (current == null) {
+        _clearMediaItem();
+      } else {
+        mediaItem.add(_item(current, controller.duration));
+      }
       _publishedDuration = controller.duration;
       _publishedCurrent = current;
     }

@@ -1,4 +1,3 @@
-
 # Mysic
 
 **Aplicación móvil de exploración musical con biblioteca personalizada, autenticación Google y funcionalidades sociales.**
@@ -9,7 +8,9 @@ Permite explorar un catálogo musical, gestionar playlists, guardar favoritos, c
 
 La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 
-> Estado: Sprint 1 cerrado (`sprint-01-v0.1.0`). Sprint 2 cerrado (`sprint-02-v0.2.0`). Sprint 3 cerrado (`sprint-03-v0.3.0`). Sprint 4 cerrado (`sprint-04-v0.4.0`). Sprint 5 cerrado (`sprint-05-v0.5.0`). Sprint 6: escucha del catálogo confirmada; cola, mini reproductor y servicio implementados, prueba Android de fondo pendiente. Prueba de audio de YouTube trasladada al Sprint 6.
+> Estado: Sprints 1 a 6 cerrados y verificados. Sprint 6 corresponde a
+> `sprint-06-v0.6.0`: reproducción del catálogo, seek, cola, mini reproductor,
+> controles del sistema y segundo plano Android.
 >
 > El catálogo experimental utiliza `youtubei.js` desde el backend. La disponibilidad
 > de metadatos no garantiza que un stream sea completo o reproducible. La resolución,
@@ -32,20 +33,20 @@ La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 
 ## Stack tecnológico
 
-| Capa | Tecnología |
-|---|---|
-| Mobile | Flutter / Dart |
-| Backend | Node.js / Express / TypeScript |
-| Autenticación | Firebase Auth / Google Sign-In |
-| Validación JWT | Firebase Admin SDK |
-| Base de datos | PostgreSQL / Supabase |
-| ORM | Prisma |
-| Catálogo experimental | youtubei.js |
-| Reproductor | just_audio / audio_service |
-| Estado | Riverpod |
-| Navegación | go_router |
-| Gestor de paquetes backend | pnpm |
-| Versionado | Git / GitHub |
+| Capa                       | Tecnología                     |
+| -------------------------- | ------------------------------ |
+| Mobile                     | Flutter / Dart                 |
+| Backend                    | Node.js / Express / TypeScript |
+| Autenticación              | Firebase Auth / Google Sign-In |
+| Validación JWT             | Firebase Admin SDK             |
+| Base de datos              | PostgreSQL / Supabase          |
+| ORM                        | Prisma                         |
+| Catálogo experimental      | youtubei.js                    |
+| Reproductor                | just_audio / audio_service     |
+| Estado                     | Riverpod                       |
+| Navegación                 | go_router                      |
+| Gestor de paquetes backend | pnpm                           |
+| Versionado                 | Git / GitHub                   |
 
 ## Arquitectura
 
@@ -344,22 +345,22 @@ La configuración de Firebase, la firma Android y la URL del backend deben verif
 
 ## 7. Roadmap
 
-| Sprint | Objetivo |
-|---|---|
-| 01 | Fundamentos |
-| 02 | Google Sign-In |
-| 03 | PostgreSQL y usuarios |
-| 04 | Catálogo |
-| 05 | Viabilidad de reproducción |
-| 06 | Reproductor |
-| 07 | Playlists |
-| 08 | Favoritos y ratings |
-| 09 | Comentarios |
-| 10 | Historial |
-| 11 | Estadísticas |
-| 12 | Optimización |
-| 13 | Pruebas |
-| 14 | Entrega académica |
+| Sprint | Objetivo                   |
+| ------ | -------------------------- |
+| 01     | Fundamentos                |
+| 02     | Google Sign-In             |
+| 03     | PostgreSQL y usuarios      |
+| 04     | Catálogo                   |
+| 05     | Viabilidad de reproducción |
+| 06     | Reproductor                |
+| 07     | Playlists                  |
+| 08     | Favoritos y ratings        |
+| 09     | Comentarios                |
+| 10     | Historial                  |
+| 11     | Estadísticas               |
+| 12     | Optimización               |
+| 13     | Pruebas                    |
+| 14     | Entrega académica          |
 
 Cada Sprint tiene una duración estimada de dos semanas.
 
@@ -421,7 +422,6 @@ En desarrollo.
 
 La documentación describe el diseño objetivo; no implica que todos los módulos estén implementados.
 
-
 ### Audio nativo experimental — Sprint 6
 
 Inicio → **Probar audio de YouTube** abre una fuente de prueba abierta (Big Buck
@@ -430,9 +430,10 @@ El backend resuelve AAC/M4A con PoToken en un worker aislado y lo entrega median
 un proxy HTTP Range autenticado; requiere Node LTS compatible y conservar
 `backend/tool/` al ejecutar el build. No garantiza disponibilidad de todas las pistas.
 El reproductor se mantiene durante la sesión al navegar e incluye cola en memoria,
-mini reproductor, seek y servicio multimedia Android; falta validar el nuevo
-transporte durante más de tres minutos en dispositivo. No incluye persistencia de cola. Pasos de ejecución y pruebas pendientes en
-[el plan del Sprint 6](docs/10-sprint-06-plan.md).
+mini reproductor, seek y servicio multimedia Android. El transporte fue validado
+en un dispositivo Android físico durante más de tres minutos, en segundo plano y
+con pantalla bloqueada. No incluye persistencia de cola. Evidencia y límites en
+[el cierre del Sprint 6](docs/10-sprint-06-plan.md).
 El backend calienta el resolvedor al iniciar y la cola precarga únicamente la
 resolución de la pista siguiente; salvo la validación final de 256 bytes, no precarga
 ni almacena el cuerpo de audio.

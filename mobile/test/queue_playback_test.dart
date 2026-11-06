@@ -133,30 +133,38 @@ void main() {
     'notificación comparte cola/controles y no expone tokens; logout la limpia',
     () async {
       final handler = MysicAudioHandler();
+      final publishedItems = <MediaItem?>[];
+      final mediaSubscription = handler.mediaItem.listen(publishedItems.add);
       handler.bind(controller);
-      await controller.playQueue([a, b]);
-      expect(handler.mediaItem.value!.title, a.title);
-      expect(handler.queue.value.map((item) => item.id), [a.id, b.id]);
-      expect(
-        handler.playbackState.value.systemActions,
-        contains(MediaAction.seek),
-      );
-      await handler.seek(const Duration(seconds: 90));
-      expect(engine.seeks, [const Duration(seconds: 90)]);
-      await handler.pause();
-      expect(controller.phase, TrackAudioPhase.paused);
-      await handler.play();
-      await handler.skipToNext();
-      expect(controller.current!.id, b.id);
-      await auth.signOut();
-      await Future<void>.delayed(Duration.zero);
-      expect(controller.queue, isEmpty);
-      expect(handler.mediaItem.value, isNull);
-      expect(handler.playbackState.value.playing, false);
-      final plays = engine.plays;
-      await handler.play();
-      expect(engine.plays, plays);
-      handler.unbind(controller);
+      try {
+        await controller.playQueue([a, b]);
+        expect(handler.mediaItem.value!.title, a.title);
+        expect(handler.queue.value.map((item) => item.id), [a.id, b.id]);
+        expect(
+          handler.playbackState.value.systemActions,
+          contains(MediaAction.seek),
+        );
+        await handler.seek(const Duration(seconds: 90));
+        expect(engine.seeks, [const Duration(seconds: 90)]);
+        await handler.pause();
+        expect(controller.phase, TrackAudioPhase.paused);
+        await handler.play();
+        await handler.skipToNext();
+        expect(controller.current!.id, b.id);
+        await auth.signOut();
+        await Future<void>.delayed(Duration.zero);
+        expect(controller.queue, isEmpty);
+        expect(handler.mediaItem.value, isNull);
+        expect(publishedItems[publishedItems.length - 2]?.id, 'mysic:idle');
+        expect(publishedItems[publishedItems.length - 2]?.title, isEmpty);
+        expect(handler.playbackState.value.playing, false);
+        final plays = engine.plays;
+        await handler.play();
+        expect(engine.plays, plays);
+        handler.unbind(controller);
+      } finally {
+        await mediaSubscription.cancel();
+      }
     },
   );
   test(

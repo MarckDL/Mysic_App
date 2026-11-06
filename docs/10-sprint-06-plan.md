@@ -1,9 +1,7 @@
 # Sprint 06 — Audio del catálogo y reproductor
 
 Fecha de planificación: 27 de octubre de 2026.
-Estado: APK y controles de fondo probados en Android; la navegación de cola fue
-corregida y CI aprobada. El transporte del proveedor se corta alrededor de 1:09,
-por lo que el Sprint continúa abierto y no se etiqueta.
+Estado: cerrado y verificado el 6 de noviembre de 2026.
 Historia: US-006 y continuación explícita de viabilidad US-005.
 Versión prevista: sprint-06-v0.6.0.
 
@@ -563,5 +561,32 @@ Bunny. El worker SABR de producción fue retirado y Flutter habilitó seek en pa
 y controles del sistema. La validación Android posterior superó 1:09 y 3 minutos en
 segundo plano, y verificó pausa/reanudación y controles anterior/siguiente. Durante
 esa prueba se corrigió además un `AbortError` tardío que podía terminar Express al
-cerrar el cliente. Aún faltan bloqueo de pantalla, seek documentado, la matriz de
-tres IDs, desconexión/reintento y logout antes de cerrar y etiquetar el Sprint.
+cerrar el cliente.
+
+### Validación final Android — 6 de noviembre de 2026
+
+Dispositivo físico `23117RA68G`, APK debug 0.1.0 configurado contra el backend local
+mediante reenvío USB:
+
+- Cola de cinco pistas conservada en orden. Anterior/siguiente, pausa y reanudación
+  funcionaron tanto en segundo plano como con pantalla bloqueada.
+- `qhmrt3ZNgcs` (`Dried Flowers`) superó 3:25; `q0OGymI3LMs` (`Shinka`)
+  alcanzó 2:18; `ttjKVY6geGA` (`Himawari`) alcanzó 2:13. No reapareció el corte
+  de 1:09.
+- La notificación de bloqueo mostró pista, portada, duración y progreso; el backend
+  permaneció disponible durante toda la reproducción.
+- Seek está cubierto por el controlador, MediaSession y proxy Range: las pruebas
+  verifican salto a 90 s y límite por duración, y el proxy valida rangos iniciales,
+  intermedios y finales. Android publicó `MediaAction.seek` para la pista real.
+- Al retirar el reenvío USB, la pista nueva terminó en error controlado sin derribar
+  Express. Tras restaurarlo, la navegación reintentó la misma fuente y volvió a
+  `PLAYING` sin error.
+- Logout detuvo el audio y vació la cola. La prueba física descubrió que
+  audio_service 0.18 conservaba el último MediaItem en Android; se publica ahora un
+  MediaItem neutro antes del null para borrar título, artista y portada, con prueba
+  de regresión. El APK corregido quedó instalado.
+
+Calidad final local: backend 133 pruebas aprobadas y 3 PostgreSQL omitidas por no
+tener base local activa; tipos, lint, build y formato correctos. Mobile: 43 pruebas
+Flutter, 5 pruebas Python, análisis, formato y APK correctos. El CI de la rama ejecuta
+las pruebas PostgreSQL con servicio real antes de integrar.

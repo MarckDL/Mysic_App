@@ -1,4 +1,3 @@
-
 # Mysic — Roadmap y planificación de sprints
 
 **Metodología:** Scrum adaptado  
@@ -326,9 +325,11 @@ un spike de PoToken/atestación, resolvedor multi-cliente, validación del rango
 y proxy HTTP Range aislado. El detalle, fases, riesgos y criterios medibles están en
 `docs/11-plan-resolucion-audio-letras.md`.
 
-Las fases 0 a 3 quedaron implementadas: PoToken, worker persistente, fallback,
-validación final y proxy Range con seek. La aceptación del Sprint sigue pendiente de
-la prueba Android prolongada y de segundo plano definida en la fase 5.
+Las fases 0 a 5 quedaron implementadas y verificadas: PoToken, worker persistente,
+fallback, validación final, proxy Range con seek y prueba Android prolongada. El 6
+de noviembre de 2026 se verificaron cola de cinco pistas, pantalla bloqueada,
+controles multimedia, tres fuentes de más de dos minutos, desconexión/reintento y
+limpieza de sesión. Sprint cerrado como `sprint-06-v0.6.0`.
 
 Letras simples/sincronizadas pasan a alcance deseable, pero no bloquean la etiqueta
 del Sprint 6. Se implementan después de estabilizar el transporte mediante una
@@ -571,15 +572,15 @@ Etiqueta: `sprint-14-v1.0.0`
 
 ## 19. Riesgos
 
-| Riesgo | Impacto | Mitigación |
-|---|---|---|
-| Cambios en youtubei.js | Alto | Adaptador MusicProvider |
+| Riesgo                         | Impacto | Mitigación                                        |
+| ------------------------------ | ------- | ------------------------------------------------- |
+| Cambios en youtubei.js         | Alto    | Adaptador MusicProvider                           |
 | Rotación de atestación/streams | Crítico | Worker aislado, fallback y pruebas de rango final |
-| Errores de Firebase | Alto | Pruebas desde Sprint 2 |
-| Acceso entre usuarios | Crítico | Autorización y pruebas multiusuario |
-| Cuotas gratuitas | Medio | Monitoreo y hosting local alternativo |
-| Tiempo insuficiente | Alto | Priorización del backlog |
-| Problemas Android | Medio | Pruebas en dispositivo físico |
+| Errores de Firebase            | Alto    | Pruebas desde Sprint 2                            |
+| Acceso entre usuarios          | Crítico | Autorización y pruebas multiusuario               |
+| Cuotas gratuitas               | Medio   | Monitoreo y hosting local alternativo             |
+| Tiempo insuficiente            | Alto    | Priorización del backlog                          |
+| Problemas Android              | Medio   | Pruebas en dispositivo físico                     |
 
 ## 20. Seguimiento
 

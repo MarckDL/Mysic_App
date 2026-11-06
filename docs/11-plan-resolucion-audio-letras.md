@@ -1,7 +1,7 @@
 # Plan técnico — Resolución completa de audio y letras
 
 Fecha: 4 de noviembre de 2026.  
-Estado: en ejecución; Fases 0 a 4 completadas, Fase 5 en validación.
+Estado: Fases 0 a 5 completadas; Fase 6 (letras) queda como incremento posterior.
 Decisión: R-007 fue eliminada por instrucción del propietario del proyecto.
 
 ## 1. Objetivo
@@ -243,8 +243,18 @@ Evidencia parcial del 4 de noviembre de 2026 en el dispositivo físico
 - La suite backend quedó en 133 pruebas aprobadas y 3 pruebas PostgreSQL omitidas
   por entorno; tipos, lint, build y formato aprobaron.
 
-La fase sigue abierta: falta repetir con tres IDs registrados, seek intermedio,
-bloqueo de pantalla, cola de cinco, caducidad/desconexión/reintento y logout.
+Validación final del 6 de noviembre de 2026:
+
+- Cola real de cinco pistas, anterior/siguiente, pausa/reanudación y bloqueo de
+  pantalla aprobados.
+- `qhmrt3ZNgcs` superó 3:25, `q0OGymI3LMs` 2:18 y `ttjKVY6geGA` 2:13 sin corte
+  en 1:09. Seek queda cubierto por MediaAction, controlador y rangos HTTP.
+- La desconexión USB produjo un error controlado; restaurar el túnel permitió
+  reintentar la misma pista sin reiniciar Express.
+- Logout detuvo reproducción y vació la cola. Se corrigió la retención del último
+  MediaItem por audio_service mediante reemplazo neutro antes de publicar null.
+
+La Fase 5 queda cerrada. Letras no bloquea la etiqueta del Sprint 6.
 
 El Sprint 6 solo puede cerrarse si la prueba real supera el límite temporal y CI
 permanece verde. Después: commit de cierre, integración en `main` y etiqueta.

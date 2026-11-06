@@ -1,4 +1,3 @@
-
 # Mysic — Documento de arquitectura
 
 **Versión:** 1.0.0  
@@ -25,25 +24,25 @@ El proyecto tiene fines académicos y de portafolio. No contempla monetización,
 
 ## 3. Stack tecnológico
 
-| Componente | Tecnología |
-|---|---|
-| Aplicación móvil | Flutter y Dart |
-| Estado | Riverpod |
-| Navegación | go_router |
-| Cliente HTTP | Dio |
-| Reproducción | just_audio, audio_service, audio_session |
-| Autenticación | Firebase Auth y Google Sign-In |
-| Backend | Node.js 22 LTS o versión LTS compatible, Express, TypeScript |
-| Validación de identidad | Firebase Admin SDK |
-| Base de datos | PostgreSQL mediante Supabase |
-| ORM | Prisma |
-| Catálogo experimental | youtubei.js |
-| Caché de metadatos | LRU en memoria |
-| Caché local | SQLite / Drift, si es necesario |
-| Testing backend | Vitest y Supertest |
-| Testing Flutter | flutter_test |
-| CI | GitHub Actions |
-| Hosting | Render o Railway |
+| Componente              | Tecnología                                                   |
+| ----------------------- | ------------------------------------------------------------ |
+| Aplicación móvil        | Flutter y Dart                                               |
+| Estado                  | Riverpod                                                     |
+| Navegación              | go_router                                                    |
+| Cliente HTTP            | Dio                                                          |
+| Reproducción            | just_audio, audio_service, audio_session                     |
+| Autenticación           | Firebase Auth y Google Sign-In                               |
+| Backend                 | Node.js 22 LTS o versión LTS compatible, Express, TypeScript |
+| Validación de identidad | Firebase Admin SDK                                           |
+| Base de datos           | PostgreSQL mediante Supabase                                 |
+| ORM                     | Prisma                                                       |
+| Catálogo experimental   | youtubei.js                                                  |
+| Caché de metadatos      | LRU en memoria                                               |
+| Caché local             | SQLite / Drift, si es necesario                              |
+| Testing backend         | Vitest y Supertest                                           |
+| Testing Flutter         | flutter_test                                                 |
+| CI                      | GitHub Actions                                               |
+| Hosting                 | Render o Railway                                             |
 
 Docker es recomendado para desarrollo local, pero no obligatorio si se utiliza Supabase alojado.
 
@@ -250,12 +249,12 @@ del backend y su vencimiento. Las URLs firmadas del proveedor permanecen interna
 
 ## 8. Estrategia de caché
 
-| Recurso | TTL inicial |
-|---|---|
-| Búsqueda | 10 minutos |
-| Metadatos de canciones | 1 hora |
-| Metadatos de artistas | 6 horas |
-| Errores transitorios | 30 segundos |
+| Recurso                  | TTL inicial                     |
+| ------------------------ | ------------------------------- |
+| Búsqueda                 | 10 minutos                      |
+| Metadatos de canciones   | 1 hora                          |
+| Metadatos de artistas    | 6 horas                         |
+| Errores transitorios     | 30 segundos                     |
 | URLs temporales de audio | No persistir como caché general |
 
 Los TTL son parámetros iniciales sujetos a revisión y a las condiciones del proveedor.
@@ -505,8 +504,7 @@ Pruebas de escucha en Android y suites Flutter pendientes de ejecución del usua
 
 ## 20. Reproductor de sesión, cola y servicio multimedia — Sprint 06
 
-Este incremento sustituye la pausa al navegar/ir al fondo descrita en la sección
-19. El usuario confirmó escucha real desde búsqueda de «Unravel» y «Ravensky» de
+Este incremento sustituye la pausa al navegar/ir al fondo descrita en la sección 19. El usuario confirmó escucha real desde búsqueda de «Unravel» y «Ravensky» de
 Ado y los controles/cancelación del primer incremento. No se recibieron sus IDs,
 por lo que no se inventan identificadores ni una matriz de disponibilidad universal.
 
@@ -529,6 +527,9 @@ artista, portada, duración y estado, y delega los controles al controlador acti
 No se incluyen ID tokens, headers ni URLs temporales de audio en MediaItem/cola.
 El sistema extrapola la posición: no se reenvían cola/portada en cada tick del motor.
 El mini reproductor muestra progreso y la pantalla completa ofrece slider de seek.
+Al cerrar sesión se publica primero un MediaItem neutro y después null porque
+audio_service 0.18 ignora null al sincronizar metadatos con Android; así no quedan
+título, artista ni portada de la cuenta anterior en la MediaSession.
 
 Android usa AudioServiceActivity, servicio mediaPlayback, MediaButtonReceiver,
 WAKE_LOCK, FOREGROUND_SERVICE y FOREGROUND_SERVICE_MEDIA_PLAYBACK e icono propio.
@@ -553,5 +554,5 @@ sin seleccionar pista; la cola puede precargar solo la resolución de su siguien
 y la cancela al cambiar o vaciarse. Las métricas no contienen IDs, URLs ni tokens.
 
 Referencias de implementación: https://pub.dev/packages/audio_service y su ejemplo
-Android. Validación de notificación, bloqueo de pantalla y ciclo de tarea en un
-Android real/emulado sigue pendiente de la prueba manual del usuario.
+Android. Notificación, bloqueo de pantalla, cola, controles y logout se verificaron
+en el dispositivo físico `23117RA68G` durante el cierre del Sprint 6.
