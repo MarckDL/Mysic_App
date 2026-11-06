@@ -144,9 +144,6 @@ void main() {
     await tester.tap(find.text('Crear'));
     await tester.pumpAndSettle();
     expect(find.text('Entrenamiento'), findsOneWidget);
-    expect(
-      router.routeInformationProvider.value.uri.path,
-      '/playlists/$secondId',
-    );
+    expect(router.routeInformationProvider.value.uri.path, '/');
   });
 }

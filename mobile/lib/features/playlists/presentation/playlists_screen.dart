@@ -23,7 +23,6 @@ class PlaylistsScreen extends ConsumerWidget {
         onPressed: action.isLoading
             ? null
             : () async {
-                final router = GoRouter.of(context);
                 final messenger = ScaffoldMessenger.of(context);
                 final form = await showPlaylistFormDialog(context);
                 if (form == null) return;
@@ -35,7 +34,11 @@ class PlaylistsScreen extends ConsumerWidget {
                       visibility: form.visibility,
                     );
                 if (created != null) {
-                  router.go('/playlists/${created.id}');
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text('Playlist “${created.name}” creada'),
+                    ),
+                  );
                 } else {
                   final error = ref.read(playlistActionsProvider).error;
                   messenger.showSnackBar(

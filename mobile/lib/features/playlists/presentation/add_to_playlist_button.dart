@@ -72,19 +72,21 @@ class _PlaylistPicker extends ConsumerWidget {
                             subtitle: Text('${item.trackCount} canciones'),
                             enabled: !action.isLoading,
                             onTap: () async {
+                              final messenger = ScaffoldMessenger.of(context);
+                              final navigator = Navigator.of(context);
                               final added = await ref
                                   .read(playlistActionsProvider.notifier)
                                   .addTrack(item.id, trackId);
                               if (!context.mounted) return;
                               if (added) {
-                                Navigator.pop(context);
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                navigator.pop();
+                                messenger.showSnackBar(
                                   SnackBar(
                                     content: Text('Añadida a ${item.name}'),
                                   ),
                                 );
                               } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                messenger.showSnackBar(
                                   SnackBar(
                                     content: Text(
                                       playlistErrorText(
