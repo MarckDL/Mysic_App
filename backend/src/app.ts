@@ -23,6 +23,10 @@ import { createCatalogRouter } from './modules/catalog/presentation/catalog.rout
 import { AuthorizedDemoProvider } from './infrastructure/music/authorized-demo-provider.js';
 import { PlaybackService } from './modules/playback/application/playback-service.js';
 import { createPlaybackRouter } from './modules/playback/presentation/playback.routes.js';
+import { PrismaPlaylistRepository } from './infrastructure/database/prisma-playlist-repository.js';
+import { PlaylistService } from './modules/playlists/application/playlist-service.js';
+import type { PlaylistRepository } from './modules/playlists/domain/playlist-repository.js';
+import { createPlaylistRouter } from './modules/playlists/presentation/playlist.routes.js';
 
 export function createApp(
   options: {
@@ -33,6 +37,8 @@ export function createApp(
     catalogLimiter?: CatalogLimiter;
     playbackService?: PlaybackService;
     audioStreamTransport?: AudioStreamTransport;
+    playlistRepository?: PlaylistRepository;
+    playlistService?: PlaylistService;
   } = {},
 ) {
   const app = express();
@@ -58,6 +64,7 @@ export function createApp(
   app.use('/api/v1/auth', createAuthRouter(verifier, users));
   app.use('/api/v1/users', createUsersRouter(verifier, users));
   const music = options.musicProvider ?? new YoutubeProvider();
+  const catalog = options.catalogService ?? new CatalogService(music);
   app.use(
     '/api/v1/playback',
     createPlaybackRouter(
@@ -73,10 +80,17 @@ export function createApp(
   );
   app.use(
     '/api/v1',
-    createCatalogRouter(
+    createCatalogRouter(verifier, catalog, options.catalogLimiter),
+  );
+  app.use(
+    '/api/v1/playlists',
+    createPlaylistRouter(
       verifier,
-      options.catalogService ?? new CatalogService(music),
-      options.catalogLimiter,
+      options.playlistService ??
+        new PlaylistService(
+          options.playlistRepository ?? new PrismaPlaylistRepository(),
+          catalog,
+        ),
     ),
   );
 
