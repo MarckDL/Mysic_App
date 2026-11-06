@@ -10,6 +10,8 @@ import '../../features/authentication/domain/mysic_profile.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/search/presentation/search_screen.dart';
 import '../../features/search/presentation/track_detail_screen.dart';
+import '../../features/playlists/presentation/playlists_screen.dart';
+import '../../features/playlists/presentation/playlist_detail_screen.dart';
 
 // Solo se monta dentro de AuthGate tras verificar y sincronizar el perfil.
 // Al cerrar/cambiar cuenta se elimina el navegador y todo su estado.
@@ -42,6 +44,15 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
       GoRoute(
         path: '/search',
         builder: (context, state) => const SearchScreen(),
+      ),
+      GoRoute(
+        path: '/playlists',
+        builder: (context, state) => const PlaylistsScreen(),
+      ),
+      GoRoute(
+        path: '/playlists/:id',
+        builder: (context, state) =>
+            PlaylistDetailScreen(id: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/tracks/:id',
