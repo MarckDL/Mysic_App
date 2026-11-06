@@ -6,7 +6,7 @@ services:
     region: virginia
     branch: main
     rootDir: backend
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm db:generate && pnpm db:deploy && pnpm build
+    buildCommand: pnpm install --frozen-lockfile && pnpm db:generate && pnpm db:deploy && pnpm build
     startCommand: pnpm start
     healthCheckPath: /api/v1/health
     autoDeployTrigger: checksPass

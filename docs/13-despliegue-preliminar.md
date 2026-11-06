@@ -33,7 +33,7 @@ rutas esperadas mediante `GOOGLE_APPLICATION_CREDENTIALS` y
 El alojamiento ejecuta:
 
 ```text
-corepack enable && pnpm install --frozen-lockfile && pnpm db:generate && pnpm db:deploy && pnpm build
+pnpm install --frozen-lockfile && pnpm db:generate && pnpm db:deploy && pnpm build
 pnpm start
 ```
 
