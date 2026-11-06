@@ -345,4 +345,15 @@ No ejecutar migraciones destructivas sin respaldo y revisión.
 La tabla users se preparó en el esquema PostgreSQL dedicado `mysic` mediante
 Prisma multi-schema. Este esquema no debe exponerse en la Data API de Supabase;
 Flutter consulta únicamente Express. El cliente se genera en el backend y no se
-versiona. La primera migración y la verificación de permisos están pendientes.
+versiona.
+
+## 15. Implementación Sprint 07
+
+Las migraciones versionadas crean `tracks`, `playlists` y `playlist_tracks` en el
+esquema `mysic`. Se aplicaron en Supabase el 6 de noviembre de 2026. Las tablas
+mantienen RLS habilitado y no exponen políticas a roles de Data API; Flutter accede
+exclusivamente mediante Express.
+
+La restricción `(playlist_id, position)` evita órdenes ambiguos. Añadir, retirar y
+reordenar ocurrencias usa transacciones serializables, y el borrado de una playlist
+elimina sus ocurrencias en cascada sin borrar el catálogo normalizado.

@@ -355,6 +355,17 @@ Cada feature debe separar, cuando sea útil:
 
 El plan gratuito de hosting puede presentar suspensión por inactividad, cuotas o cambios de condiciones.
 
+### Despliegue preliminar desde Sprint 07
+
+Para no posponer la validación remota hasta la entrega, Sprint 07 incorpora un
+servicio Express preliminar en Render definido por `render.yaml`. Supabase conserva
+PostgreSQL y Firebase Admin verifica la misma identidad usada por Android. El APK
+recibe la URL HTTPS mediante `API_BASE_URL`; ningún secreto se compila en Flutter.
+
+Esta instancia permite probar login, catálogo, playlists y transporte de audio desde
+otra red. El plan gratuito es solo una validación técnica: el arranque en frío y el
+ancho de banda del proxy de audio se medirán antes de decidir el plan de la demo.
+
 ## 13. Pruebas
 
 ### Backend

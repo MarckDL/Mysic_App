@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: mysic-api
+    runtime: node
+    plan: free
+    region: virginia
+    branch: main
+    rootDir: backend
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm db:generate && pnpm db:deploy && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /api/v1/health
+    autoDeployTrigger: checksPass
+    maxShutdownDelaySeconds: 120
+    buildFilter:
+      paths:
+        - backend/**
+        - render.yaml
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 24.22.1
+      - key: PNPM_VERSION
+        value: 10.34.7
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/firebase-admin.json
+      - key: DATABASE_SSL_CA_FILE
+        value: /etc/secrets/supabase-ca.crt

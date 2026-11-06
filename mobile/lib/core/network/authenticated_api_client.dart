@@ -27,6 +27,23 @@ class AuthenticatedApiClient {
     CancelToken? cancelToken,
   }) => _request('POST', path, body: body, cancelToken: cancelToken);
 
+  Future<Map<String, dynamic>> patch(
+    String path, {
+    required Map<String, dynamic> body,
+    CancelToken? cancelToken,
+  }) => _request('PATCH', path, body: body, cancelToken: cancelToken);
+
+  Future<Map<String, dynamic>> put(
+    String path, {
+    required Map<String, dynamic> body,
+    CancelToken? cancelToken,
+  }) => _request('PUT', path, body: body, cancelToken: cancelToken);
+
+  Future<Map<String, dynamic>> delete(
+    String path, {
+    CancelToken? cancelToken,
+  }) => _request('DELETE', path, cancelToken: cancelToken);
+
   Future<Map<String, dynamic>> _request(
     String method,
     String path, {

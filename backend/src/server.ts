@@ -16,6 +16,7 @@ const resolver = new YoutubePlaybackTokenBroker(
 const transport = new YoutubeAudioStream(resolver, fetch, metric);
 const server = createApp({ audioStreamTransport: transport }).listen(
   port,
+  '0.0.0.0',
   () => {
     console.info(JSON.stringify({ event: 'server_started', port }));
     void transport.warm().catch(() => {});

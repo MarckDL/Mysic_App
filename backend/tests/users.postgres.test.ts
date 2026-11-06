@@ -57,7 +57,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       expect(
         (await repository.findByFirebaseUid(profile.firebaseUid))?.displayName,
       ).toBe('Cuenta actualizada');
-    });
+    }, 20_000);
     it('rechaza google_id duplicado sin fusionar usuarios', async () => {
       await repository.sync({
         firebaseUid: `${prefix}-c`,

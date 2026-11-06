@@ -18,12 +18,15 @@ Uri validatedApiUri(String baseUrl) {
 }
 
 Dio configureApiDio(String baseUrl, [Dio? dio]) {
-  validatedApiUri(baseUrl);
+  final uri = validatedApiUri(baseUrl);
+  final local =
+      kDebugMode && ['10.0.2.2', '127.0.0.1', 'localhost'].contains(uri.host);
   final client = dio ?? Dio();
   client.options = BaseOptions(
     baseUrl: baseUrl,
-    connectTimeout: const Duration(seconds: 10),
-    receiveTimeout: const Duration(seconds: 15),
+    // El hosting preliminar puede tardar cerca de un minuto en despertar.
+    connectTimeout: Duration(seconds: local ? 10 : 75),
+    receiveTimeout: Duration(seconds: local ? 15 : 75),
     sendTimeout: const Duration(seconds: 10),
     followRedirects: false,
   );
