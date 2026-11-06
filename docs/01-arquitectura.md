@@ -1,4 +1,3 @@
-
 # Mysic — Documento de arquitectura
 
 **Versión:** 1.0.0  
@@ -25,25 +24,25 @@ El proyecto tiene fines académicos y de portafolio. No contempla monetización,
 
 ## 3. Stack tecnológico
 
-| Componente | Tecnología |
-|---|---|
-| Aplicación móvil | Flutter y Dart |
-| Estado | Riverpod |
-| Navegación | go_router |
-| Cliente HTTP | Dio |
-| Reproducción | just_audio, audio_service, audio_session |
-| Autenticación | Firebase Auth y Google Sign-In |
-| Backend | Node.js 22 LTS o versión LTS compatible, Express, TypeScript |
-| Validación de identidad | Firebase Admin SDK |
-| Base de datos | PostgreSQL mediante Supabase |
-| ORM | Prisma |
-| Catálogo experimental | youtubei.js |
-| Caché de metadatos | LRU en memoria |
-| Caché local | SQLite / Drift, si es necesario |
-| Testing backend | Vitest y Supertest |
-| Testing Flutter | flutter_test |
-| CI | GitHub Actions |
-| Hosting | Render o Railway |
+| Componente              | Tecnología                                                   |
+| ----------------------- | ------------------------------------------------------------ |
+| Aplicación móvil        | Flutter y Dart                                               |
+| Estado                  | Riverpod                                                     |
+| Navegación              | go_router                                                    |
+| Cliente HTTP            | Dio                                                          |
+| Reproducción            | just_audio, audio_service, audio_session                     |
+| Autenticación           | Firebase Auth y Google Sign-In                               |
+| Backend                 | Node.js 22 LTS o versión LTS compatible, Express, TypeScript |
+| Validación de identidad | Firebase Admin SDK                                           |
+| Base de datos           | PostgreSQL mediante Supabase                                 |
+| ORM                     | Prisma                                                       |
+| Catálogo experimental   | youtubei.js                                                  |
+| Caché de metadatos      | LRU en memoria                                               |
+| Caché local             | SQLite / Drift, si es necesario                              |
+| Testing backend         | Vitest y Supertest                                           |
+| Testing Flutter         | flutter_test                                                 |
+| CI                      | GitHub Actions                                               |
+| Hosting                 | Render o Railway                                             |
 
 Docker es recomendado para desarrollo local, pero no obligatorio si se utiliza Supabase alojado.
 
@@ -62,7 +61,9 @@ flowchart TD
     YouTube["youtubei.js"]
     Cache["LRU Metadata Cache"]
     Player["Flutter Audio Player"]
-    Audio["Authorized Audio Source"]
+    Resolver["Playback Resolver"]
+    TokenWorker["Isolated Token/Cipher Worker"]
+    Audio["Temporary Audio Stream"]
 
     Flutter --> Firebase
     Flutter -->|"HTTPS + Firebase ID Token"| API
@@ -73,8 +74,11 @@ flowchart TD
     Services --> Provider
     Provider --> Cache
     Provider --> YouTube
+    Services --> Resolver
+    Resolver --> TokenWorker
+    Resolver --> Audio
     Flutter --> Player
-    Player -.->|"Permitted playback"| Audio
+    Player -->|"Authenticated HTTP Range"| API
 ```
 
 ### 4.1 Flutter
@@ -153,9 +157,8 @@ export interface MusicProvider {
 }
 ```
 
-`resolvePlayback` solamente puede devolver una fuente reproducible cuando exista un mecanismo autorizado y compatible.
-
-Para las pruebas del reproductor se utilizará un conjunto pequeño de archivos de audio propios, libres o expresamente autorizados.
+`resolvePlayback` solamente devuelve una fuente después de validar identidad,
+formato, duración completa, caducidad y capacidad real de entrega por rangos.
 
 ## 5. Flujo de autenticación
 
@@ -225,29 +228,33 @@ Respuesta conceptual:
 ```json
 {
   "mode": "unavailable",
-  "reason": "No authorized playback source configured"
+  "reason": "No complete playback source available"
 }
 ```
 
-Cuando exista una fuente autorizada de reproducción directa, la respuesta podrá incluir una URL temporal y su vencimiento.
+Cuando exista una fuente reproducible, la respuesta podrá incluir una ruta temporal
+del backend y su vencimiento. Las URLs firmadas del proveedor permanecen internas.
 
 ### Restricciones importantes
 
 - No asumir que los enlaces internos de YouTube son permanentes.
 - No almacenar URLs de audio firmadas como datos duraderos.
 - No exponer cookies, credenciales ni tokens privados.
-- No convertir Express en un proxy de retransmisión musical sin autorización.
-- No implementar mecanismos para evadir controles de acceso, DRM o restricciones del proveedor.
+- Ejecutar código dinámico del proveedor solo en un trabajador aislado, sin secretos
+  de Firebase, PostgreSQL ni variables privadas de la aplicación.
+- Validar el último rango del medio antes de aceptar una URL; un primer megabyte
+  accesible no demuestra que la pista completa esté disponible.
+- Limitar concurrencia, bytes, duración, destinos de red y reintentos del proxy.
 - Documentar la viabilidad real de reproducción en el Sprint 5.
 
 ## 8. Estrategia de caché
 
-| Recurso | TTL inicial |
-|---|---|
-| Búsqueda | 10 minutos |
-| Metadatos de canciones | 1 hora |
-| Metadatos de artistas | 6 horas |
-| Errores transitorios | 30 segundos |
+| Recurso                  | TTL inicial                     |
+| ------------------------ | ------------------------------- |
+| Búsqueda                 | 10 minutos                      |
+| Metadatos de canciones   | 1 hora                          |
+| Metadatos de artistas    | 6 horas                         |
+| Errores transitorios     | 30 segundos                     |
 | URLs temporales de audio | No persistir como caché general |
 
 Los TTL son parámetros iniciales sujetos a revisión y a las condiciones del proveedor.
@@ -364,7 +371,7 @@ El plan gratuito de hosting puede presentar suspensión por inactividad, cuotas 
 - Pruebas de widgets.
 - Pruebas de navegación.
 - Pruebas de estados de autenticación.
-- Pruebas del reproductor con audio autorizado.
+- Pruebas del reproductor con streams iniciales, intermedios y finales.
 - Pruebas de sincronización de datos.
 
 ## 14. Decisiones pendientes
@@ -453,3 +460,99 @@ sin autoplay. Maneja foco, desconexión de auriculares, pausa al fondo y limpiez
 al salir/cambiar de cuenta. No hay servicio de reproducción en segundo plano.
 El asset no demuestra streaming HTTPS ni reproducción de YouTube. La validación
 real de ese proveedor se trasladó expresamente a Sprint 06 por acuerdo del usuario.
+
+## 19. Incremento Sprint 06: audio nativo experimental
+
+Este apartado conserva el puente implementado antes de retirar R-007 como registro
+histórico. Su limitación secuencial y ausencia de tokens ya no describen el código
+actual; la política y la implementación vigente se documentan en
+`docs/11-plan-resolucion-audio-letras.md`.
+
+La preferencia confirmada del usuario es audio nativo de YouTube, sin reproductor
+visible embebido. SABR no ofrece en este entorno una URL de archivo compatible con
+just_audio. Se adapta la entrega mediante un puente de medios en el backend para
+esta prueba; sustituye la hipótesis de entrega directa del plan inicial.
+
+- POST /api/v1/playback/resolve conserva la demo y devuelve para YouTube una ruta
+  candidata api-stream, ligada al mismo sourceId, seekable:false y
+  availabilityVerified:false. Resolver una ruta no acredita escucha ni disponibilidad.
+- GET /api/v1/playback/audio/:sourceId verifica Firebase/Google antes de abrir el
+  proveedor. Devuelve MP4/AAC fragmentado sin URLs de CDN ni Firebase en el destino
+  externo. No se admiten URLs arbitrarias, query params ni rangos distintos del inicio.
+- youtubei.js y googlevideo permanecen en backend. El transporte funciona en un
+  proceso hijo Node 24 con entorno de red limitado, sin variables Firebase/DB,
+  sin permisos Node de escritura, procesos, addons o workers. El evaluador normal
+  del SDK usa contexto VM con plazo de 500 ms, dentro de ese proceso. Ni VM ni los
+  permisos Node se presentan como aislamiento de sistema operativo para código hostil.
+- Se limitan destinos HTTPS del proveedor y se rechazan redirecciones de fetch.
+  No hay cookies de usuario, generadores de tokens, cambios de identidad ni evasión
+  de restricciones. Un rechazo del proveedor detiene la entrega.
+- Máximo dos streams por instancia de backend, uno por UID; límite de aperturas,
+  30 s de preparación, 20 min/100 MB por conexión. Hay backpressure y cancelación
+  al desconectar. No se escriben archivos de audio ni URLs en BD/caché.
+- Android utiliza just_audio con Authorization directo al backend (sin proxy local).
+  Token renovado antes de cada apertura, controles play/pause/stop, sin seek. Se
+  detiene al salir del detalle, cerrar/cambiar cuenta o ir al fondo. AudioSession
+  pausa ante pérdida de foco o desconexión de auriculares, sin reanudación automática.
+- Inicio incluye una prueba abierta de Big Buck Bunny con atribución. Los detalles
+  del catálogo usan el ID exacto seleccionado. No se garantiza disponibilidad de
+  todas las pistas ni se presume autorización a partir de sus metadatos.
+
+Este incremento requiere Node 24, backend/tool/ además de dist/ y node_modules/.
+El servicio multimedia de segundo plano, mini player y cola siguen pendientes.
+Pruebas de escucha en Android y suites Flutter pendientes de ejecución del usuario.
+
+## 20. Reproductor de sesión, cola y servicio multimedia — Sprint 06
+
+Este incremento sustituye la pausa al navegar/ir al fondo descrita en la sección 19. El usuario confirmó escucha real desde búsqueda de «Unravel» y «Ravensky» de
+Ado y los controles/cancelación del primer incremento. No se recibieron sus IDs,
+por lo que no se inventan identificadores ni una matriz de disponibilidad universal.
+
+CatalogNavigator mantiene un solo TrackPlaybackController mientras exista la sesión
+verificada. Las pantallas, el mini reproductor, la vista /player y MysicAudioHandler
+comparten ese controlador y su motor just_audio; ninguna vista crea otro reproductor.
+Cerrar/cambiar cuenta elimina el navegador, detiene el motor y vacía cola y metadatos.
+Renovar el token del mismo UID conserva la navegación y el audio.
+
+La cola vive en memoria, máximo 100 elementos, sin duplicados al añadir. Reproducir
+resultados sustituye la cola por los resultados actuales; reproducir una pista la
+selecciona o añade a la cola existente. Añadir a la cola no inicia reproducción.
+Hay anterior/siguiente, salto a un elemento, eliminación de elementos no actuales y
+vaciar. El final avanza una sola vez; una pista fallida conserva un error y permite
+reintentar o saltar manualmente, sin recorrer indefinidamente elementos fallidos.
+La cola no es una playlist persistida ni genera historial en este sprint.
+
+AudioService 0.18.19 se inicializa una vez en main. Su handler publica título,
+artista, portada, duración y estado, y delega los controles al controlador activo.
+No se incluyen ID tokens, headers ni URLs temporales de audio en MediaItem/cola.
+El sistema extrapola la posición: no se reenvían cola/portada en cada tick del motor.
+El mini reproductor muestra progreso y la pantalla completa ofrece slider de seek.
+Al cerrar sesión se publica primero un MediaItem neutro y después null porque
+audio_service 0.18 ignora null al sincronizar metadatos con Android; así no quedan
+título, artista ni portada de la cuenta anterior en la MediaSession.
+
+Android usa AudioServiceActivity, servicio mediaPlayback, MediaButtonReceiver,
+WAKE_LOCK, FOREGROUND_SERVICE y FOREGROUND_SERVICE_MEDIA_PLAYBACK e icono propio.
+androidStopForegroundOnPause:false permite continuar desde la notificación tras
+pausar en segundo plano sin volver a iniciar el servicio desde una app oculta.
+No se solicitan exclusiones de batería. Detener publica idle; retirar la tarea
+solicita detener y vaciar la cola. No se promete supervivencia a muerte forzada del
+proceso ni restauración automática de una cola perdida.
+
+AudioSession pausa por foco/auriculares sin auto-resume; una interrupción durante
+carga cancela la intención de reproducción. La demo local antigua limpia la cola
+principal antes de cargar su diagnóstico para evitar audio simultáneo.
+
+El transporte SABR secuencial fue sustituido por resolución PoToken multi-cliente y
+un proxy HTTP Range. El backend valida inicio/final, tamaño, MIME, host y caducidad;
+acepta rangos simples, conserva backpressure y re-resuelve una vez ante 403. El seek
+de Flutter y del servicio multimedia usa esos rangos. Se mantienen una conexión por
+UID, dos usuarios simultáneos por instancia y cancelación al desconectar. No se añade
+precarga del cuerpo reproducible de otras canciones; solo se conserva la prueba final
+acotada a 256 bytes. Al iniciar el backend se calienta el worker
+sin seleccionar pista; la cola puede precargar solo la resolución de su siguiente ID
+y la cancela al cambiar o vaciarse. Las métricas no contienen IDs, URLs ni tokens.
+
+Referencias de implementación: https://pub.dev/packages/audio_service y su ejemplo
+Android. Notificación, bloqueo de pantalla, cola, controles y logout se verificaron
+en el dispositivo físico `23117RA68G` durante el cierre del Sprint 6.

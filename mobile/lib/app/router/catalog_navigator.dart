@@ -1,3 +1,8 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../features/playback/application/playback_providers.dart';
+import '../../features/playback/presentation/player_screen.dart';
+import '../../features/playback/presentation/player_widgets.dart';
+import '../../features/playback/presentation/youtube_audio_test_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/playback/presentation/demo_audio_screen.dart';
@@ -8,16 +13,24 @@ import '../../features/search/presentation/track_detail_screen.dart';
 
 // Solo se monta dentro de AuthGate tras verificar y sincronizar el perfil.
 // Al cerrar/cambiar cuenta se elimina el navegador y todo su estado.
-class CatalogNavigator extends StatefulWidget {
+class CatalogNavigator extends ConsumerStatefulWidget {
   const CatalogNavigator({super.key, required this.profile});
   final MysicProfile profile;
   @override
-  State<CatalogNavigator> createState() => _CatalogNavigatorState();
+  ConsumerState<CatalogNavigator> createState() => _CatalogNavigatorState();
 }
 
-class _CatalogNavigatorState extends State<CatalogNavigator> {
+class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
   late final GoRouter _router = GoRouter(
     routes: [
+      GoRoute(
+        path: '/player',
+        builder: (context, state) => const PlayerScreen(),
+      ),
+      GoRoute(
+        path: '/youtube-audio-test',
+        builder: (context, state) => const YoutubeAudioTestScreen(),
+      ),
       GoRoute(
         path: '/audio-test',
         builder: (context, state) => const DemoAudioScreen(),
@@ -53,5 +66,21 @@ class _CatalogNavigatorState extends State<CatalogNavigator> {
   }
 
   @override
-  Widget build(BuildContext context) => Router.withConfig(config: _router);
+  Widget build(BuildContext context) {
+    // Este listener mantiene una única instancia mientras la sesión está montada.
+    final controller = ref.watch(trackPlaybackControllerProvider);
+    return Column(
+      children: [
+        Expanded(child: Router.withConfig(config: _router)),
+        MiniPlayer(
+          controller: controller,
+          open: () {
+            if (_router.routeInformationProvider.value.uri.path != '/player') {
+              _router.push('/player');
+            }
+          },
+        ),
+      ],
+    );
+  }
 }

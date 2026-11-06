@@ -60,7 +60,7 @@ describe('resolución de audio autorizado', () => {
     expect(unknown.status).toBe(200);
     expect(unknown.body.mode).toBe('unavailable');
   });
-  it('informa indisponibilidad YouTube sin inicializar el SDK ni extraer audio', async () => {
+  it('devuelve ruta nativa candidata sin afirmar disponibilidad ni extraer audio', async () => {
     const factory = vi.fn();
     const music = new YoutubeProvider(factory);
     const app = createApp({ tokenVerifier: verifier, musicProvider: music });
@@ -69,8 +69,11 @@ describe('resolución de audio autorizado', () => {
       .auth('a', { type: 'bearer' })
       .send({ source: 'youtube', sourceId: 'abcdefghijk' });
     expect(response.status).toBe(200);
-    expect(response.body.mode).toBe('unavailable');
-    expect(response.body.reason).toContain('autorizada');
+    expect(response.body.mode).toBe('direct');
+    expect(response.body.delivery).toBe('api-stream');
+    expect(response.body.path).toBe('/api/v1/playback/audio/abcdefghijk');
+    expect(response.body.availabilityVerified).toBe(false);
+    expect(response.body.seekable).toBe(false);
     expect(factory).not.toHaveBeenCalled();
   });
   it.each([null, 'bad', 'other'])(
@@ -142,6 +145,23 @@ describe('resolución de audio autorizado', () => {
         )
       ).mode,
     ).toBe('unavailable');
+  });
+  it('rechaza ruta nativa de otra pista o destino externo', async () => {
+    const provider = fakeProvider(async () => ({
+      mode: 'direct',
+      delivery: 'api-stream',
+      sourceId: 'abcdefghijk',
+      path: '/api/v1/playback/audio/other000000',
+      contentType: 'audio/mp4',
+      seekable: false,
+      availabilityVerified: false,
+    }));
+    await expect(
+      new PlaybackService(new Map([['youtube', provider]])).resolve(
+        'youtube',
+        'abcdefghijk',
+      ),
+    ).rejects.toThrow();
   });
   it('aborta resolución lenta y no mantiene recursos temporales', async () => {
     vi.useFakeTimers();

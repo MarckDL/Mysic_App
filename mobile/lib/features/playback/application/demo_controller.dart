@@ -52,7 +52,9 @@ class DemoController {
         cancelToken: _cancel,
       );
       if (!_active) return;
-      if (!result.available) throw PlaybackFailure(result.reason!);
+      if (result.assetPath == null) {
+        throw PlaybackFailure(result.reason ?? 'Fuente inválida');
+      }
       await _engine.load(result.assetPath!);
       if (!_active) {
         await _engine.pause();

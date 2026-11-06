@@ -91,11 +91,18 @@ export class YoutubeProvider implements MusicProvider {
     });
   }
 
-  async resolvePlayback() {
+  async resolvePlayback(sourceId: string) {
+    if (!youtubeSourceIdPattern.test(sourceId))
+      throw new ProviderUnavailableError();
+    // Ruta candidata: disponibilidad real se determina al abrir el transporte.
     return {
-      mode: 'unavailable' as const,
-      reason:
-        'No hay una fuente de audio autorizada y compatible configurada para esta pista de YouTube.',
+      mode: 'direct' as const,
+      delivery: 'api-stream' as const,
+      path: `/api/v1/playback/audio/${sourceId}`,
+      sourceId,
+      contentType: 'audio/mp4' as const,
+      seekable: false as const,
+      availabilityVerified: false as const,
     };
   }
 }

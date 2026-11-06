@@ -184,14 +184,6 @@ Toda integración musical debe implementar la interfaz `MusicProvider`.
 
 No acoplar los módulos de dominio a las respuestas internas de youtubei.js.
 
-### R-007 — Reproducción
-
-La extracción o retransmisión de audio no debe asumir derechos de uso.
-
-No implementar evasión de DRM, autenticación, bloqueos o restricciones de proveedor.
-
-Usar fuentes autorizadas para pruebas y demostraciones.
-
 ### R-008 — Arquitectura
 
 Mantener separación entre:

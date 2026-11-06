@@ -1,3 +1,8 @@
+import {
+  YoutubeAudioStream,
+  type AudioStreamTransport,
+} from './infrastructure/music/youtube-audio-stream.js';
+import { createAudioStreamRouter } from './modules/playback/presentation/audio-stream.routes.js';
 import express from 'express';
 import { createFirebaseTokenVerifier } from './infrastructure/firebase/firebase-token-verifier.js';
 import { createAuthRouter } from './modules/auth/presentation/auth.routes.js';
@@ -27,6 +32,7 @@ export function createApp(
     catalogService?: CatalogService;
     catalogLimiter?: CatalogLimiter;
     playbackService?: PlaybackService;
+    audioStreamTransport?: AudioStreamTransport;
   } = {},
 ) {
   const app = express();
@@ -41,6 +47,13 @@ export function createApp(
   const verifier = options.tokenVerifier ?? createFirebaseTokenVerifier();
   const users = new UserService(
     options.userRepository ?? new PrismaUserRepository(),
+  );
+  app.use(
+    '/api/v1/playback',
+    createAudioStreamRouter(
+      verifier,
+      options.audioStreamTransport ?? new YoutubeAudioStream(),
+    ),
   );
   app.use('/api/v1/auth', createAuthRouter(verifier, users));
   app.use('/api/v1/users', createUsersRouter(verifier, users));

@@ -18,6 +18,9 @@ class _DemoAudioScreenState extends ConsumerState<DemoAudioScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(ref.read(trackPlaybackControllerProvider).clear());
+    });
   }
 
   @override

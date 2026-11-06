@@ -17,10 +17,11 @@ Definir los requisitos funcionales y no funcionales de Mysic, una aplicación m�
 - Gestión de usuarios.
 - Búsqueda y exploración musical.
 - Integración experimental de catálogo mediante youtubei.js.
-- Reproductor de audio con fuente compatible.
+- Reproductor de audio con resolución temporal y entrega por rangos.
 - Playlists y favoritos centralizados.
 - Calificaciones y comentarios.
 - Historial y estadísticas personales.
+- Letras simples y sincronizadas con atribución de proveedor.
 - Aislamiento multiusuario.
 - Persistencia en PostgreSQL.
 - APK privado para demostración.
@@ -33,7 +34,6 @@ Definir los requisitos funcionales y no funcionales de Mysic, una aplicación m�
 - Almacenamiento masivo de MP3.
 - Playlists colaborativas.
 - Recomendaciones mediante IA.
-- Letras sincronizadas.
 - Monetización y publicidad.
 
 ## 3. Actores
@@ -78,7 +78,7 @@ Definir los requisitos funcionales y no funcionales de Mysic, una aplicación m�
 
 | ID | Requisito | Prioridad |
 |---|---|---|
-| RF-017 | Reproducir audio desde una fuente compatible y autorizada | Obligatoria |
+| RF-017 | Reproducir audio desde una fuente compatible validada por el backend | Obligatoria |
 | RF-018 | Pausar y reanudar reproducción | Obligatoria |
 | RF-019 | Avanzar o retroceder dentro de una pista cuando sea compatible | Obligatoria |
 | RF-020 | Mostrar información de pista actual | Obligatoria |
@@ -148,6 +148,14 @@ Definir los requisitos funcionales y no funcionales de Mysic, una aplicación m�
 | RF-054 | Filtrar estadísticas por período | Obligatoria |
 | RF-055 | Aislar estadísticas por usuario | Obligatoria |
 
+### Módulo de letras
+
+| ID | Requisito | Prioridad |
+|---|---|---|
+| RF-056 | Consultar letras normalizadas mediante proveedores desacoplados | Deseable |
+| RF-057 | Sincronizar líneas disponibles con la posición del reproductor | Deseable |
+| RF-058 | Mostrar fuente, atribución y estado no disponible | Obligatoria al habilitar letras |
+
 ## 5. Requisitos no funcionales
 
 Los valores siguientes son objetivos iniciales de ingeniería, no mediciones ya verificadas.
@@ -193,8 +201,8 @@ Los valores siguientes son objetivos iniciales de ingeniería, no mediciones ya 
 - RN-009: Los comentarios eliminados no se muestran públicamente.
 - RN-010: Los eventos de escucha usan identificadores idempotentes.
 - RN-011: Los metadatos externos no garantizan disponibilidad de audio.
-- RN-012: No se almacenan archivos musicales externos sin autorización.
-- RN-013: La reproducción requiere un mecanismo compatible y permitido.
+- RN-012: No se almacenan archivos musicales externos completos como biblioteca local del backend.
+- RN-013: La reproducción requiere validar formato, duración completa, caducidad y rangos.
 - RN-014: El usuario puede solicitar eliminación de su cuenta y datos.
 
 ## 7. Casos de uso prioritarios
@@ -265,7 +273,7 @@ La entrega académica deberá demostrar:
 - Comentarios con autor identificado.
 - Historial y estadísticas personales.
 - Búsqueda mediante backend y youtubei.js.
-- Reproducción demostrable con fuente autorizada.
+- Reproducción completa demostrable con una fuente resuelta por el backend.
 - Manejo de fallos externos.
 - Pruebas de autenticación y autorización.
 - APK instalable y documentación actualizada.

@@ -9,6 +9,7 @@ class FakeAuthRepository implements AuthRepository {
   int signInCount = 0;
   int signOutCount = 0;
   final refreshes = <bool>[];
+  bool emitOnTokenRefresh = false;
   Future<void> Function()? onSignIn;
 
   @override
@@ -35,6 +36,9 @@ class FakeAuthRepository implements AuthRepository {
   @override
   Future<String?> getIdToken({bool forceRefresh = false}) async {
     refreshes.add(forceRefresh);
+    if (forceRefresh && emitOnTokenRefresh && user != null) {
+      _changes.add(AuthUser(uid: user!.uid, displayName: user!.displayName));
+    }
     return user == null ? null : 'firebase-id-token-for-test';
   }
 }

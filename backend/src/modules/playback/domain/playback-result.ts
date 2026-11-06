@@ -6,6 +6,15 @@ export type PlaybackResult =
       contentType: 'audio/wav';
       durationSeconds: number;
     }
+  | {
+      mode: 'direct';
+      delivery: 'api-stream';
+      path: string;
+      sourceId: string;
+      contentType: 'audio/mp4';
+      seekable: false;
+      availabilityVerified: false;
+    }
   | { mode: 'embedded'; url: string }
   | { mode: 'unavailable'; reason: string };
 
