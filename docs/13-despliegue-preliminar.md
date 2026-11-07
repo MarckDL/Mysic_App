@@ -24,6 +24,13 @@ una red externa; el endurecimiento final sigue perteneciendo a los Sprints 12 a 
    - `supabase-ca.crt`, certificado CA usado para PostgreSQL.
 5. No copiar esos valores al Blueprint, GitHub, APK, logs ni documentación.
 
+Como alternativa automatizable a los archivos secretos, el backend admite
+`FIREBASE_ADMIN_CREDENTIALS_BASE64` y `DATABASE_SSL_CA_BASE64`. Render conserva
+estos valores cifrados; deben contener el archivo completo codificado en Base64.
+La credencial Firebase se rechaza si su `project_id` no coincide con
+`FIREBASE_PROJECT_ID`. Las variables Base64 tienen prioridad sobre las rutas de
+archivo y nunca deben imprimirse ni almacenarse en Git.
+
 Render monta los archivos secretos bajo `/etc/secrets/`. El Blueprint configura las
 rutas esperadas mediante `GOOGLE_APPLICATION_CREDENTIALS` y
 `DATABASE_SSL_CA_FILE`.
