@@ -76,7 +76,7 @@ class PlaylistActions extends Notifier<AsyncValue<void>> {
         visibility: visibility,
       ),
     );
-    if (result != null) ref.invalidate(playlistsProvider);
+    if (result != null && ref.mounted) ref.invalidate(playlistsProvider);
     return result;
   }
 
@@ -95,7 +95,7 @@ class PlaylistActions extends Notifier<AsyncValue<void>> {
         visibility: visibility,
       ),
     );
-    if (result == null) return false;
+    if (result == null || !ref.mounted) return false;
     ref.invalidate(playlistsProvider);
     ref.invalidate(playlistDetailProvider(id));
     return true;
@@ -105,7 +105,7 @@ class PlaylistActions extends Notifier<AsyncValue<void>> {
     final result = await _run(
       (repository) => repository.delete(id).then((_) => true),
     );
-    if (result != true) return false;
+    if (result != true || !ref.mounted) return false;
     ref.invalidate(playlistsProvider);
     ref.invalidate(playlistDetailProvider(id));
     return true;
@@ -113,7 +113,7 @@ class PlaylistActions extends Notifier<AsyncValue<void>> {
 
   Future<bool> addTrack(String id, String trackId) async {
     final result = await _run((repository) => repository.addTrack(id, trackId));
-    if (result == null) return false;
+    if (result == null || !ref.mounted) return false;
     ref.invalidate(playlistsProvider);
     ref.invalidate(playlistDetailProvider(id));
     return true;
@@ -123,7 +123,7 @@ class PlaylistActions extends Notifier<AsyncValue<void>> {
     final result = await _run(
       (repository) => repository.removeTrack(id, itemId),
     );
-    if (result == null) return false;
+    if (result == null || !ref.mounted) return false;
     ref.invalidate(playlistsProvider);
     ref.invalidate(playlistDetailProvider(id));
     return true;
@@ -131,7 +131,7 @@ class PlaylistActions extends Notifier<AsyncValue<void>> {
 
   Future<bool> reorder(String id, List<String> itemIds) async {
     final result = await _run((repository) => repository.reorder(id, itemIds));
-    if (result == null) return false;
+    if (result == null || !ref.mounted) return false;
     ref.invalidate(playlistsProvider);
     ref.invalidate(playlistDetailProvider(id));
     return true;
