@@ -73,7 +73,7 @@ void main() {
 
     await tester.tap(find.text('Añadir a playlist'));
     await pumpUntil(tester, find.text(playlistName));
-    await tester.tap(find.text(playlistName));
+    await tester.tap(find.text(playlistName).first);
     await pumpUntil(tester, find.text('Reproducir audio'));
 
     await tester.tap(find.text('Reproducir audio'));
@@ -88,7 +88,7 @@ void main() {
     await pumpUntil(tester, find.text('Mis playlists'));
     await tester.tap(find.text('Mis playlists'));
     await pumpUntil(tester, find.text(playlistName));
-    await tester.tap(find.text(playlistName));
+    await tester.tap(find.text(playlistName).first);
     await pumpUntil(tester, find.textContaining('1 canción'));
   }, timeout: const Timeout(Duration(minutes: 8)));
 }

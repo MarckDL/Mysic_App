@@ -57,6 +57,25 @@ describe('YoutubePlaybackTokenBroker', () => {
     await broker.close();
   });
 
+  it('permite que el calentamiento supere el límite interactivo', async () => {
+    vi.useFakeTimers();
+    const worker = new FakeWorker();
+    const broker = new YoutubePlaybackTokenBroker(
+      () => asChild(worker),
+      50,
+      Date.now,
+      undefined,
+      100,
+    );
+    const warming = broker.warm();
+    await vi.advanceTimersByTimeAsync(50);
+    expect(worker.killed).toBe(false);
+    worker.reply({ type: 'warmed', requestId: 1 });
+    await expect(warming).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+    await broker.close();
+  });
+
   it('normaliza y reutiliza una fuente validada sin exponerla en logs', async () => {
     const worker = new FakeWorker();
     const broker = new YoutubePlaybackTokenBroker(() => asChild(worker));
