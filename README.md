@@ -8,7 +8,7 @@ Permite explorar un catálogo musical, gestionar playlists, guardar favoritos, c
 
 La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 
-> Estado: Sprints 1 a 6 cerrados y verificados. Sprint 7 está en ejecución:
+> Estado: Sprints 1 a 6 cerrados y verificados. Sprint 7 está en validación física:
 > playlists multiusuario, privacidad, orden transaccional, persistencia en Supabase
 > y preparación del backend HTTPS.
 >
