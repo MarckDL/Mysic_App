@@ -259,13 +259,19 @@ describe('YoutubePlaybackTokenBroker', () => {
       metrics,
     );
     const result = broker.resolve(sourceId);
-    worker.reply({ type: 'error', requestId: 1, reason: 'private-detail' });
+    worker.reply({
+      type: 'error',
+      requestId: 1,
+      reason: 'private-detail',
+      diagnostic: 'YTMUSIC:provider-rejected,WEB:format-validation-failed',
+    });
     await expect(result).rejects.toThrow('worker-error');
     expect(metrics).toHaveBeenCalledWith(
       expect.objectContaining({
         stage: 'resolution',
         success: false,
         reason: 'worker-error',
+        diagnostic: 'YTMUSIC:provider-rejected,WEB:format-validation-failed',
       }),
     );
     await broker.close();

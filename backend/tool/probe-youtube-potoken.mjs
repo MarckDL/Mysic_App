@@ -10,7 +10,8 @@ import { Innertube, Log, Platform } from 'youtubei.js';
 
 /* global AbortSignal, fetch, Request */
 
-const SOURCE_ID = 'aqz-KE-bpKQ';
+const args = process.argv.slice(2).filter((arg) => arg !== '--');
+const SOURCE_ID = args[0] ?? 'aqz-KE-bpKQ';
 const REQUEST_KEY = 'O43z0dpjhgX20SCx4KAo';
 const MAX_REDIRECTS = 4;
 const RANGE_SIZE = 256 * 1024;
@@ -214,6 +215,8 @@ let stage = 'environment';
 let botGuard;
 let dom;
 try {
+  if (args.length > 1 || !/^[A-Za-z0-9_-]{11}$/.test(SOURCE_ID))
+    throw new Error('invalid-source-id');
   dom = installBrowserGlobals();
   Platform.shim.eval = async (data) =>
     new vm.Script(`(function(){${data.output}\n})()`, {

@@ -33,6 +33,19 @@ function safeFailureReason(error) {
     : 'worker-error';
 }
 
+function safeResolutionReason(error) {
+  if (error?.status === 403) return 'provider-rejected';
+  if (error?.name === 'TimeoutError' || error?.name === 'AbortError')
+    return 'timeout';
+  return [
+    'not-playable',
+    'format-unavailable',
+    'format-validation-failed',
+  ].includes(error?.message)
+    ? error.message
+    : 'worker-error';
+}
+
 Log.setLevel(Log.Level.NONE);
 Platform.shim.eval = async (data) =>
   new vm.Script(`(function(){${data.output}\n})()`, {
@@ -321,6 +334,7 @@ async function resolveSource(sourceId) {
   const request = (async () => {
     let content = await prepare(sourceId);
     const context = await getContext();
+    const failures = [];
     for (const client of CLIENTS) {
       const failureKey = `${sourceId}:${client}`;
       const failedUntil = failedCandidates.get(failureKey) ?? 0;
@@ -335,6 +349,7 @@ async function resolveSource(sourceId) {
         resolutions.set(sourceId, resolved);
         return resolved;
       } catch (error) {
+        let reason = safeResolutionReason(error);
         if (error?.status === 403) {
           contentTokens.delete(sourceId);
           content = await prepare(sourceId);
@@ -347,14 +362,18 @@ async function resolveSource(sourceId) {
             );
             resolutions.set(sourceId, resolved);
             return resolved;
-          } catch {
+          } catch (retryError) {
             // El rechazo se registra y el siguiente cliente continúa.
+            reason = safeResolutionReason(retryError);
           }
         }
+        failures.push(`${client}:${reason}`);
         failedCandidates.set(failureKey, Date.now() + FAILURE_TTL_MS);
       }
     }
-    throw new Error('no-client-available');
+    const error = new Error('no-client-available');
+    error.diagnostic = failures.join(',');
+    throw error;
   })().finally(() => resolutionRequests.delete(sourceId));
   resolutionRequests.set(sourceId, request);
   return request;
@@ -432,6 +451,9 @@ process.on('message', (message) => {
         type: 'error',
         requestId: message.requestId,
         reason: safeFailureReason(error),
+        ...(typeof error?.diagnostic === 'string'
+          ? { diagnostic: error.diagnostic }
+          : {}),
       }),
     );
 });
