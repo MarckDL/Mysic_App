@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../../generated/prisma/client.js';
 import { DatabaseUnavailableError } from '../../modules/users/domain/user-repository.js';
+import { readBase64Secret } from '../config/base64-secret.js';
 
 let client: PrismaClient | undefined;
 
@@ -19,8 +20,11 @@ export function getDatabase(): PrismaClient {
     for (const key of ['sslmode', 'sslcert', 'sslkey', 'sslrootcert']) {
       url.searchParams.delete(key);
     }
+    const inlineCa = readBase64Secret('DATABASE_SSL_CA_BASE64');
     const caFile = process.env.DATABASE_SSL_CA_FILE?.trim();
-    const ca = !local && caFile ? readFileSync(caFile, 'utf8') : undefined;
+    const ca = !local
+      ? (inlineCa ?? (caFile ? readFileSync(caFile, 'utf8') : undefined))
+      : undefined;
     client = new PrismaClient({
       adapter: new PrismaPg({
         connectionString: url.toString(),

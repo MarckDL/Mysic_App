@@ -4,6 +4,7 @@ import {
   type AuthIdentity,
   type TokenVerifier,
 } from '../../modules/auth/domain/token-verifier.js';
+import { readBase64Secret } from '../config/base64-secret.js';
 
 export interface VerifiedFirebaseToken {
   uid: string;
@@ -39,17 +40,37 @@ async function loadFirebaseAuth(): Promise<FirebaseAuthClient> {
     // No se admiten tokens sin firma del emulador en la API real.
     throw new AuthUnavailableError('Firebase Admin no está configurado');
   }
-  const { applicationDefault, getApps, initializeApp } =
+  const { applicationDefault, cert, getApps, initializeApp } =
     await import('firebase-admin/app');
   const { getAuth } = await import('firebase-admin/auth');
   const name = 'mysic-backend';
   const existing = getApps().find((app) => app.name === name);
+  const inlineCredentials = readBase64Secret(
+    'FIREBASE_ADMIN_CREDENTIALS_BASE64',
+  );
+  let credential = applicationDefault();
+  if (inlineCredentials) {
+    const parsed = JSON.parse(inlineCredentials) as Record<string, unknown>;
+    const credentialProjectId = parsed['project_id'];
+    const clientEmail = parsed['client_email'];
+    const privateKey = parsed['private_key'];
+    if (
+      credentialProjectId !== projectId ||
+      typeof clientEmail !== 'string' ||
+      !clientEmail ||
+      typeof privateKey !== 'string' ||
+      !privateKey
+    ) {
+      throw new AuthUnavailableError('Credencial Firebase inconsistente');
+    }
+    credential = cert({ projectId, clientEmail, privateKey });
+  }
   const app =
     existing ??
     initializeApp(
       {
         projectId,
-        credential: applicationDefault(),
+        credential,
       },
       name,
     );
