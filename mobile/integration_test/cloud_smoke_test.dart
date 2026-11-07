@@ -75,7 +75,9 @@ void main() {
     await pumpUntil(tester, find.text(playlistName));
     await tester.tap(find.text(playlistName).first);
     await pumpUntil(tester, find.text('Reproducir audio'));
+    await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('Reproducir audio'));
     await tester.tap(find.text('Reproducir audio'));
     await pumpUntil(tester, find.text('Pausar'));
     await waitRealTime(tester, const Duration(seconds: 75));
