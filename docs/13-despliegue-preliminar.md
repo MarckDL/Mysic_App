@@ -44,9 +44,27 @@ producción.
 
 ## Verificación
 
+### Evidencia del 7 de noviembre de 2026
+
+- Blueprint: `Mysic Sprint 7`.
+- Servicio: `mysic-api-k03u`, plan gratuito, región Virginia.
+- URL pública: `https://mysic-api-k03u.onrender.com`.
+- Commit desplegado: `8b88fb0e26f75d89e890b8fee3e0cb7d8912031e`.
+- Migraciones Prisma: 3 encontradas, ninguna pendiente.
+- `GET /api/v1/health`: `200 {"status":"ok"}`.
+- `GET /api/v1/playlists` sin token: `401 UNAUTHENTICATED`.
+- Token inválido en `/api/v1/auth/session`: `401 UNAUTHENTICATED`.
+- APK debug compilado con la URL pública. La prueba autenticada y de reproducción
+  permanece pendiente de instalarlo en el dispositivo físico.
+
+Los primeros intentos detectaron dos problemas de configuración ya corregidos:
+`corepack enable` no podía modificar `/usr/bin` en Render y las variables de
+conexión del servicio estaban vacías. El despliegue vigente terminó en estado
+`live` después de usar el `pnpm` provisto por Render y sincronizar las variables.
+
 1. Confirmar `200 {"status":"ok"}` en `https://<servicio>/api/v1/health`.
 2. Confirmar que una ruta privada sin token devuelve `401`.
-3. Compilar el APK:
+3. Desde `mobile/`, compilar el APK:
 
 ```text
 flutter build apk --debug \

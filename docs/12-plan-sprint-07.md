@@ -284,7 +284,7 @@ El Sprint solo puede cerrarse cuando:
 
 Cada entrega debe ser pequeña, revisable y mantener las pruebas existentes en verde.
 
-## 12. Avance de ejecución — 6 de noviembre de 2026
+## 12. Avance de ejecución — actualizado el 7 de noviembre de 2026
 
 Completado:
 
@@ -297,11 +297,15 @@ Completado:
 - Análisis estático, formato, compilación backend y APK Android correctos.
 - APK instalado en el dispositivo `23117RA68G` sin errores fatales de inicio.
 - Blueprint de Render y guía segura de despliegue preparados.
+- Backend desplegado en `https://mysic-api-k03u.onrender.com` y estado `live`.
+- Migraciones Prisma verificadas en Render; no existen migraciones pendientes.
+- Health check público `200` y rutas privadas sin sesión/token inválido `401`.
+- APK remoto compilado con la URL HTTPS de Render.
 
 Pendiente para cerrar el Sprint:
 
-- Completar el acceso del propietario a Render y crear el servicio.
-- Registrar URL HTTPS y verificar health, Firebase, catálogo, playlists y audio remoto.
+- Instalar el APK remoto en el dispositivo cuando vuelva a estar conectado por USB.
+- Verificar con sesión real Firebase: catálogo, playlists y audio remoto.
 - Ejecutar la prueba física con datos móviles y una segunda cuenta Google.
 - Confirmar recuperación tras limpiar datos o reinstalar la aplicación.
-- Integrar en `main`, verificar CI y publicar `sprint-07-v0.7.0`.
+- Publicar `sprint-07-v0.7.0` solo después de la aceptación física final.
