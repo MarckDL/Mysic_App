@@ -15,14 +15,19 @@ function fixture() {
       ],
     },
   });
-  const getInfo = vi.fn().mockResolvedValue({
+  const getBasicInfo = vi.fn().mockResolvedValue({
     basic_info: { id: 'abcdefghijk', title: 'Song', author: 'Artist' },
     playability_status: { status: 'UNPLAYABLE' },
   });
   const create = vi.fn(
-    async () => ({ music: { search, getInfo } }) as unknown as Innertube,
+    async () => ({ music: { search }, getBasicInfo }) as unknown as Innertube,
   );
-  return { provider: new YoutubeProvider(create), search, getInfo, create };
+  return {
+    provider: new YoutubeProvider(create),
+    search,
+    getBasicInfo,
+    create,
+  };
 }
 
 describe('adaptador YoutubeProvider', () => {
@@ -37,9 +42,11 @@ describe('adaptador YoutubeProvider', () => {
     });
   });
   it('consulta detalle independiente y no afirma reproducción con UNPLAYABLE', async () => {
-    const { provider, getInfo, search } = fixture();
+    const { provider, getBasicInfo, search } = fixture();
     expect((await provider.getTrack('abcdefghijk'))?.title).toBe('Song');
-    expect(getInfo).toHaveBeenCalledWith('abcdefghijk');
+    expect(getBasicInfo).toHaveBeenCalledWith('abcdefghijk', {
+      client: 'YTMUSIC',
+    });
     expect(search).not.toHaveBeenCalled();
     expect(
       (await provider.resolvePlayback('abcdefghijk')).availabilityVerified,
@@ -53,12 +60,19 @@ describe('adaptador YoutubeProvider', () => {
     );
   });
   it('controla restricciones externas y descarta detalles de otra pista', async () => {
-    const { provider, getInfo } = fixture();
-    getInfo.mockRejectedValueOnce(new Error('login required - private data'));
-    await expect(provider.getTrack('abcdefghijk')).rejects.toBeInstanceOf(
-      ProviderUnavailableError,
-    );
-    getInfo.mockResolvedValueOnce({
+    const { provider, getBasicInfo } = fixture();
+    getBasicInfo
+      .mockRejectedValueOnce(new Error('login required - private data'))
+      .mockResolvedValueOnce({
+        basic_info: { id: 'abcdefghijk', title: 'Song', author: 'Artist' },
+      });
+    await expect(provider.getTrack('abcdefghijk')).resolves.toMatchObject({
+      title: 'Song',
+    });
+    expect(getBasicInfo).toHaveBeenLastCalledWith('abcdefghijk', {
+      client: 'TV',
+    });
+    getBasicInfo.mockReset().mockResolvedValue({
       basic_info: { id: '12345678901', title: 'Other' },
     });
     await expect(provider.getTrack('abcdefghijk')).rejects.toBeInstanceOf(

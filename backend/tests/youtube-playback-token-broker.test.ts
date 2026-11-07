@@ -229,4 +229,26 @@ describe('YoutubePlaybackTokenBroker', () => {
     expect(vi.getTimerCount()).toBe(0);
     await broker.close();
   });
+
+  it('registra una causa segura cuando el worker informa un fallo', async () => {
+    const worker = new FakeWorker();
+    const metrics = vi.fn();
+    const broker = new YoutubePlaybackTokenBroker(
+      () => asChild(worker),
+      30_000,
+      Date.now,
+      metrics,
+    );
+    const result = broker.resolve(sourceId);
+    worker.reply({ type: 'error', requestId: 1, reason: 'private-detail' });
+    await expect(result).rejects.toThrow('worker-error');
+    expect(metrics).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stage: 'resolution',
+        success: false,
+        reason: 'worker-error',
+      }),
+    );
+    await broker.close();
+  });
 });

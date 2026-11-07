@@ -27,6 +27,12 @@ let botGuard;
 let dom;
 let closing = false;
 
+function safeFailureReason(error) {
+  return error?.name === 'TimeoutError' || error?.name === 'AbortError'
+    ? 'timeout'
+    : 'worker-error';
+}
+
 Log.setLevel(Log.Level.NONE);
 Platform.shim.eval = async (data) =>
   new vm.Script(`(function(){${data.output}\n})()`, {
@@ -382,8 +388,12 @@ process.on('message', (message) => {
       .then(() =>
         process.send?.({ type: 'warmed', requestId: message.requestId }),
       )
-      .catch(() =>
-        process.send?.({ type: 'error', requestId: message.requestId }),
+      .catch((error) =>
+        process.send?.({
+          type: 'error',
+          requestId: message.requestId,
+          reason: safeFailureReason(error),
+        }),
       );
     return;
   }
@@ -417,8 +427,12 @@ process.on('message', (message) => {
             },
       ),
     )
-    .catch(() =>
-      process.send?.({ type: 'error', requestId: message.requestId }),
+    .catch((error) =>
+      process.send?.({
+        type: 'error',
+        requestId: message.requestId,
+        reason: safeFailureReason(error),
+      }),
     );
 });
 process.once('disconnect', () => void shutdown());
