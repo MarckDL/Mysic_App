@@ -332,13 +332,15 @@ async function resolveSource(sourceId) {
   const active = resolutionRequests.get(sourceId);
   if (active) return active;
   const request = (async () => {
-    let content = await prepare(sourceId);
+    const content = await prepare(sourceId);
     const context = await getContext();
-    const failures = [];
-    for (const client of CLIENTS) {
+    const candidates = CLIENTS.filter(
+      (client) =>
+        (failedCandidates.get(`${sourceId}:${client}`) ?? 0) <= Date.now(),
+    );
+    const failures = new Map();
+    const attempt = async (client) => {
       const failureKey = `${sourceId}:${client}`;
-      const failedUntil = failedCandidates.get(failureKey) ?? 0;
-      if (failedUntil > Date.now()) continue;
       try {
         const resolved = await resolveClient(
           context,
@@ -346,34 +348,46 @@ async function resolveSource(sourceId) {
           client,
           content.token,
         );
-        resolutions.set(sourceId, resolved);
         return resolved;
       } catch (error) {
         let reason = safeResolutionReason(error);
         if (error?.status === 403) {
           contentTokens.delete(sourceId);
-          content = await prepare(sourceId);
+          const refreshed = await prepare(sourceId);
           try {
-            const resolved = await resolveClient(
+            return await resolveClient(
               context,
               sourceId,
               client,
-              content.token,
+              refreshed.token,
             );
-            resolutions.set(sourceId, resolved);
-            return resolved;
           } catch (retryError) {
             // El rechazo se registra y el siguiente cliente continúa.
             reason = safeResolutionReason(retryError);
           }
         }
-        failures.push(`${client}:${reason}`);
+        failures.set(client, reason);
         failedCandidates.set(failureKey, Date.now() + FAILURE_TTL_MS);
+        throw error;
       }
+    };
+    try {
+      // Los centros de datos cloud pueden tardar 8–12 s por cliente. Estas
+      // consultas son independientes y comparten la misma atestación; aceptar
+      // la primera fuente completamente validada evita acumular cuatro
+      // timeouts en serie.
+      const resolved = await Promise.any(candidates.map(attempt));
+      resolutions.set(sourceId, resolved);
+      return resolved;
+    } catch {
+      const diagnostic = CLIENTS.flatMap((client) => {
+        const reason = failures.get(client);
+        return reason ? [`${client}:${reason}`] : [];
+      }).join(',');
+      const error = new Error('no-client-available');
+      error.diagnostic = diagnostic;
+      throw error;
     }
-    const error = new Error('no-client-available');
-    error.diagnostic = failures.join(',');
-    throw error;
   })().finally(() => resolutionRequests.delete(sourceId));
   resolutionRequests.set(sourceId, request);
   return request;
