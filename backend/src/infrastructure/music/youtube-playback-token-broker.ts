@@ -25,7 +25,12 @@ type WorkerMessage =
       durationMs: number;
       expiresAtMs: number;
     }
-  | { type: 'error'; requestId: number; reason?: string };
+  | {
+      type: 'error';
+      requestId: number;
+      reason?: string;
+      diagnostic?: string;
+    };
 
 type Pending = {
   sourceId: string;
@@ -42,13 +47,24 @@ export type PlaybackMetric = Readonly<{
   cacheHit: boolean;
   success: boolean;
   reason?: 'timeout' | 'worker-error' | 'worker-exit';
+  diagnostic?: string;
 }>;
+
+const diagnosticPattern =
+  /^(?:YTMUSIC|WEB|VISIONOS|TV_SIMPLY):(?:not-playable|format-unavailable|provider-rejected|format-validation-failed|timeout|worker-error)(?:,(?:YTMUSIC|WEB|VISIONOS|TV_SIMPLY):(?:not-playable|format-unavailable|provider-rejected|format-validation-failed|timeout|worker-error))*$/;
 
 function metricReason(error: unknown): PlaybackMetric['reason'] {
   if (!(error instanceof Error)) return 'worker-error';
   if (error.message === 'timeout') return 'timeout';
   if (error.message === 'worker-exit') return 'worker-exit';
   return 'worker-error';
+}
+
+function metricDiagnostic(error: unknown) {
+  if (!(error instanceof Error) || !error.message.startsWith('worker-error:'))
+    return undefined;
+  const value = error.message.slice('worker-error:'.length);
+  return diagnosticPattern.test(value) ? value : undefined;
 }
 
 function defaultWorkerFactory() {
@@ -230,6 +246,9 @@ export class YoutubePlaybackTokenBroker
           cacheHit: false,
           success: false,
           reason: metricReason(error),
+          ...(metricDiagnostic(error)
+            ? { diagnostic: metricDiagnostic(error) }
+            : {}),
         });
         throw error;
       })
@@ -331,6 +350,12 @@ export class YoutubePlaybackTokenBroker
       message.type === 'error' && message.reason === 'timeout'
         ? 'timeout'
         : 'worker-error';
+    const safeFailure =
+      message.type === 'error' &&
+      typeof message.diagnostic === 'string' &&
+      diagnosticPattern.test(message.diagnostic)
+        ? `${safeReason}:${message.diagnostic}`
+        : safeReason;
     if (message.type === 'warmed') {
       const warm = this.warmPending.get(message.requestId);
       if (!warm) return;
@@ -344,7 +369,7 @@ export class YoutubePlaybackTokenBroker
       if (warm) {
         clearTimeout(warm.timer);
         this.warmPending.delete(message.requestId);
-        warm.reject(safeReason);
+        warm.reject(safeFailure);
         return;
       }
     }
@@ -378,7 +403,7 @@ export class YoutubePlaybackTokenBroker
       !Number.isSafeInteger(message.expiresAtMs) ||
       message.expiresAtMs <= this.now()
     ) {
-      pending.reject(message.type === 'error' ? safeReason : 'worker-error');
+      pending.reject(message.type === 'error' ? safeFailure : 'worker-error');
       return;
     }
     const lease = {
