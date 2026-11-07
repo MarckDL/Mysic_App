@@ -41,9 +41,33 @@ function safeResolutionReason(error) {
     'not-playable',
     'format-unavailable',
     'format-validation-failed',
+    'provider-rate-limited',
+    'metadata-unavailable',
   ].includes(error?.message)
     ? error.message
     : 'worker-error';
+}
+
+function normalizeMetadataError(error) {
+  const status = Number(error?.status ?? error?.cause?.status);
+  const message = `${error?.message ?? ''} ${error?.cause?.message ?? ''}`;
+  if (status === 403 || /(?:^|\D)403(?:\D|$)|forbidden/i.test(message)) {
+    const rejected = new Error('provider-rejected');
+    rejected.status = 403;
+    return rejected;
+  }
+  if (status === 429 || /(?:^|\D)429(?:\D|$)|rate.?limit/i.test(message))
+    return new Error('provider-rate-limited');
+  if (
+    error?.name === 'TimeoutError' ||
+    error?.name === 'AbortError' ||
+    /timed?\s*out|timeout/i.test(message)
+  ) {
+    const timeout = new Error('metadata-timeout');
+    timeout.name = 'TimeoutError';
+    return timeout;
+  }
+  return new Error('metadata-unavailable');
 }
 
 Log.setLevel(Log.Level.NONE);
@@ -282,10 +306,15 @@ async function validateTail(url, contentLength) {
 }
 
 async function resolveClient(context, sourceId, client, token) {
-  const info = await context.yt.getBasicInfo(sourceId, {
-    client,
-    po_token: token,
-  });
+  let info;
+  try {
+    info = await context.yt.getBasicInfo(sourceId, {
+      client,
+      po_token: token,
+    });
+  } catch (error) {
+    throw normalizeMetadataError(error);
+  }
   if (
     info.basic_info.id !== sourceId ||
     info.basic_info.is_live ||

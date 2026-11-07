@@ -51,7 +51,7 @@ export type PlaybackMetric = Readonly<{
 }>;
 
 const diagnosticPattern =
-  /^(?:YTMUSIC|WEB|VISIONOS|TV_SIMPLY):(?:not-playable|format-unavailable|provider-rejected|format-validation-failed|timeout|worker-error)(?:,(?:YTMUSIC|WEB|VISIONOS|TV_SIMPLY):(?:not-playable|format-unavailable|provider-rejected|format-validation-failed|timeout|worker-error))*$/;
+  /^(?:YTMUSIC|WEB|VISIONOS|TV_SIMPLY):(?:not-playable|format-unavailable|provider-rejected|provider-rate-limited|metadata-unavailable|format-validation-failed|timeout|worker-error)(?:,(?:YTMUSIC|WEB|VISIONOS|TV_SIMPLY):(?:not-playable|format-unavailable|provider-rejected|provider-rate-limited|metadata-unavailable|format-validation-failed|timeout|worker-error))*$/;
 
 function metricReason(error: unknown): PlaybackMetric['reason'] {
   if (!(error instanceof Error)) return 'worker-error';
