@@ -82,12 +82,23 @@ export class YoutubeProvider implements MusicProvider {
     if (!youtubeSourceIdPattern.test(sourceId))
       return Promise.reject(new ProviderUnavailableError());
     return this.execute(signal, async (client) => {
-      const info = await client.music.getInfo(sourceId);
-      const track = normalizeYoutubeDetail(info.basic_info);
-      // Un estado de audio UNPLAYABLE no elimina metadatos válidos ni habilita audio.
-      if (!track || track.sourceId !== sourceId)
-        throw new ProviderUnavailableError();
-      return track;
+      // Solo necesitamos metadatos: getBasicInfo evita la segunda petición
+      // watch-next de Music.getInfo, que puede fallar aunque el video exista.
+      // YTMUSIC conserva el contexto musical; TV es el fallback de metadatos
+      // cuando el centro de datos del hosting recibe un rechazo del primero.
+      for (const selected of ['YTMUSIC', 'TV'] as const) {
+        try {
+          const info = await client.getBasicInfo(sourceId, {
+            client: selected,
+          });
+          const track = normalizeYoutubeDetail(info.basic_info);
+          // UNPLAYABLE no elimina metadatos válidos ni habilita audio.
+          if (track?.sourceId === sourceId) return track;
+        } catch {
+          signal?.throwIfAborted();
+        }
+      }
+      throw new ProviderUnavailableError();
     });
   }
 

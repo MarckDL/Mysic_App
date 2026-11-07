@@ -25,12 +25,12 @@ type WorkerMessage =
       durationMs: number;
       expiresAtMs: number;
     }
-  | { type: 'error'; requestId: number };
+  | { type: 'error'; requestId: number; reason?: string };
 
 type Pending = {
   sourceId: string;
   resolve: (lease: PlaybackAttestationLease) => void;
-  reject: () => void;
+  reject: (reason?: string) => void;
   timer: ReturnType<typeof setTimeout>;
 };
 
@@ -41,7 +41,15 @@ export type PlaybackMetric = Readonly<{
   durationMs: number;
   cacheHit: boolean;
   success: boolean;
+  reason?: 'timeout' | 'worker-error' | 'worker-exit';
 }>;
+
+function metricReason(error: unknown): PlaybackMetric['reason'] {
+  if (!(error instanceof Error)) return 'worker-error';
+  if (error.message === 'timeout') return 'timeout';
+  if (error.message === 'worker-exit') return 'worker-exit';
+  return 'worker-error';
+}
 
 function defaultWorkerFactory() {
   const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -103,14 +111,16 @@ export class YoutubePlaybackTokenBroker
     number,
     {
       resolve: () => void;
-      reject: () => void;
+      reject: (reason?: string) => void;
       timer: ReturnType<typeof setTimeout>;
     }
   >();
 
   constructor(
     private readonly workerFactory: WorkerFactory = defaultWorkerFactory,
-    private readonly timeoutMs = 15_000,
+    // En un hosting recién despertado, crear la sesión, el intérprete y la
+    // atestación puede superar 15 s aunque el mismo flujo en caliente tarde 6 s.
+    private readonly timeoutMs = 30_000,
     private readonly now: () => number = Date.now,
     private readonly metric: (value: PlaybackMetric) => void = () => {},
   ) {}
@@ -137,6 +147,7 @@ export class YoutubePlaybackTokenBroker
             durationMs: this.now() - started,
             cacheHit: false,
             success: false,
+            reason: metricReason(error),
           });
           throw error;
         })
@@ -214,6 +225,7 @@ export class YoutubePlaybackTokenBroker
           durationMs: this.now() - started,
           cacheHit: false,
           success: false,
+          reason: metricReason(error),
         });
         throw error;
       })
@@ -229,10 +241,10 @@ export class YoutubePlaybackTokenBroker
     const child = this.getWorker();
     const requestId = ++this.requestId;
     return new Promise<PlaybackAttestationLease>((resolve, reject) => {
-      const fail = () => reject(new Error('Playback attestation unavailable'));
+      const fail = (reason = 'worker-error') => reject(new Error(reason));
       const timer = setTimeout(() => {
         this.pending.delete(requestId);
-        fail();
+        fail('timeout');
         this.restartWorker(child);
       }, this.timeoutMs);
       this.pending.set(requestId, {
@@ -256,10 +268,10 @@ export class YoutubePlaybackTokenBroker
     const child = this.getWorker();
     const requestId = ++this.requestId;
     return new Promise<void>((resolve, reject) => {
-      const fail = () => reject(new Error('Playback worker unavailable'));
+      const fail = (reason = 'worker-error') => reject(new Error(reason));
       const timer = setTimeout(() => {
         this.warmPending.delete(requestId);
-        fail();
+        fail('timeout');
         this.restartWorker(child);
       }, this.timeoutMs);
       this.warmPending.set(requestId, { resolve, reject: fail, timer });
@@ -276,10 +288,10 @@ export class YoutubePlaybackTokenBroker
     const child = this.getWorker();
     const requestId = ++this.requestId;
     return new Promise<ResolvedPlaybackSource>((resolve, reject) => {
-      const fail = () => reject(new Error('Playback source unavailable'));
+      const fail = (reason = 'worker-error') => reject(new Error(reason));
       const timer = setTimeout(() => {
         this.pending.delete(requestId);
-        fail();
+        fail('timeout');
         this.restartWorker(child);
       }, this.timeoutMs);
       this.pending.set(requestId, {
@@ -311,6 +323,10 @@ export class YoutubePlaybackTokenBroker
     if (!value || typeof value !== 'object' || !('type' in value)) return;
     const message = value as WorkerMessage;
     if (!Number.isSafeInteger(message.requestId)) return;
+    const safeReason =
+      message.type === 'error' && message.reason === 'timeout'
+        ? 'timeout'
+        : 'worker-error';
     if (message.type === 'warmed') {
       const warm = this.warmPending.get(message.requestId);
       if (!warm) return;
@@ -324,7 +340,7 @@ export class YoutubePlaybackTokenBroker
       if (warm) {
         clearTimeout(warm.timer);
         this.warmPending.delete(message.requestId);
-        warm.reject();
+        warm.reject(safeReason);
         return;
       }
     }
@@ -358,7 +374,7 @@ export class YoutubePlaybackTokenBroker
       !Number.isSafeInteger(message.expiresAtMs) ||
       message.expiresAtMs <= this.now()
     ) {
-      pending.reject();
+      pending.reject(message.type === 'error' ? safeReason : 'worker-error');
       return;
     }
     const lease = {
@@ -409,18 +425,18 @@ export class YoutubePlaybackTokenBroker
     this.child = undefined;
     this.warmed = false;
     if (!child.killed) child.kill('SIGKILL');
-    this.rejectAll();
+    this.rejectAll('worker-exit');
   }
 
-  private rejectAll() {
+  private rejectAll(reason = 'worker-error') {
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
-      pending.reject();
+      pending.reject(reason);
     }
     this.pending.clear();
     for (const pending of this.warmPending.values()) {
       clearTimeout(pending.timer);
-      pending.reject();
+      pending.reject(reason);
     }
     this.warmPending.clear();
   }
