@@ -25,7 +25,7 @@ class PlaylistsScreen extends ConsumerWidget {
             : () async {
                 final messenger = ScaffoldMessenger.of(context);
                 final form = await showPlaylistFormDialog(context);
-                if (form == null) return;
+                if (form == null || !context.mounted) return;
                 final created = await ref
                     .read(playlistActionsProvider.notifier)
                     .create(
@@ -33,6 +33,7 @@ class PlaylistsScreen extends ConsumerWidget {
                       description: form.description,
                       visibility: form.visibility,
                     );
+                if (!context.mounted) return;
                 if (created != null) {
                   messenger.showSnackBar(
                     SnackBar(

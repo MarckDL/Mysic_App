@@ -30,6 +30,9 @@ export class CatalogService {
         const result = (await this.provider.search(query, signal)).slice(0, 20);
         signal.throwIfAborted();
         this.searches.set(key, result);
+        for (const track of result) {
+          this.tracks.set(`youtube:${track.sourceId}`, track);
+        }
         return result;
       }),
     );

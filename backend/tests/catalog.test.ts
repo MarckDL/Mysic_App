@@ -73,6 +73,13 @@ describe('caché de catálogo', () => {
     expect(b[0]?.title).toBe('Song');
     expect((await service.search('query'))[0]?.title).toBe('Song');
   });
+  it('reutiliza los metadatos de búsqueda para detalle y playlists', async () => {
+    const music = provider();
+    const service = new CatalogService(music);
+    await service.search('query');
+    await expect(service.getTrack(track.sourceId)).resolves.toEqual(track);
+    expect(music.getTrack).not.toHaveBeenCalled();
+  });
   it('separa búsqueda y detalle, almacena vacíos y expira cada TTL', async () => {
     let now = 0;
     const music = provider();
@@ -82,6 +89,7 @@ describe('caché de catálogo', () => {
     await service.search('q');
     await service.getTrack('abcdefghijk');
     expect(music.search).toHaveBeenCalledTimes(1);
+    expect(music.getTrack).toHaveBeenCalledTimes(1);
     now = 600_000;
     await service.search('q');
     await service.getTrack('abcdefghijk');

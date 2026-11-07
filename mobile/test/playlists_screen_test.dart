@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +23,7 @@ class FakePlaylists implements PlaylistRepository {
   final summaries = <PlaylistSummary>[];
   final details = <String, PlaylistDetail>{};
   final removed = <String>[];
+  Completer<void>? createGate;
 
   FakePlaylists() {
     final detail = makeDetail(firstId, 'Viaje', withTrack: true);
@@ -68,6 +71,7 @@ class FakePlaylists implements PlaylistRepository {
     String? description,
     PlaylistVisibility visibility = PlaylistVisibility.private,
   }) async {
+    await createGate?.future;
     final value = makeDetail(secondId, name);
     summaries.insert(0, value);
     details[value.id] = value;
@@ -145,5 +149,44 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Entrenamiento'), findsOneWidget);
     expect(router.routeInformationProvider.value.uri.path, '/');
+  });
+
+  testWidgets('crear no usa ref ni messenger después de salir de la pantalla', (
+    tester,
+  ) async {
+    final repository = FakePlaylists()..createGate = Completer<void>();
+    final router = GoRouter(
+      routes: [
+        GoRoute(path: '/', builder: (_, _) => const PlaylistsScreen()),
+        GoRoute(
+          path: '/away',
+          builder: (_, _) => const Scaffold(body: Text('Otra pantalla')),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(
+            FakeAuthRepository(user: const AuthUser(uid: 'a')),
+          ),
+          playlistRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Nueva'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).first, 'Pendiente');
+    await tester.tap(find.text('Crear'));
+    await tester.pump();
+    router.go('/away');
+    await tester.pumpAndSettle();
+    repository.createGate!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Otra pantalla'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }
