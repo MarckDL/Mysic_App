@@ -263,8 +263,7 @@ describe('YoutubePlaybackTokenBroker', () => {
       type: 'error',
       requestId: 1,
       reason: 'private-detail',
-      diagnostic:
-        'YTMUSIC:provider-rejected,WEB:format-validation-failed',
+      diagnostic: 'YTMUSIC:provider-rejected,WEB:format-validation-failed',
     });
     await expect(result).rejects.toThrow('worker-error');
     expect(metrics).toHaveBeenCalledWith(
@@ -272,8 +271,7 @@ describe('YoutubePlaybackTokenBroker', () => {
         stage: 'resolution',
         success: false,
         reason: 'worker-error',
-        diagnostic:
-          'YTMUSIC:provider-rejected,WEB:format-validation-failed',
+        diagnostic: 'YTMUSIC:provider-rejected,WEB:format-validation-failed',
       }),
     );
     await broker.close();
