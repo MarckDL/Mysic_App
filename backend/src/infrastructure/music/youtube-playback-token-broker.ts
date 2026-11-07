@@ -123,6 +123,10 @@ export class YoutubePlaybackTokenBroker
     private readonly timeoutMs = 30_000,
     private readonly now: () => number = Date.now,
     private readonly metric: (value: PlaybackMetric) => void = () => {},
+    // El calentamiento ocurre en segundo plano y en Render puede superar el
+    // límite interactivo. Mantener vivo el worker evita repetir todo el
+    // bootstrap cuando el usuario solicita la primera pista.
+    private readonly warmTimeoutMs = 60_000,
   ) {}
 
   warm(signal?: AbortSignal) {
@@ -273,7 +277,7 @@ export class YoutubePlaybackTokenBroker
         this.warmPending.delete(requestId);
         fail('timeout');
         this.restartWorker(child);
-      }, this.timeoutMs);
+      }, this.warmTimeoutMs);
       this.warmPending.set(requestId, { resolve, reject: fail, timer });
       child.send({ type: 'warm', requestId }, (error) => {
         if (!error) return;
