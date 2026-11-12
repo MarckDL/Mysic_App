@@ -345,6 +345,17 @@ de `PlaybackSourceResolver`. La app transmite por HTTP Range, limita la caché a
 resoluciones y ejecuta una sola extracción simultánea. La aceptación requiere prueba
 física prolongada y controles de notificación antes de cerrar Sprint 07.
 
+El 11 de noviembre se implementó la optimización de inicio: cliente HTTP reutilizable,
+extracción mínima de audio, caducidad derivada de la URL, single-flight, cancelación
+nativa de anticipación, calentamiento tras autenticación y prefetch de metadatos para
+primera búsqueda estable/siguiente pista. La línea base ARM64 previa era 22.294.411
+bytes y el resultado optimizado es 22.369.054 bytes, un aumento de 74.643 bytes que
+permanece bajo el límite. El 12 de noviembre, 20 inicios anticipados alcanzaron p95
+0,588 s y 20 cambios de cola p95 0,865 s. Las 20 selecciones calientes no anticipadas
+quedaron en p50 1,601 s y p95 1,723 s; el PSS aumentó 36,3 MiB. Latencia anticipada
+y APK cumplen, pero latencia no anticipada y memoria todavía impiden aceptar
+completamente la optimización. Falta repetir la matriz en datos móviles.
+
 ## 11. Sprint 07 — Playlists
 
 ### Objetivo

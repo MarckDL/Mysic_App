@@ -14,6 +14,16 @@ class JustAudioTrackEngine implements TrackAudioEngine {
   AudioPlayer get _player => _instance ??= AudioPlayer(
     useProxyForRequestHeaders: false,
     handleInterruptions: false,
+    audioLoadConfiguration: const AudioLoadConfiguration(
+      androidLoadControl: AndroidLoadControl(
+        minBufferDuration: Duration(seconds: 3),
+        maxBufferDuration: Duration(seconds: 15),
+        bufferForPlaybackDuration: Duration(milliseconds: 250),
+        bufferForPlaybackAfterRebufferDuration: Duration(seconds: 1),
+        targetBufferBytes: 1024 * 1024,
+        prioritizeTimeOverSizeThresholds: false,
+      ),
+    ),
   );
   final _positions = StreamController<Duration>.broadcast();
   final _durations = StreamController<Duration?>.broadcast();
@@ -21,6 +31,8 @@ class JustAudioTrackEngine implements TrackAudioEngine {
   final _subscriptions = <StreamSubscription<dynamic>>[];
   bool _configured = false;
   bool _disposed = false;
+  Stopwatch? _audibleTimer;
+  bool _firstProgressArmed = false;
   @override
   Stream<TrackAudioPhase> get states => _states.stream;
   @override
@@ -75,6 +87,15 @@ class JustAudioTrackEngine implements TrackAudioEngine {
     );
     _subscriptions.add(
       _player.positionStream.listen((value) {
+        if (value > Duration.zero &&
+            _audibleTimer != null &&
+            _firstProgressArmed) {
+          debugPrint(
+            'audio_first_progress durationMs=${_audibleTimer!.elapsedMilliseconds}',
+          );
+          _audibleTimer = null;
+          _firstProgressArmed = false;
+        }
         if (!_disposed) _positions.add(value);
       }),
     );
@@ -87,20 +108,44 @@ class JustAudioTrackEngine implements TrackAudioEngine {
   }
 
   @override
+  Future<void> warmUp() async {
+    if (_disposed) return;
+    _player;
+    await (_configuration ??= _configure());
+    if (_disposed) return;
+    await _sourceResolver.warmUp();
+  }
+
+  @override
+  void markPlaybackRequested() {
+    _audibleTimer = Stopwatch()..start();
+    _firstProgressArmed = false;
+  }
+
+  @override
   Future<void> load(String sourceId, String token) async {
     if (!RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(sourceId) || token.isEmpty) {
       throw StateError('Fuente inválida');
     }
-    await (_configuration ??= _configure());
+    await warmUp();
     if (_disposed) return;
+    final resolutionTimer = Stopwatch()..start();
     final source = await _sourceResolver.resolve(sourceId, token);
+    debugPrint(
+      'audio_source_resolution durationMs=${resolutionTimer.elapsedMilliseconds}',
+    );
     if (_disposed) return;
+    final preparationTimer = Stopwatch()..start();
     await _player
         .setAudioSource(
           AudioSource.uri(source.uri, headers: source.headers),
           preload: true,
         )
         .timeout(const Duration(seconds: 40));
+    _firstProgressArmed = true;
+    debugPrint(
+      'audio_player_preparation durationMs=${preparationTimer.elapsedMilliseconds}',
+    );
   }
 
   @override
@@ -148,7 +193,7 @@ class JustAudioTrackEngine implements TrackAudioEngine {
 
   @override
   Future<void> stop() async {
-    cancelPrefetch();
+    _firstProgressArmed = false;
     if (!_disposed) await _instance?.stop();
   }
 

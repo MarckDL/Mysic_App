@@ -12,9 +12,11 @@ class PlaybackSource {
 }
 
 abstract interface class PlaybackSourceResolver {
+  Future<void> warmUp();
   Future<PlaybackSource> resolve(String sourceId, String token);
   Future<void> prefetch(String sourceId, String token);
   void cancelPrefetch();
+  Future<void> clear();
   Future<void> dispose();
 }
 
@@ -33,6 +35,14 @@ class AndroidPlaybackSourceResolver implements PlaybackSourceResolver {
   final MethodChannel _channel;
   int _prefetchGeneration = 0;
   bool _disposed = false;
+
+  @override
+  Future<void> warmUp() async {
+    if (_disposed) return;
+    await _channel
+        .invokeMethod<void>('warmUp')
+        .timeout(const Duration(seconds: 10));
+  }
 
   @override
   Future<PlaybackSource> resolve(String sourceId, String token) async {
@@ -67,13 +77,23 @@ class AndroidPlaybackSourceResolver implements PlaybackSourceResolver {
   @override
   void cancelPrefetch() {
     _prefetchGeneration++;
+    if (!_disposed) {
+      _channel.invokeMethod<void>('cancelPrefetch').catchError((Object _) {});
+    }
+  }
+
+  @override
+  Future<void> clear() async {
+    if (_disposed) return;
+    cancelPrefetch();
+    await _channel.invokeMethod<void>('clear');
   }
 
   @override
   Future<void> dispose() async {
     if (_disposed) return;
-    _disposed = true;
     cancelPrefetch();
+    _disposed = true;
     try {
       await _channel.invokeMethod<void>('clear');
     } on PlatformException {
@@ -97,6 +117,9 @@ class BackendPlaybackSourceResolver implements PlaybackSourceResolver {
   final Uri _base;
   final Dio _client = Dio();
   CancelToken? _prefetchCancel;
+
+  @override
+  Future<void> warmUp() async {}
 
   @override
   Future<PlaybackSource> resolve(String sourceId, String token) async {
@@ -131,6 +154,9 @@ class BackendPlaybackSourceResolver implements PlaybackSourceResolver {
     _prefetchCancel?.cancel();
     _prefetchCancel = null;
   }
+
+  @override
+  Future<void> clear() async => cancelPrefetch();
 
   @override
   Future<void> dispose() async {

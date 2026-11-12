@@ -86,6 +86,8 @@ Definir los requisitos funcionales y no funcionales de Mysic, una aplicación m�
 | RF-022 | Soportar controles multimedia en segundo plano | Obligatoria |
 | RF-023 | Manejar interrupciones y errores de audio | Obligatoria |
 | RF-024 | Mostrar indisponibilidad cuando no exista fuente reproducible | Obligatoria |
+| RF-058 | Anticipar metadatos de la primera búsqueda estable y siguiente pista sin precargar audio | Obligatoria |
+| RF-059 | Medir inicio audible por etapas sin registrar identificadores, tokens ni URLs | Obligatoria |
 
 ### Módulo de playlists
 
@@ -206,6 +208,10 @@ Los valores siguientes son objetivos iniciales de ingeniería, no mediciones ya 
 - RN-014: El usuario puede solicitar eliminación de su cuenta y datos.
 - RN-015: El resolvedor Android no descarga ni persiste canciones completas; conserva
   como máximo tres resoluciones efímeras en memoria y ejecuta una extracción a la vez.
+- RN-016: Una reproducción solicitada tiene prioridad sobre anticipaciones obsoletas;
+  solicitudes simultáneas de la misma pista comparten una única resolución.
+- RN-017: El APK ARM64 debe permanecer en 24 MB o menos y el incremento de memoria
+  durante reproducción en 30 MiB o menos para aceptar la optimización.
 
 ## 7. Casos de uso prioritarios
 

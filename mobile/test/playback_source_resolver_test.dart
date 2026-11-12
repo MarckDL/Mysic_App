@@ -57,4 +57,24 @@ void main() {
     expect(calls, 0);
     await resolver.dispose();
   });
+
+  test(
+    'Android calienta, cancela anticipación nativa y limpia memoria',
+    () async {
+      final methods = <String>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        methods.add(call.method);
+        return null;
+      });
+      final resolver = AndroidPlaybackSourceResolver(channel: channel);
+
+      await resolver.warmUp();
+      resolver.cancelPrefetch();
+      await Future<void>.delayed(Duration.zero);
+      await resolver.clear();
+      await resolver.dispose();
+
+      expect(methods, containsAll(['warmUp', 'cancelPrefetch', 'clear']));
+    },
+  );
 }

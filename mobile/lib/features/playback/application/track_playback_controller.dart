@@ -6,6 +6,7 @@ import '../domain/track_audio_engine.dart';
 
 class TrackPlaybackController extends ChangeNotifier {
   TrackPlaybackController(this._auth, this._engine, this._uid) {
+    unawaited(_engine.warmUp().catchError((Object _) {}));
     _subscription = _engine.states.listen((value) {
       if (!_active) return;
       if (value == TrackAudioPhase.interrupted) {
@@ -90,6 +91,17 @@ class TrackPlaybackController extends ChangeNotifier {
     await jump(target);
   }
 
+  Future<void> prefetchTrack(CatalogTrack track) async {
+    if (!_active || !_validTrack(track)) return;
+    _engine.cancelPrefetch();
+    final generation = _generation;
+    final token = await _auth.getIdToken();
+    if (!_valid(generation) || token == null || token.isEmpty) return;
+    await _engine.prefetch(track.id.substring(8), token);
+  }
+
+  void cancelPrefetch() => _engine.cancelPrefetch();
+
   void enqueue(CatalogTrack track) {
     if (!_active ||
         !_validTrack(track) ||
@@ -122,7 +134,7 @@ class TrackPlaybackController extends ChangeNotifier {
 
   Future<void> jump(int target) async {
     if (!_active || target < 0 || target >= _queue.length) return;
-    _engine.cancelPrefetch();
+    _engine.markPlaybackRequested();
     final generation = ++_generation;
     _eventsEnabled = false;
     index = target;
@@ -232,6 +244,7 @@ class TrackPlaybackController extends ChangeNotifier {
   }
 
   Future<void> stop() async {
+    _engine.cancelPrefetch();
     ++_generation;
     _eventsEnabled = false;
     if (!_disposed) {

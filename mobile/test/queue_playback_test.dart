@@ -35,6 +35,10 @@ void main() {
     controller = TrackPlaybackController(auth, engine, 'a');
   });
   tearDown(() => controller.dispose());
+  test('calienta una sola instancia del motor al crear la sesión', () async {
+    await Future<void>.delayed(Duration.zero);
+    expect(engine.warmUps, 1);
+  });
   test(
     'cola conserva orden y metadatos; anterior/siguiente reproducen ID exacto',
     () async {

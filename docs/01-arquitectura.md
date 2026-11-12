@@ -136,6 +136,23 @@ Para acotar costo en el teléfono, utiliza un único ejecutor, una caché LRU de
 resoluciones en memoria y reproducción HTTP Range directa. No descarga la canción
 completa, no escribe audio en disco y no mantiene un servidor local.
 
+El adaptador reutiliza un único cliente HTTP con dos solicitudes como máximo, pool
+pequeño, DNS/TLS/HTTP2 reutilizables y compresión de respuestas de metadatos. Solo
+la validación del último byte solicita `Accept-Encoding: identity`. La extracción
+obtiene directamente `StreamExtractor`, ejecuta `fetchPage()` y consulta audio
+progresivo, sin construir descripción, relacionados, subtítulos o video.
+
+Tras verificar la sesión, Flutter conserva una instancia de `AudioPlayer`, configura
+la sesión y calienta el extractor sin buscar ni descargar audio. Las búsquedas
+estables durante 600 ms anticipan solo la primera pista y la cola solo la siguiente.
+Android configura el reproductor con 250 ms de buffer para el primer inicio, 1 s
+después de un rebuffer, ventana de 3–15 s y objetivo de 1 MiB. Este ajuste sustituye
+el buffer inicial predeterminado más conservador sin introducir caché de audio,
+proxy local ni persistencia.
+El canal implementa `warmUp`, `resolve`, `prefetch`, `cancelPrefetch` y `clear`;
+resoluciones iguales comparten un single-flight y una reproducción explícita cancela
+anticipaciones obsoletas. Logout y cierre eliminan caché y reproductor.
+
 Las interfaces internas de YouTube no constituyen una API pública estable. El uso personal o académico no elimina las condiciones de uso ni los derechos sobre contenido musical.
 
 ### 4.4 MusicProvider

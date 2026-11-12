@@ -284,7 +284,11 @@ El Sprint solo puede cerrarse cuando:
 
 Cada entrega debe ser pequeña, revisable y mantener las pruebas existentes en verde.
 
-## 12. Avance de ejecución — actualizado el 11 de noviembre de 2026
+## 12. Avance de ejecución — actualizado el 12 de noviembre de 2026
+
+La primera entrega optimizada se publica como candidata `0.7.0-rc.1`. La etiqueta
+final `sprint-07-v0.7.0` permanece reservada hasta cumplir todos los criterios de
+latencia, memoria y validación física.
 
 Completado:
 
@@ -292,7 +296,8 @@ Completado:
 - CRUD autenticado, privacidad y ocultación de recursos privados ajenos.
 - Incorporación, retiro, repetidos y reordenamiento transaccional.
 - Feature Flutter con listado, formulario, detalle y selector desde canciones.
-- 144 pruebas backend y 46 pruebas Flutter correctas, sin omisiones.
+- 146 pruebas backend y 53 pruebas Flutter correctas; 6 casos PostgreSQL requieren
+  la base efímera de integración.
 - Las pruebas backend incluyen 6 casos contra PostgreSQL real.
 - Análisis estático, formato, compilación backend y APK Android correctos.
 - APK instalado en el dispositivo `23117RA68G` sin errores fatales de inicio.
@@ -306,7 +311,7 @@ Completado:
   descarga completa ni almacenamiento en disco.
 - La versión release ARM64 compila en 22,5 MB; la extracción se limita a un trabajo
   simultáneo y una caché LRU de tres pistas en memoria.
-- `flutter analyze` y 50 pruebas Flutter están en verde.
+- `flutter analyze` y 53 pruebas Flutter están en verde.
 - El APK release fue instalado en el dispositivo físico `23117RA68G` conservando
   la sesión. La resolución nativa en frío tomó 2,27–2,50 s.
 - `Luma` reprodujo más de 3:39 sin el corte de 1:09 y avanzó automáticamente.
@@ -317,10 +322,38 @@ Completado:
   posición y las resoluciones precargadas respondieron en 0 ms.
 - La reproducción continuó activa durante más de 30 segundos con Mysic en segundo
   plano y el launcher visible.
+- Se implementó el plan de reducción de latencia: OkHttp reutilizable y acotado,
+  extracción mínima, caducidad real, single-flight, prioridad de reproducción,
+  calentamiento de extractor/sesión/player y anticipación de metadatos a 600 ms.
+- La instrumentación separa resolución, preparación de `just_audio` y primer avance
+  audible sin registrar URLs, tokens o IDs. La línea base ARM64 anterior al cambio es
+  22.294.411 bytes. El artefacto optimizado mide 22.369.054 bytes (+74.643 bytes)
+  y permanece bajo el límite.
+- Veinte inicios anticipados midieron p50 511,5 ms y p95 588 ms; 20 cambios de cola
+  anticipados midieron p50 620 ms y p95 864,8 ms. Ambos escenarios cumplen el
+  objetivo de p95 menor a un segundo.
+- Veinte selecciones calientes no anticipadas midieron p50 1.600,5 ms y p95
+  1.722,8 ms. La extracción consumió normalmente 1,0–1,2 s y la preparación del
+  reproductor cerca de 0,48 s; este criterio no cumple todavía.
+- El ajuste de `just_audio` redujo la preparación anticipada desde p50 1.373 ms a
+  p50 475,5 ms sin caché de audio. Usa buffer inicial de 250 ms, objetivo de 1 MiB
+  y ventana de 3–15 s.
+- El PSS pasó de 149.946 KiB a 187.122 KiB una vez estabilizado: +37.176 KiB
+  (36,3 MiB), por encima del máximo de 30 MiB.
+- Se verificaron reproducción hasta el final, seek, pausa/reanudación, más de 30 s
+  en segundo plano, pantalla apagada, sesión Android `PLAYING` y pausa/reanudación,
+  anterior/siguiente desde controles multimedia. No reapareció el corte de 1:09.
+- Veinte arranques fríos de la actividad midieron p50 791,5 ms y p95 886 ms; esta
+  métrica cubre visibilidad de la aplicación, no inicio audible en frío.
+- El APK ARM64 final se reinstaló sobre la aplicación, conservó la sesión Google y
+  volvió a verificarla contra el backend remoto. También se completó un nuevo login
+  después de la limpieza de datos usada por la prueba de integración.
 
 Pendiente para cerrar el Sprint:
 
 - Ejecutar la prueba física con datos móviles y una segunda cuenta Google.
-- Confirmar pantalla bloqueada y seek manual en el APK final.
-- Confirmar recuperación tras limpiar datos o reinstalar la aplicación.
+- Repetir las 20 mediciones anticipadas/no anticipadas con datos móviles y medir
+  CPU/tráfico contra la línea base.
+- Reducir el incremento PSS por debajo de 30 MiB y reevaluar la latencia caliente
+  no anticipada sin ampliar precarga ni almacenar audio.
 - Publicar `sprint-07-v0.7.0` solo después de la aceptación física final.

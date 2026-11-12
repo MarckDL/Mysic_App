@@ -101,6 +101,36 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Song'), findsOneWidget);
   });
+  testWidgets('anticipa solo el primer resultado tras 600 ms estables', (
+    tester,
+  ) async {
+    final repository = SearchFake();
+    final audio = FakeTrackAudioEngine();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(
+            FakeAuthRepository(user: const AuthUser(uid: 'a')),
+          ),
+          trackAudioEngineFactoryProvider.overrideWithValue(() => audio),
+          catalogRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: const MaterialApp(home: SearchScreen()),
+      ),
+    );
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), 'artist');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Song'), findsOneWidget);
+    expect(audio.prefetched, isEmpty);
+    await tester.pump(const Duration(milliseconds: 599));
+    expect(audio.prefetched, isEmpty);
+    await tester.pump(const Duration(milliseconds: 2));
+    await tester.pumpAndSettle();
+    expect(audio.prefetched, ['abcdefghijk']);
+  });
   testWidgets('navega al detalle y elimina las rutas al cerrar sesión', (
     tester,
   ) async {

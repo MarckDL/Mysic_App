@@ -11,6 +11,8 @@ La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 > Estado: Sprints 1 a 6 cerrados y verificados. Sprint 7 está en validación física:
 > playlists multiusuario, privacidad, orden transaccional, persistencia en Supabase
 > backend HTTPS y resolución Android liviana en validación física.
+> La candidata optimizada `0.7.0-rc.1` está disponible para pruebas; no constituye
+> todavía el cierre formal del Sprint 7.
 >
 > El catálogo experimental utiliza `youtubei.js` desde el backend. La disponibilidad
 > de metadatos no garantiza que un stream sea completo o reproducible. La resolución,
@@ -450,9 +452,20 @@ catálogo y playlists funcionen. Android utiliza por ello un `PlaybackSourceReso
 nativo y entrega la URL efímera directamente a `just_audio`. Se ejecuta una sola
 extracción a la vez, se conservan como máximo tres resoluciones en RAM y el audio se
 solicita por HTTP Range, sin descargar la canción completa ni escribirla en disco.
-El APK release ARM64 medido durante el desarrollo ocupa 22,5 MB.
-En la validación física del Sprint 7, la resolución en frío tardó aproximadamente
-2,3–2,5 segundos, la pista superó 3:39 sin corte, el cambio de pista precargada fue
-inmediato y el incremento de memoria medido después de iniciar extractor y audio fue
-de aproximadamente 24,5 MiB. Anterior, siguiente, pausa, reanudación y segundo plano
-funcionaron mediante la sesión multimedia de Android.
+La optimización de latencia reutiliza un cliente HTTP con pool acotado, calienta
+extractor, sesión y reproductor tras autenticar, y anticipa únicamente metadatos de
+la primera búsqueda estable y de la siguiente pista. Una reproducción solicitada
+cancela la anticipación obsoleta y las solicitudes iguales comparten resolución.
+Las métricas registran etapas y duraciones, nunca IDs, tokens ni URLs.
+En la validación física del 12 de noviembre, 20 inicios anticipados midieron p50
+0,512 s y p95 0,588 s; 20 cambios de cola midieron p50 0,620 s y p95 0,865 s.
+Veinte selecciones calientes sin anticipación midieron p50 1,601 s y p95 1,723 s,
+por lo que ese objetivo continúa abierto. La configuración Android de `just_audio`
+espera 250 ms para iniciar y limita el buffer objetivo a 1 MiB; no se añadió caché
+de audio ni proxy local.
+
+La reproducción completa, seek, pausa/reanudación, segundo plano, pantalla apagada
+y controles multimedia quedaron verificados en el teléfono físico. El PSS estable
+subió 37.176 KiB (36,3 MiB), por encima del presupuesto de 30 MiB, así que la
+optimización todavía no está aceptada. El APK ARM64 optimizado mide 22.369.054 bytes,
+74.643 bytes más que la línea base y dentro del presupuesto de 24 MB.

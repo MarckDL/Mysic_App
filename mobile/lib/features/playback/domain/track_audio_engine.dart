@@ -13,6 +13,8 @@ abstract interface class TrackAudioEngine {
   Stream<Duration> get positions;
   Stream<Duration?> get durations;
   Duration? get duration;
+  Future<void> warmUp();
+  void markPlaybackRequested();
   Future<void> load(String sourceId, String token);
   Future<void> prefetch(String sourceId, String token);
   void cancelPrefetch();

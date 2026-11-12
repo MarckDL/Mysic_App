@@ -10,6 +10,7 @@ class FakeTrackAudioEngine implements TrackAudioEngine {
   int plays = 0;
   int stops = 0;
   int disposals = 0;
+  int warmUps = 0;
   final seeks = <Duration>[];
   final prefetched = <String>[];
   int prefetchCancellations = 0;
@@ -21,6 +22,14 @@ class FakeTrackAudioEngine implements TrackAudioEngine {
   Stream<Duration> get positions => const Stream.empty();
   @override
   Stream<Duration?> get durations => const Stream.empty();
+  @override
+  Future<void> warmUp() async {
+    warmUps++;
+  }
+
+  @override
+  void markPlaybackRequested() {}
+
   @override
   Future<void> load(String sourceId, String token) async {
     this.sourceId = sourceId;

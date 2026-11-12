@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/catalog_navigator.dart';
 import '../application/auth_providers.dart';
+import '../../playback/application/playback_providers.dart';
 import 'login_screen.dart';
 
 class AuthGate extends ConsumerWidget {
@@ -25,6 +26,8 @@ class AuthGate extends ConsumerWidget {
         onRetry: () => ref.invalidate(verifiedSessionProvider),
       );
     }
+    // La sesión verificada mantiene un único motor caliente durante la navegación.
+    ref.watch(trackPlaybackControllerProvider);
     return CatalogNavigator(
       key: ValueKey(user.uid),
       profile: verified.requireValue,
