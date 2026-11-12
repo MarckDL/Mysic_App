@@ -451,3 +451,8 @@ nativo y entrega la URL efímera directamente a `just_audio`. Se ejecuta una sol
 extracción a la vez, se conservan como máximo tres resoluciones en RAM y el audio se
 solicita por HTTP Range, sin descargar la canción completa ni escribirla en disco.
 El APK release ARM64 medido durante el desarrollo ocupa 22,5 MB.
+En la validación física del Sprint 7, la resolución en frío tardó aproximadamente
+2,3–2,5 segundos, la pista superó 3:39 sin corte, el cambio de pista precargada fue
+inmediato y el incremento de memoria medido después de iniciar extractor y audio fue
+de aproximadamente 24,5 MiB. Anterior, siguiente, pausa, reanudación y segundo plano
+funcionaron mediante la sesión multimedia de Android.

@@ -307,12 +307,20 @@ Completado:
 - La versión release ARM64 compila en 22,5 MB; la extracción se limita a un trabajo
   simultáneo y una caché LRU de tres pistas en memoria.
 - `flutter analyze` y 50 pruebas Flutter están en verde.
+- El APK release fue instalado en el dispositivo físico `23117RA68G` conservando
+  la sesión. La resolución nativa en frío tomó 2,27–2,50 s.
+- `Luma` reprodujo más de 3:39 sin el corte de 1:09 y avanzó automáticamente.
+- El proceso pasó de 163,9 MiB PSS al inicio a 188,4 MiB durante reproducción:
+  incremento aproximado de 24,5 MiB después de inicializar extractor y audio.
+- La sesión multimedia publicó estado `PLAYING` y cola de cuatro pistas. Siguiente
+  cambió `Luma` → `Eclipsis`, anterior volvió a `Luma`, pausa/reanudación conservó
+  posición y las resoluciones precargadas respondieron en 0 ms.
+- La reproducción continuó activa durante más de 30 segundos con Mysic en segundo
+  plano y el launcher visible.
 
 Pendiente para cerrar el Sprint:
 
-- Instalar el APK release actualizado cuando el dispositivo vuelva a estar conectado.
-- Verificar audio nativo durante más de tres minutos, seek, segundo plano y controles
-  anterior/siguiente desde la notificación.
 - Ejecutar la prueba física con datos móviles y una segunda cuenta Google.
+- Confirmar pantalla bloqueada y seek manual en el APK final.
 - Confirmar recuperación tras limpiar datos o reinstalar la aplicación.
 - Publicar `sprint-07-v0.7.0` solo después de la aceptación física final.

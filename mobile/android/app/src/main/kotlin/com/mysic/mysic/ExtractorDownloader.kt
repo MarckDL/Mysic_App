@@ -23,6 +23,9 @@ internal class ExtractorDownloader : Downloader() {
             connection.readTimeout = READ_TIMEOUT_MS
             connection.requestMethod = request.httpMethod()
             connection.setRequestProperty("Accept-Encoding", "identity")
+            if (request.headers().keys.none { it.equals("User-Agent", ignoreCase = true) }) {
+                connection.setRequestProperty("User-Agent", DEFAULT_USER_AGENT)
+            }
             request.headers().forEach { (name, values) ->
                 values.forEach { value -> connection.addRequestProperty(name, value) }
             }
@@ -74,5 +77,8 @@ internal class ExtractorDownloader : Downloader() {
         const val CONNECT_TIMEOUT_MS = 12_000
         const val READ_TIMEOUT_MS = 20_000
         const val MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+        const val DEFAULT_USER_AGENT =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) " +
+                "Gecko/20100101 Firefox/140.0"
     }
 }
