@@ -11,9 +11,7 @@ import okhttp3.Dispatcher
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
-import java.io.ByteArrayOutputStream
 import java.io.IOException
-import java.io.InputStream
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -60,9 +58,7 @@ internal class ExtractorDownloader : Downloader(), AutoCloseable {
                     throw IOException("Redirected outside HTTPS")
                 }
                 val responseBody = if (request.httpMethod() == "HEAD") "" else {
-                    response.body?.byteStream()?.use {
-                        String(readLimited(it), Charsets.UTF_8)
-                    }.orEmpty()
+                    response.body?.source()?.let(::readLimited).orEmpty()
                 }
                 Log.i(
                     LOG_TAG,
@@ -99,20 +95,12 @@ internal class ExtractorDownloader : Downloader(), AutoCloseable {
         client.connectionPool.evictAll()
     }
 
-    private fun readLimited(stream: InputStream): ByteArray {
-        val output = ByteArrayOutputStream()
-        val buffer = ByteArray(16 * 1024)
-        var total = 0
-        while (true) {
-            val count = stream.read(buffer)
-            if (count < 0) break
-            total += count
-            if (total > MAX_RESPONSE_BYTES) {
-                throw IOException("Extractor response exceeded limit")
-            }
-            output.write(buffer, 0, count)
+    private fun readLimited(source: okio.BufferedSource): String {
+        source.request(MAX_RESPONSE_BYTES + 1L)
+        if (source.buffer.size > MAX_RESPONSE_BYTES) {
+            throw IOException("Extractor response exceeded limit")
         }
-        return output.toByteArray()
+        return source.readString(Charsets.UTF_8)
     }
 
     private companion object {
