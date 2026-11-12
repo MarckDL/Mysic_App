@@ -206,6 +206,18 @@ sequenceDiagram
 
 La búsqueda puede ser pública o requerir autenticación, según la política definitiva. Las operaciones de biblioteca y datos personales siempre requieren autenticación.
 
+### Flujo de favoritos y calificaciones
+
+1. Flutter envía el Firebase ID token a rutas privadas bajo `/api/v1`.
+2. Express resuelve `users.id` desde el UID verificado; el cliente nunca envía el propietario.
+3. Al añadir un favorito o calificar, el catálogo valida la pista y PostgreSQL actualiza sus metadatos.
+4. `favorites` usa `(user_id, track_id)` como clave idempotente.
+5. `ratings` conserva una sola nota por usuario y pista y calcula el promedio agregado.
+
+Las operaciones disponibles son `GET /api/v1/favorites`, las operaciones
+`GET`, `PUT` y `DELETE` sobre `/api/v1/favorites/youtube/:sourceId`, y las
+mismas tres operaciones sobre `/api/v1/ratings/youtube/:sourceId`.
+
 ## 7. Flujo de reproducción
 
 El reproductor Flutter utiliza `just_audio` y `audio_service`.

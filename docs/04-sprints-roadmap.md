@@ -370,6 +370,12 @@ Plan de ejecución: `docs/12-plan-sprint-07.md`.
 
 ## 12. Sprint 08 — Favoritos y ratings
 
+Estado actual: implementación local en curso. La migración Prisma, los endpoints,
+las restricciones, la pantalla de favoritos y la calificación de 1 a 5 están
+implementados en una rama separada. El Sprint no está cerrado: falta ejecutar las
+pruebas PostgreSQL contra una base de datos de prueba, desplegar la migración y
+validar el APK con cuentas reales.
+
 ### Objetivo
 
 Persistir preferencias musicales por usuario.

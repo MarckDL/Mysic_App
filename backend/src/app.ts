@@ -27,6 +27,14 @@ import { PrismaPlaylistRepository } from './infrastructure/database/prisma-playl
 import { PlaylistService } from './modules/playlists/application/playlist-service.js';
 import type { PlaylistRepository } from './modules/playlists/domain/playlist-repository.js';
 import { createPlaylistRouter } from './modules/playlists/presentation/playlist.routes.js';
+import { PrismaFavoriteRepository } from './infrastructure/database/prisma-favorite-repository.js';
+import { FavoriteService } from './modules/favorites/application/favorite-service.js';
+import type { FavoriteRepository } from './modules/favorites/domain/favorite-repository.js';
+import { createFavoriteRouter } from './modules/favorites/presentation/favorite.routes.js';
+import { PrismaRatingRepository } from './infrastructure/database/prisma-rating-repository.js';
+import { RatingService } from './modules/ratings/application/rating-service.js';
+import type { RatingRepository } from './modules/ratings/domain/rating-repository.js';
+import { createRatingRouter } from './modules/ratings/presentation/rating.routes.js';
 
 export function createApp(
   options: {
@@ -39,6 +47,10 @@ export function createApp(
     audioStreamTransport?: AudioStreamTransport;
     playlistRepository?: PlaylistRepository;
     playlistService?: PlaylistService;
+    favoriteRepository?: FavoriteRepository;
+    favoriteService?: FavoriteService;
+    ratingRepository?: RatingRepository;
+    ratingService?: RatingService;
   } = {},
 ) {
   const app = express();
@@ -89,6 +101,28 @@ export function createApp(
       options.playlistService ??
         new PlaylistService(
           options.playlistRepository ?? new PrismaPlaylistRepository(),
+          catalog,
+        ),
+    ),
+  );
+  app.use(
+    '/api/v1/favorites',
+    createFavoriteRouter(
+      verifier,
+      options.favoriteService ??
+        new FavoriteService(
+          options.favoriteRepository ?? new PrismaFavoriteRepository(),
+          catalog,
+        ),
+    ),
+  );
+  app.use(
+    '/api/v1/ratings',
+    createRatingRouter(
+      verifier,
+      options.ratingService ??
+        new RatingService(
+          options.ratingRepository ?? new PrismaRatingRepository(),
           catalog,
         ),
     ),

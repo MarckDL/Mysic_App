@@ -35,7 +35,7 @@ class AuthenticatedApiClient {
 
   Future<Map<String, dynamic>> put(
     String path, {
-    required Map<String, dynamic> body,
+    Map<String, dynamic>? body,
     CancelToken? cancelToken,
   }) => _request('PUT', path, body: body, cancelToken: cancelToken);
 

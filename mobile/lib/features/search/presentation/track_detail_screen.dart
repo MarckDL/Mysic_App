@@ -4,6 +4,8 @@ import '../application/catalog_providers.dart';
 import 'catalog_widgets.dart';
 import '../../playback/presentation/playback_availability_panel.dart';
 import '../../playlists/presentation/add_to_playlist_button.dart';
+import '../../favorites/presentation/favorite_button.dart';
+import '../../ratings/presentation/rating_panel.dart';
 
 class TrackDetailScreen extends ConsumerWidget {
   const TrackDetailScreen({super.key, required this.id});
@@ -38,7 +40,6 @@ class TrackDetailScreen extends ConsumerWidget {
                 const SizedBox(height: 8),
                 const Text('Reproducción de audio experimental'),
                 const SizedBox(height: 12),
-                AddToPlaylistButton(trackId: track.id),
                 if (track.id == 'youtube:aqz-KE-bpKQ')
                   const Text(
                     'Big Buck Bunny · © 2008 Blender Foundation · bigbuckbunny.org · CC BY 3.0',
@@ -47,6 +48,16 @@ class TrackDetailScreen extends ConsumerWidget {
                   key: ValueKey(track.id),
                   track: track,
                 ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: AddToPlaylistButton(trackId: track.id)),
+                    const SizedBox(width: 12),
+                    FavoriteButton(trackId: track.id),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                RatingPanel(trackId: track.id),
               ],
             ),
           ),
