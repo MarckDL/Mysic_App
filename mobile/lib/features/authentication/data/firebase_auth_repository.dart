@@ -18,7 +18,13 @@ class FirebaseAuthRepository implements AuthRepository {
   AuthUser? get currentUser => _mapUser(_auth.currentUser);
 
   @override
-  Stream<AuthUser?> authStateChanges() => _auth.idTokenChanges().map(_mapUser);
+  Stream<AuthUser?> authStateChanges() async* {
+    // Firebase puede tardar en emitir el primer idTokenChanges después de que
+    // Android restaura el proceso. Publicar el usuario persistido evita dejar
+    // la interfaz esperando mientras las renovaciones siguen en segundo plano.
+    yield _mapUser(_auth.currentUser);
+    yield* _auth.idTokenChanges().map(_mapUser);
+  }
 
   @override
   Future<void> signInWithGoogle() async {

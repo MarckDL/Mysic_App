@@ -63,6 +63,20 @@ aceptan o mitigan por separado; no se presentará el resultado como integración
   revisión individual de API, atribución, disponibilidad y condiciones.
 - Almacenamiento completo de canciones en disco o PostgreSQL.
 
+### Decisión posterior — 11 de noviembre de 2026
+
+La resolución cloud quedó descartada como transporte principal porque el proveedor
+rechaza consistentemente la IP de Render aunque las mismas pistas y rangos funcionan
+desde la red del dispositivo. Con autorización del propietario se reemplazó la
+restricción anterior de R-005: Android puede resolver en el dispositivo mediante
+NewPipeExtractor detrás de `PlaybackSourceResolver`.
+
+No se adopta el runtime Rust/Tauri/libmpv de Limusic. El adaptador Android ejecuta
+una sola extracción a la vez, guarda como máximo tres resoluciones efímeras en RAM,
+valida el rango final y entrega la URL directamente a `just_audio`. No descarga el
+archivo completo, no crea proxy local y no escribe audio en disco. La compilación
+release ARM64 medida ocupa 22,5 MB.
+
 ## 4. Arquitectura objetivo
 
 ```text

@@ -335,6 +335,16 @@ Letras simples/sincronizadas pasan a alcance deseable, pero no bloquean la etiqu
 del Sprint 6. Se implementan después de estabilizar el transporte mediante una
 interfaz `LyricsProvider`, inicialmente LRCLIB y YouTube Music como fallback.
 
+### Ajuste Android durante Sprint 07 — 11 de noviembre de 2026
+
+Render recibe rechazo del proveedor para todos los clientes de reproducción aun
+cuando la misma pista supera las pruebas de rangos desde la red del dispositivo.
+Se aprobó sustituir la restricción anterior de R-005 por un adaptador nativo Android:
+`youtubei.js` sigue limitado al backend y `NewPipeExtractor` queda aislado detrás
+de `PlaybackSourceResolver`. La app transmite por HTTP Range, limita la caché a tres
+resoluciones y ejecuta una sola extracción simultánea. La aceptación requiere prueba
+física prolongada y controles de notificación antes de cerrar Sprint 07.
+
 ## 11. Sprint 07 — Playlists
 
 ### Objetivo

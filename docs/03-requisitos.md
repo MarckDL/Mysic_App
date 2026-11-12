@@ -69,7 +69,7 @@ Definir los requisitos funcionales y no funcionales de Mysic, una aplicación m�
 | RF-010 | Mostrar resultados con título, artista y miniatura | Obligatoria |
 | RF-011 | Consultar detalle de una canción | Obligatoria |
 | RF-012 | Explorar información disponible de artistas | Obligatoria |
-| RF-013 | Integrar youtubei.js exclusivamente en backend | Obligatoria |
+| RF-013 | Mantener youtubei.js exclusivamente en backend y aislar proveedores nativos detrás de adaptadores | Obligatoria |
 | RF-014 | Normalizar respuestas del proveedor | Obligatoria |
 | RF-015 | Gestionar errores y falta de resultados | Obligatoria |
 | RF-016 | Aplicar caché temporal de metadatos | Obligatoria |
@@ -78,7 +78,7 @@ Definir los requisitos funcionales y no funcionales de Mysic, una aplicación m�
 
 | ID | Requisito | Prioridad |
 |---|---|---|
-| RF-017 | Reproducir audio desde una fuente compatible validada por el backend | Obligatoria |
+| RF-017 | Reproducir audio desde una fuente compatible validada por backend o por el resolvedor nativo autorizado | Obligatoria |
 | RF-018 | Pausar y reanudar reproducción | Obligatoria |
 | RF-019 | Avanzar o retroceder dentro de una pista cuando sea compatible | Obligatoria |
 | RF-020 | Mostrar información de pista actual | Obligatoria |
@@ -204,6 +204,8 @@ Los valores siguientes son objetivos iniciales de ingeniería, no mediciones ya 
 - RN-012: No se almacenan archivos musicales externos completos como biblioteca local del backend.
 - RN-013: La reproducción requiere validar formato, duración completa, caducidad y rangos.
 - RN-014: El usuario puede solicitar eliminación de su cuenta y datos.
+- RN-015: El resolvedor Android no descarga ni persiste canciones completas; conserva
+  como máximo tres resoluciones efímeras en memoria y ejecuta una extracción a la vez.
 
 ## 7. Casos de uso prioritarios
 

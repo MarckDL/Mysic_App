@@ -172,11 +172,15 @@ Utilizar:
 
 Las claves foráneas utilizan `users.id`.
 
-### R-005 — youtubei.js
+### R-005 — Resolución musical por plataforma
 
-`youtubei.js` debe existir exclusivamente dentro de `backend/`.
+`youtubei.js` debe existir exclusivamente dentro de `backend/` y nunca debe
+instalarse o importarse desde Flutter.
 
-Nunca instalarlo o importarlo desde Flutter.
+Android puede utilizar un adaptador nativo de reproducción para resolver URLs
+efímeras en el dispositivo cuando el proveedor rechace la IP del backend. El
+adaptador debe permanecer detrás de `PlaybackSourceResolver`, no debe persistir
+ni registrar URLs firmadas y debe limitar concurrencia, caché y destinos de red.
 
 ### R-006 — Proveedores externos
 

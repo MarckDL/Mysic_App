@@ -10,7 +10,7 @@ La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 
 > Estado: Sprints 1 a 6 cerrados y verificados. Sprint 7 está en validación física:
 > playlists multiusuario, privacidad, orden transaccional, persistencia en Supabase
-> y preparación del backend HTTPS.
+> backend HTTPS y resolución Android liviana en validación física.
 >
 > El catálogo experimental utiliza `youtubei.js` desde el backend. La disponibilidad
 > de metadatos no garantiza que un stream sea completo o reproducible. La resolución,
@@ -42,6 +42,7 @@ La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 | Base de datos              | PostgreSQL / Supabase          |
 | ORM                        | Prisma                         |
 | Catálogo experimental      | youtubei.js                    |
+| Resolución de audio Android | NewPipeExtractor               |
 | Reproductor                | just_audio / audio_service     |
 | Estado                     | Riverpod                       |
 | Navegación                 | go_router                      |
@@ -58,12 +59,13 @@ flowchart LR
     API --> DB[("PostgreSQL")]
     API --> Provider["MusicProvider"]
     Provider --> YT["youtubei.js"]
-    API --> Playback["Resolvedor de reproducción"]
-    Playback --> Player["Stream temporal"]
-    Mobile --> Player
+    Mobile --> DevicePlayback["Resolvedor Android"]
+    DevicePlayback --> Player["Stream temporal por rangos"]
+    API -. fallback .-> Player
 ```
 
-El backend gestiona autenticación, autorización, catálogo y persistencia.
+El backend gestiona autenticación, autorización, catálogo y persistencia. Android
+resuelve únicamente URLs efímeras de reproducción cuando la IP cloud es rechazada.
 
 La aplicación móvil no accede directamente a PostgreSQL.
 
@@ -416,6 +418,9 @@ MarckDL
 
 Proyecto académico y de portafolio.
 
+Licencia del proyecto: GPL-3.0-or-later. Consultar [LICENSE](LICENSE) y
+[avisos de terceros](THIRD_PARTY_NOTICES.md).
+
 ## 12. Estado
 
 En desarrollo.
@@ -437,3 +442,12 @@ con pantalla bloqueada. No incluye persistencia de cola. Evidencia y límites en
 El backend calienta el resolvedor al iniciar y la cola precarga únicamente la
 resolución de la pista siguiente; salvo la validación final de 256 bytes, no precarga
 ni almacena el cuerpo de audio.
+
+### Ajuste de reproducción Android — Sprint 7
+
+La IP de Render es rechazada por el proveedor para reproducción aunque autenticación,
+catálogo y playlists funcionen. Android utiliza por ello un `PlaybackSourceResolver`
+nativo y entrega la URL efímera directamente a `just_audio`. Se ejecuta una sola
+extracción a la vez, se conservan como máximo tres resoluciones en RAM y el audio se
+solicita por HTTP Range, sin descargar la canción completa ni escribirla en disco.
+El APK release ARM64 medido durante el desarrollo ocupa 22,5 MB.

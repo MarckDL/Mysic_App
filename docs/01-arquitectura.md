@@ -37,6 +37,7 @@ El proyecto tiene fines académicos y de portafolio. No contempla monetización,
 | Base de datos           | PostgreSQL mediante Supabase                                 |
 | ORM                     | Prisma                                                       |
 | Catálogo experimental   | youtubei.js                                                  |
+| Resolución Android      | NewPipeExtractor detrás de MethodChannel                     |
 | Caché de metadatos      | LRU en memoria                                               |
 | Caché local             | SQLite / Drift, si es necesario                              |
 | Testing backend         | Vitest y Supertest                                           |
@@ -61,8 +62,8 @@ flowchart TD
     YouTube["youtubei.js"]
     Cache["LRU Metadata Cache"]
     Player["Flutter Audio Player"]
-    Resolver["Playback Resolver"]
-    TokenWorker["Isolated Token/Cipher Worker"]
+    CloudResolver["Cloud Playback Resolver"]
+    DeviceResolver["Android Device Resolver"]
     Audio["Temporary Audio Stream"]
 
     Flutter --> Firebase
@@ -74,11 +75,12 @@ flowchart TD
     Services --> Provider
     Provider --> Cache
     Provider --> YouTube
-    Services --> Resolver
-    Resolver --> TokenWorker
-    Resolver --> Audio
+    Services --> CloudResolver
+    CloudResolver --> Audio
     Flutter --> Player
-    Player -->|"Authenticated HTTP Range"| API
+    Player --> DeviceResolver
+    DeviceResolver -->|"Ephemeral URL + HTTP Range"| Audio
+    Player -. fallback .->|"Authenticated HTTP Range"| API
 ```
 
 ### 4.1 Flutter
@@ -113,7 +115,7 @@ Responsabilidades:
 
 ### 4.3 youtubei.js
 
-La librería `youtubei.js` debe ejecutarse exclusivamente en Node.js, dentro de `backend/`.
+La librería `youtubei.js` se ejecuta exclusivamente en Node.js, dentro de `backend/`.
 
 Se utilizará como integración experimental para:
 
@@ -124,6 +126,15 @@ Se utilizará como integración experimental para:
 - Investigar la viabilidad técnica del catálogo.
 
 La librería no debe importarse en Flutter.
+
+Android dispone además de un adaptador nativo de reproducción. Este adaptador no
+reemplaza `MusicProvider`: recibe solamente un ID ya normalizado, resuelve una URL
+efímera en el dispositivo y la devuelve a `just_audio`. La integración queda detrás
+de `PlaybackSourceResolver`; no llega a widgets ni módulos de catálogo.
+
+Para acotar costo en el teléfono, utiliza un único ejecutor, una caché LRU de tres
+resoluciones en memoria y reproducción HTTP Range directa. No descarga la canción
+completa, no escribe audio en disco y no mantiene un servidor local.
 
 Las interfaces internas de YouTube no constituyen una API pública estable. El uso personal o académico no elimina las condiciones de uso ni los derechos sobre contenido musical.
 
@@ -210,7 +221,7 @@ La búsqueda puede ser pública o requerir autenticación, según la política d
 
 El reproductor Flutter utiliza `just_audio` y `audio_service`.
 
-El backend puede proporcionar información sobre la disponibilidad de reproducción a través de:
+El backend continúa proporcionando información de disponibilidad a través de:
 
 `POST /api/v1/playback/resolve`
 
@@ -232,16 +243,20 @@ Respuesta conceptual:
 }
 ```
 
-Cuando exista una fuente reproducible, la respuesta podrá incluir una ruta temporal
-del backend y su vencimiento. Las URLs firmadas del proveedor permanecen internas.
+En Android autenticado, `PlaybackSourceResolver` intenta la resolución nativa porque
+el proveedor rechazó de forma reproducible las IP de Render. El resultado solo vive
+en memoria y `just_audio` solicita por rangos los bytes requeridos. En plataformas
+sin adaptador nativo se conserva la ruta autenticada del backend como fallback.
 
 ### Restricciones importantes
 
 - No asumir que los enlaces internos de YouTube son permanentes.
 - No almacenar URLs de audio firmadas como datos duraderos.
+- No imprimir URLs firmadas en logs o telemetría.
+- Permitir un solo trabajo de extracción Android y como máximo tres entradas en RAM.
 - No exponer cookies, credenciales ni tokens privados.
-- Ejecutar código dinámico del proveedor solo en un trabajador aislado, sin secretos
-  de Firebase, PostgreSQL ni variables privadas de la aplicación.
+- En backend, ejecutar código dinámico del proveedor solo en un trabajador aislado.
+  En Android, el adaptador nativo no recibe tokens Firebase ni credenciales de Mysic.
 - Validar el último rango del medio antes de aceptar una URL; un primer megabyte
   accesible no demuestra que la pista completa esté disponible.
 - Limitar concurrencia, bytes, duración, destinos de red y reintentos del proxy.

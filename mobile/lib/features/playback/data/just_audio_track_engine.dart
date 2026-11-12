@@ -1,18 +1,15 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:audio_session/audio_session.dart';
-import 'package:dio/dio.dart';
 import 'package:just_audio/just_audio.dart';
-import '../../../core/network/api_dio.dart';
+import '../domain/playback_source_resolver.dart';
 import '../domain/track_audio_engine.dart';
 
 class JustAudioTrackEngine implements TrackAudioEngine {
-  JustAudioTrackEngine(String baseUrl) : _base = validatedApiUri(baseUrl);
-  final Uri _base;
-  final Dio _prefetchClient = Dio();
-  CancelToken? _prefetchCancel;
+  JustAudioTrackEngine(String baseUrl, {PlaybackSourceResolver? sourceResolver})
+    : _sourceResolver = sourceResolver ?? createPlaybackSourceResolver(baseUrl);
+  final PlaybackSourceResolver _sourceResolver;
   Future<void>? _configuration;
-  // Android envía Authorization directamente a nuestro backend, sin proxy local.
   AudioPlayer? _instance;
   AudioPlayer get _player => _instance ??= AudioPlayer(
     useProxyForRequestHeaders: false,
@@ -96,10 +93,12 @@ class JustAudioTrackEngine implements TrackAudioEngine {
     }
     await (_configuration ??= _configure());
     if (_disposed) return;
+    final source = await _sourceResolver.resolve(sourceId, token);
+    if (_disposed) return;
     await _player
-        .setUrl(
-          _base.resolve('/api/v1/playback/audio/$sourceId').toString(),
-          headers: {'Authorization': 'Bearer $token'},
+        .setAudioSource(
+          AudioSource.uri(source.uri, headers: source.headers),
+          preload: true,
         )
         .timeout(const Duration(seconds: 40));
   }
@@ -112,25 +111,12 @@ class JustAudioTrackEngine implements TrackAudioEngine {
       return;
     }
     cancelPrefetch();
-    final cancel = CancelToken();
-    _prefetchCancel = cancel;
-    try {
-      await _prefetchClient.post<void>(
-        _base.resolve('/api/v1/playback/prefetch/$sourceId').toString(),
-        options: Options(headers: {'Authorization': 'Bearer $token'}),
-        cancelToken: cancel,
-      );
-    } on DioException catch (error) {
-      if (!CancelToken.isCancel(error)) rethrow;
-    } finally {
-      if (identical(_prefetchCancel, cancel)) _prefetchCancel = null;
-    }
+    await _sourceResolver.prefetch(sourceId, token);
   }
 
   @override
   void cancelPrefetch() {
-    _prefetchCancel?.cancel();
-    _prefetchCancel = null;
+    _sourceResolver.cancelPrefetch();
   }
 
   @override
@@ -171,7 +157,7 @@ class JustAudioTrackEngine implements TrackAudioEngine {
     if (_disposed) return;
     _disposed = true;
     cancelPrefetch();
-    _prefetchClient.close(force: true);
+    await _sourceResolver.dispose();
     for (final subscription in _subscriptions) {
       await subscription.cancel();
     }

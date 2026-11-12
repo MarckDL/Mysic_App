@@ -284,7 +284,7 @@ El Sprint solo puede cerrarse cuando:
 
 Cada entrega debe ser pequeña, revisable y mantener las pruebas existentes en verde.
 
-## 12. Avance de ejecución — actualizado el 7 de noviembre de 2026
+## 12. Avance de ejecución — actualizado el 11 de noviembre de 2026
 
 Completado:
 
@@ -301,11 +301,18 @@ Completado:
 - Migraciones Prisma verificadas en Render; no existen migraciones pendientes.
 - Health check público `200` y rutas privadas sin sesión/token inválido `401`.
 - APK remoto compilado con la URL HTTPS de Render.
+- El rechazo de streams desde la IP de Render quedó aislado del resto del backend.
+- Se implementó un resolvedor Android detrás de `PlaybackSourceResolver`, sin
+  descarga completa ni almacenamiento en disco.
+- La versión release ARM64 compila en 22,5 MB; la extracción se limita a un trabajo
+  simultáneo y una caché LRU de tres pistas en memoria.
+- `flutter analyze` y 50 pruebas Flutter están en verde.
 
 Pendiente para cerrar el Sprint:
 
-- Instalar el APK remoto en el dispositivo cuando vuelva a estar conectado por USB.
-- Verificar con sesión real Firebase: catálogo, playlists y audio remoto.
+- Instalar el APK release actualizado cuando el dispositivo vuelva a estar conectado.
+- Verificar audio nativo durante más de tres minutos, seek, segundo plano y controles
+  anterior/siguiente desde la notificación.
 - Ejecutar la prueba física con datos móviles y una segunda cuenta Google.
 - Confirmar recuperación tras limpiar datos o reinstalar la aplicación.
 - Publicar `sprint-07-v0.7.0` solo después de la aceptación física final.

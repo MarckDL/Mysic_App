@@ -48,3 +48,19 @@ administrativas no se versionan. Nunca colocar Firebase Admin credentials en mob
 
 ApiConfig lee API_BASE_URL. HTTP está limitado a hosts locales de desarrollo y solo
 se permite en debug; usar HTTPS para un backend remoto.
+
+## Reproducción Android
+
+El catálogo, autenticación y datos privados continúan usando el backend. Android
+resuelve únicamente la fuente efímera de audio mediante un adaptador nativo detrás
+de `PlaybackSourceResolver`, porque el proveedor rechaza las IP de Render.
+
+- una sola extracción simultánea;
+- caché LRU de tres resoluciones en RAM;
+- respuesta de metadatos limitada a 4 MiB;
+- validación del rango final antes de reproducir;
+- entrega directa a `just_audio` mediante HTTP Range;
+- sin descarga completa, archivo local ni servidor proxy en el teléfono.
+
+NewPipeExtractor es GPL-3.0-or-later. Consultar los avisos y la licencia en la raíz
+antes de distribuir un APK. La compilación release ARM64 comprobada ocupa 22,5 MB.
