@@ -8,11 +8,11 @@ Permite explorar un catálogo musical, gestionar playlists, guardar favoritos, c
 
 La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 
-> Estado: Sprints 1 a 6 cerrados y verificados. Sprint 7 está en validación física:
-> playlists multiusuario, privacidad, orden transaccional, persistencia en Supabase
-> backend HTTPS y resolución Android liviana en validación física.
-> La candidata optimizada `0.7.0-rc.1` está disponible para pruebas; no constituye
-> todavía el cierre formal del Sprint 7.
+> Estado: Sprints 1 a 7 cerrados y verificados. Sprint 7 incorporó playlists
+> multiusuario, privacidad, orden transaccional, persistencia en Supabase y uso
+> desde un Android físico contra el backend HTTPS, sin `adb reverse`.
+> La matriz específica con red móvil del operador y las optimizaciones de latencia
+> no anticipada continúan como trabajo del Sprint 12.
 >
 > El catálogo experimental utiliza `youtubei.js` desde el backend. La disponibilidad
 > de metadatos no garantiza que un stream sea completo o reproducible. La resolución,

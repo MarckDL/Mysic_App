@@ -353,8 +353,17 @@ bytes y el resultado optimizado es 22.369.054 bytes, un aumento de 74.643 bytes 
 permanece bajo el límite. El 12 de noviembre, 20 inicios anticipados alcanzaron p95
 0,588 s y 20 cambios de cola p95 0,865 s. Las 20 selecciones calientes no anticipadas
 quedaron en p50 1,601 s y p95 1,723 s; el PSS aumentó 36,3 MiB. Latencia anticipada
-y APK cumplen, pero latencia no anticipada y memoria todavía impiden aceptar
-completamente la optimización. Falta repetir la matriz en datos móviles.
+y APK cumplen. La latencia no anticipada y la repetición de la matriz mediante la
+red móvil del operador se conservan como línea base y trabajo del Sprint 12; no
+bloquean los requisitos funcionales RF-025 a RF-031 de playlists.
+
+El 12 de noviembre de 2026 se completó la aceptación física final mediante una red
+Wi-Fi externa ordinaria, sin `adb reverse`: dos cuentas Google mostraron bibliotecas
+aisladas, y se verificaron creación, cambio de privacidad, incorporación,
+reproducción, retiro, persistencia remota y eliminación. El backend público, las
+migraciones y las baterías automatizadas quedaron en verde. Sprint cerrado como
+`sprint-07-v0.7.0`. La prueba por red móvil del operador no se ejecutó por falta de
+datos y queda documentada para el Sprint 12.
 
 ## 11. Sprint 07 — Playlists
 
@@ -383,7 +392,9 @@ Aceptación:
 - Playlists persistidas en PostgreSQL.
 - Solo el propietario puede modificarlas.
 - La información se recupera después de reinstalar la app.
-- El backend es accesible por HTTPS y la app funciona mediante datos móviles.
+- El backend es accesible por HTTPS y la app funciona desde una red externa, sin
+  depender de `adb reverse` ni de servicios locales. La matriz por red móvil del
+  operador se registra para el Sprint 12 cuando no haya datos disponibles.
 
 Etiqueta: `sprint-07-v0.7.0`
 

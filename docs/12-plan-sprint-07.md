@@ -189,7 +189,8 @@ Salida: CI local verde y evidencias trazables por requisito.
 5. Verificar `/api/v1/health`, autenticación real, catálogo, playlists y audio por
    rangos sobre la URL pública HTTPS.
 6. Compilar el APK con `API_BASE_URL=https://<backend-remoto>`.
-7. Validar la app mediante datos móviles, sin `adb reverse` ni servidor local.
+7. Validar la app desde una red externa, preferiblemente mediante datos móviles,
+   sin `adb reverse` ni servidor local; documentar cualquier sustitución por Wi-Fi.
 8. Documentar arranque en frío, límites de tráfico y cualquier restricción del plan.
 
 El servicio gratuito solo es aceptable para la validación preliminar. Si suspende
@@ -241,7 +242,9 @@ El Sprint solo puede cerrarse cuando:
 - El orden persiste sin huecos ni duplicados después de añadir, retirar y reordenar.
 - La app recupera datos reales tras reinstalar o limpiar datos locales.
 - La URL pública usa HTTPS y el APK funciona sin depender de `adb reverse`.
-- Login, catálogo, playlists y reproducción se verifican mediante datos móviles.
+- Login, catálogo, playlists y reproducción se verifican desde una red externa,
+  sin `adb reverse` ni backend local. La red móvil del operador puede sustituirse
+  por Wi-Fi externo si la limitación queda registrada y se agenda su matriz.
 - Backend: formato, lint, tipos, build y pruebas están en verde.
 - Flutter: formato, `flutter analyze`, pruebas y APK Android están en verde.
 - La prueba física cubre al menos dos cuentas para propiedad y privacidad.
@@ -284,11 +287,10 @@ El Sprint solo puede cerrarse cuando:
 
 Cada entrega debe ser pequeña, revisable y mantener las pruebas existentes en verde.
 
-## 12. Avance de ejecución — actualizado el 12 de noviembre de 2026
+## 12. Cierre y evidencia — 12 de noviembre de 2026
 
-La primera entrega optimizada se publica como candidata `0.7.0-rc.1`. La etiqueta
-final `sprint-07-v0.7.0` permanece reservada hasta cumplir todos los criterios de
-latencia, memoria y validación física.
+La candidata `0.7.0-rc.1` fue validada y el alcance funcional del Sprint 07 queda
+aceptado. La etiqueta final es `sprint-07-v0.7.0`.
 
 Completado:
 
@@ -298,7 +300,9 @@ Completado:
 - Feature Flutter con listado, formulario, detalle y selector desde canciones.
 - 146 pruebas backend y 53 pruebas Flutter correctas; 6 casos PostgreSQL requieren
   la base efímera de integración.
-- Las pruebas backend incluyen 6 casos contra PostgreSQL real.
+- Los 6 casos de integración PostgreSQL permanecen excluidos localmente porque
+  requieren `TEST_DATABASE_URL` hacia una base desechable; no se ejecutaron contra
+  la base productiva de Supabase.
 - Análisis estático, formato, compilación backend y APK Android correctos.
 - APK instalado en el dispositivo `23117RA68G` sin errores fatales de inicio.
 - Blueprint de Render y guía segura de despliegue preparados.
@@ -349,11 +353,30 @@ Completado:
   volvió a verificarla contra el backend remoto. También se completó un nuevo login
   después de la limpieza de datos usada por la prueba de integración.
 
-Pendiente para cerrar el Sprint:
+La aceptación final se ejecutó sin `adb reverse`, mediante el backend público y una
+red Wi-Fi externa ordinaria. La cuenta A creó una playlist temporal, cambió su
+privacidad, añadió y reprodujo `Luma`, comprobó su persistencia, retiró la pista y
+eliminó la playlist sin afectar datos existentes. Tras cerrar sesión, la cuenta B
+mostró exclusivamente sus propias playlists; las bibliotecas visibles de A y B
+fueron distintas. Las restricciones de escritura ajena, ocultación privada y lectura
+pública están además cubiertas por las pruebas de rutas y aplicación.
 
-- Ejecutar la prueba física con datos móviles y una segunda cuenta Google.
-- Repetir las 20 mediciones anticipadas/no anticipadas con datos móviles y medir
-  CPU/tráfico contra la línea base.
-- Reducir el incremento PSS por debajo de 30 MiB y reevaluar la latencia caliente
-  no anticipada sin ampliar precarga ni almacenar audio.
-- Publicar `sprint-07-v0.7.0` solo después de la aceptación física final.
+Durante 30 segundos de reproducción por Wi-Fi se recibieron 1.151.992 bytes y se
+enviaron 32.725 bytes. Diez muestras de CPU promediaron 22,72 % de un núcleo. El PSS
+pasó de 176.150 KiB a 172.615 KiB una vez estabilizado, sin aumento sostenido; otra
+prueba inmediata registró +8.705 KiB, por debajo del máximo de 30 MiB. La sesión
+multimedia siguió en estado `PLAYING` con Mysic en segundo plano, conservó cola y
+metadatos, y respondió al control de pausa.
+
+Desviación aprobada y trabajo posterior:
+
+- No había datos móviles disponibles en el dispositivo. La prueba externa se hizo
+  por Wi-Fi, sin túneles ni servicios locales, por lo que valida el acceso HTTPS y
+  la independencia de la red de desarrollo. La repetición por red del operador se
+  traslada al Sprint 12.
+- La latencia caliente no anticipada p95 de 1.722,8 ms sigue como línea base de
+  optimización del Sprint 12. No bloquea RF-025 a RF-031 ni la aceptación funcional
+  de playlists.
+- Resultado final local: backend con 146 pruebas correctas y 6 omitidas de forma
+  explícita; Flutter con 53 pruebas correctas; formato, análisis, tipos, build,
+  esquema Prisma y migraciones correctos.
