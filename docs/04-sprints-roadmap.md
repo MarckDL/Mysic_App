@@ -428,6 +428,12 @@ Aceptación:
 
 Etiqueta: `sprint-08-v0.8.0`
 
+Plan y seguimiento: `docs/14-plan-sprint-08.md`.
+
+Estado al 12 de noviembre de 2026: implementación y pruebas locales completadas.
+Pendientes la batería PostgreSQL sobre base efímera, migración/despliegue remoto,
+aceptación física con dos cuentas y cierre formal en Git/GitHub.
+
 ## 13. Sprint 09 — Comentarios
 
 ### Objetivo

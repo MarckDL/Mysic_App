@@ -8,7 +8,9 @@ Permite explorar un catálogo musical, gestionar playlists, guardar favoritos, c
 
 La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 
-> Estado: Sprints 1 a 7 cerrados y verificados. Sprint 7 incorporó playlists
+> Estado: Sprints 1 a 7 cerrados y verificados. Sprint 8 está implementado
+> localmente con favoritos y calificaciones; quedan pendientes la migración y
+> aceptación remotas antes de publicar `sprint-08-v0.8.0`. Sprint 7 incorporó playlists
 > multiusuario, privacidad, orden transaccional, persistencia en Supabase y uso
 > desde un Android físico contra el backend HTTPS, sin `adb reverse`.
 > La matriz específica con red móvil del operador y las optimizaciones de latencia

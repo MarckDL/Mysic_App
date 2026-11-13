@@ -119,6 +119,10 @@ Definir los requisitos funcionales y no funcionales de Mysic, una aplicaci처n m�
 | RF-038 | Consultar promedio de calificaciones | Obligatoria |
 | RF-039 | Mantener una calificaci처n activa por usuario y canci처n | Obligatoria |
 
+Contrato Sprint 08: una calificaci처n creada puede modificarse entre 1 y 5, pero no
+eliminarse. El agregado autenticado incluye promedio y cantidad de votos; sin votos
+el promedio es nulo y la cantidad es cero.
+
 ### M처dulo de comentarios
 
 | ID | Requisito | Prioridad |

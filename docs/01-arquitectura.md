@@ -188,6 +188,17 @@ export interface MusicProvider {
 `resolvePlayback` solamente devuelve una fuente después de validar identidad,
 formato, duración completa, caducidad y capacidad real de entrega por rangos.
 
+### 4.5 Favoritos y calificaciones
+
+Flutter envía únicamente el identificador normalizado de catálogo. Express valida
+el Firebase ID token, resuelve el UUID interno y obtiene los metadatos mediante
+`CatalogService` antes de persistir una referencia `Track`.
+
+Los favoritos y la calificación personal son privados. El promedio y la cantidad
+de votos se calculan en PostgreSQL y solo se exponen a usuarios autenticados. Las
+restricciones únicas de base de datos hacen idempotentes los favoritos y mantienen
+una sola calificación activa por usuario y canción.
+
 ## 5. Flujo de autenticación
 
 ```mermaid

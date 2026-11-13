@@ -20,6 +20,8 @@ model User {
   createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
   playlists   Playlist[]
+  favorites   Favorite[]
+  ratings     Rating[]
 
   @@map("users")
   @@schema("mysic")
@@ -43,9 +45,41 @@ model Track {
   thumbnailUrl      String?         @map("thumbnail_url") @db.Text
   metadataUpdatedAt DateTime        @default(now()) @map("metadata_updated_at") @db.Timestamptz(6)
   playlistTracks    PlaylistTrack[]
+  favorites         Favorite[]
+  ratings           Rating[]
 
   @@unique([source, sourceId])
   @@map("tracks")
+  @@schema("mysic")
+}
+
+model Favorite {
+  userId    String   @map("user_id") @db.Uuid
+  trackId   String   @map("track_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track     Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
+
+  @@id([userId, trackId])
+  @@index([userId, createdAt])
+  @@index([trackId])
+  @@map("favorites")
+  @@schema("mysic")
+}
+
+model Rating {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  trackId   String   @map("track_id") @db.Uuid
+  score     Int      @db.SmallInt
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track     Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, trackId])
+  @@index([trackId])
+  @@map("ratings")
   @@schema("mysic")
 }
 

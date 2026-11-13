@@ -128,6 +128,10 @@ Debe garantizarse una posición consistente dentro de cada playlist, utilizando 
 
 Clave primaria compuesta: `(user_id, track_id)`.
 
+Implementación Sprint 08: índice `(user_id, created_at)` para la biblioteca reciente,
+índice por `track_id`, cascada al eliminar el usuario, RLS habilitado y permisos
+públicos revocados.
+
 ### 4.6 ratings
 
 | Campo | Tipo | Restricción |
@@ -142,6 +146,10 @@ Clave primaria compuesta: `(user_id, track_id)`.
 Restricción: `UNIQUE(user_id, track_id)`.
 
 Un usuario mantiene una calificación activa por canción.
+
+Implementación Sprint 08: `score` utiliza `SMALLINT` y `CHECK (score BETWEEN 1 AND
+5)`. Existe un índice por `track_id` para promedio/cantidad, cascada al eliminar el
+usuario, RLS habilitado y permisos públicos revocados.
 
 ### 4.7 comments
 

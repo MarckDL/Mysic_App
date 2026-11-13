@@ -50,6 +50,12 @@ class HomeScreen extends ConsumerWidget {
                   label: const Text('Mis playlists'),
                 ),
                 const SizedBox(height: 12),
+                FilledButton.tonalIcon(
+                  onPressed: () => context.push('/favorites'),
+                  icon: const Icon(Icons.favorite),
+                  label: const Text('Mis favoritos'),
+                ),
+                const SizedBox(height: 12),
                 OutlinedButton.icon(
                   onPressed: () => context.push('/audio-test'),
                   icon: const Icon(Icons.volume_up),
