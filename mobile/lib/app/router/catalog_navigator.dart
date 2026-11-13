@@ -13,6 +13,9 @@ import '../../features/search/presentation/track_detail_screen.dart';
 import '../../features/playlists/presentation/playlists_screen.dart';
 import '../../features/playlists/presentation/playlist_detail_screen.dart';
 import '../../features/favorites/presentation/favorites_screen.dart';
+import '../../features/library/presentation/library_screen.dart';
+import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/youtube_library/presentation/youtube_library_screen.dart';
 
 // Solo se monta dentro de AuthGate tras verificar y sincronizar el perfil.
 // Al cerrar/cambiar cuenta se elimina el navegador y todo su estado.
@@ -60,6 +63,18 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
         builder: (context, state) => const FavoritesScreen(),
       ),
       GoRoute(
+        path: '/library',
+        builder: (context, state) => const LibraryScreen(),
+      ),
+      GoRoute(
+        path: '/profile',
+        builder: (context, state) => ProfileScreen(profile: widget.profile),
+      ),
+      GoRoute(
+        path: '/youtube-library',
+        builder: (context, state) => const YoutubeLibraryScreen(),
+      ),
+      GoRoute(
         path: '/tracks/:id',
         builder: (context, state) =>
             TrackDetailScreen(id: state.pathParameters['id']!),
@@ -85,18 +100,60 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
   Widget build(BuildContext context) {
     // Este listener mantiene una única instancia mientras la sesión está montada.
     final controller = ref.watch(trackPlaybackControllerProvider);
-    return Column(
-      children: [
-        Expanded(child: Router.withConfig(config: _router)),
-        MiniPlayer(
-          controller: controller,
-          open: () {
-            if (_router.routeInformationProvider.value.uri.path != '/player') {
-              _router.push('/player');
-            }
-          },
-        ),
-      ],
+    return ListenableBuilder(
+      listenable: _router.routeInformationProvider,
+      builder: (context, _) {
+        final path = _router.routeInformationProvider.value.uri.path;
+        final destination = switch (path) {
+          '/search' => 1,
+          '/library' || '/playlists' || '/favorites' => 2,
+          '/profile' => 3,
+          _ => 0,
+        };
+        final primary = !const {
+          '/player',
+          '/audio-test',
+          '/youtube-audio-test',
+        }.contains(path);
+        return Column(
+          children: [
+            Expanded(child: Router.withConfig(config: _router)),
+            if (primary)
+              MiniPlayer(
+                controller: controller,
+                open: () => _router.push('/player'),
+              ),
+            if (primary)
+              NavigationBar(
+                selectedIndex: destination,
+                onDestinationSelected: (index) => _router.go(
+                  const ['/', '/search', '/library', '/profile'][index],
+                ),
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.home_outlined),
+                    selectedIcon: Icon(Icons.home),
+                    label: 'Inicio',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.search),
+                    label: 'Explorar',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.library_music_outlined),
+                    selectedIcon: Icon(Icons.library_music),
+                    label: 'Biblioteca',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.person_outline),
+                    selectedIcon: Icon(Icons.person),
+                    label: 'Perfil',
+                  ),
+                ],
+              ),
+          ],
+        );
+      },
     );
   }
 }

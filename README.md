@@ -399,6 +399,7 @@ No ejecutar el cierre sin revisar cambios, pruebas y secretos.
 - [Requisitos](docs/03-requisitos.md)
 - [Roadmap](docs/04-sprints-roadmap.md)
 - [Plan de resolución de audio y letras](docs/11-plan-resolucion-audio-letras.md)
+- [Sistema visual móvil e integración YouTube](docs/13-plan-interfaz-visual.md)
 - [Instrucciones para agentes](AGENTS.md)
 
 ## 10. Limitaciones
@@ -422,6 +423,18 @@ Proyecto académico y de portafolio.
 En desarrollo.
 
 La documentación describe el diseño objetivo; no implica que todos los módulos estén implementados.
+
+### Rama visual y biblioteca conectada
+
+La rama `codex/mobile-ui-youtube-integration` incorpora el sistema claro con acento
+morado, cuatro destinos principales, mini reproductor persistente y reproductor
+oscuro. También prepara una conexión oficial opcional con YouTube mediante el
+alcance `youtube.readonly`: la autorización se usa durante una sincronización
+manual y no se persiste. Los datos importados son de solo lectura; una playlist
+remota puede duplicarse como playlist privada editable de Mysic.
+
+Esta rama no cierra los Sprints 7 u 8 y la migración nueva debe revisarse y
+desplegarse antes de probar la conexión con datos reales.
 
 ### Audio nativo experimental — Sprint 6
 

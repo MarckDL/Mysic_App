@@ -80,14 +80,14 @@ class MiniPlayer extends StatelessWidget {
       }
       final playing = controller.phase == TrackAudioPhase.playing;
       return Material(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        color: Colors.white,
         child: SafeArea(
           top: false,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               if (controller.phase == TrackAudioPhase.loading)
-                const LinearProgressIndicator(),
+                const LinearProgressIndicator(minHeight: 2),
               Row(
                 children: [
                   Expanded(

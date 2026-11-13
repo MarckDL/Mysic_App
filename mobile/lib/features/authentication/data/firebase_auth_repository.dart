@@ -51,6 +51,27 @@ class FirebaseAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<String> authorizeYouTubeReadOnly() async {
+    try {
+      await (_initialization ??= _google.initialize(
+        serverClientId: FirebaseClientConfig.googleServerClientId,
+      ));
+      final authorization = await _google.authorizationClient.authorizeScopes(
+        const ['https://www.googleapis.com/auth/youtube.readonly'],
+      );
+      return authorization.accessToken;
+    } on GoogleSignInException catch (error) {
+      if (error.code == GoogleSignInExceptionCode.canceled) {
+        throw const AuthFailure(
+          'Conexión con YouTube cancelada.',
+          cancelled: true,
+        );
+      }
+      throw const AuthFailure('No se pudo autorizar la lectura de YouTube.');
+    }
+  }
+
+  @override
   Future<String?> getIdToken({bool forceRefresh = false}) async {
     try {
       return await _auth.currentUser?.getIdToken(forceRefresh);

@@ -38,21 +38,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ? null
         : ref.watch(searchResultsProvider(query));
     return Scaffold(
-      appBar: AppBar(title: const Text('Buscar música')),
+      appBar: AppBar(title: const Text('Explorar')),
       body: SafeArea(
         child: Column(
           children: [
             Padding(
               padding: const EdgeInsets.all(16),
               child: TextField(
-                autofocus: true,
                 maxLength: 120,
                 onChanged: _changed,
                 decoration: const InputDecoration(
-                  labelText: 'Canción o artista',
-                  hintText: 'Escribe al menos 2 caracteres',
+                  hintText: 'Canciones o artistas…',
+                  counterText: '',
                   prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
                 ),
               ),
             ),
@@ -81,14 +79,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                   const Divider(height: 1),
                               itemBuilder: (context, index) {
                                 if (index == 0) {
-                                  return TextButton.icon(
-                                    onPressed: () => unawaited(
-                                      ref
-                                          .read(trackPlaybackControllerProvider)
-                                          .playQueue(tracks),
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 4,
                                     ),
-                                    icon: const Icon(Icons.playlist_play),
-                                    label: const Text('Reproducir resultados'),
+                                    child: FilledButton.tonalIcon(
+                                      onPressed: () => unawaited(
+                                        ref
+                                            .read(
+                                              trackPlaybackControllerProvider,
+                                            )
+                                            .playQueue(tracks),
+                                      ),
+                                      icon: const Icon(Icons.playlist_play),
+                                      label: const Text(
+                                        'Reproducir resultados',
+                                      ),
+                                    ),
                                   );
                                 }
                                 final track = tracks[index - 1];

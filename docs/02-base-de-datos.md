@@ -1,4 +1,3 @@
-
 # Mysic — Diseño de base de datos
 
 **Motor:** PostgreSQL  
@@ -58,31 +57,31 @@ erDiagram
 
 ### 4.1 users
 
-| Campo | Tipo | Restricción |
-|---|---|---|
-| id | UUID | PK |
+| Campo        | Tipo         | Restricción      |
+| ------------ | ------------ | ---------------- |
+| id           | UUID         | PK               |
 | firebase_uid | VARCHAR(128) | UNIQUE, NOT NULL |
-| google_id | VARCHAR(255) | UNIQUE, NULL |
-| email | VARCHAR(320) | NULL |
-| display_name | VARCHAR(150) | NOT NULL |
-| photo_url | TEXT | NULL |
-| created_at | TIMESTAMPTZ | NOT NULL |
-| updated_at | TIMESTAMPTZ | NOT NULL |
+| google_id    | VARCHAR(255) | UNIQUE, NULL     |
+| email        | VARCHAR(320) | NULL             |
+| display_name | VARCHAR(150) | NOT NULL         |
+| photo_url    | TEXT         | NULL             |
+| created_at   | TIMESTAMPTZ  | NOT NULL         |
+| updated_at   | TIMESTAMPTZ  | NOT NULL         |
 
 `email` no debe utilizarse como identificador estable de la cuenta.
 
 ### 4.2 tracks
 
-| Campo | Tipo | Restricción |
-|---|---|---|
-| id | UUID | PK |
-| source | VARCHAR(50) | NOT NULL |
-| source_id | VARCHAR(255) | NOT NULL |
-| title | VARCHAR(500) | NOT NULL |
-| artist_name | VARCHAR(255) | NOT NULL |
-| duration_seconds | INTEGER | NULL |
-| thumbnail_url | TEXT | NULL |
-| metadata_updated_at | TIMESTAMPTZ | NOT NULL |
+| Campo               | Tipo         | Restricción |
+| ------------------- | ------------ | ----------- |
+| id                  | UUID         | PK          |
+| source              | VARCHAR(50)  | NOT NULL    |
+| source_id           | VARCHAR(255) | NOT NULL    |
+| title               | VARCHAR(500) | NOT NULL    |
+| artist_name         | VARCHAR(255) | NOT NULL    |
+| duration_seconds    | INTEGER      | NULL        |
+| thumbnail_url       | TEXT         | NULL        |
+| metadata_updated_at | TIMESTAMPTZ  | NOT NULL    |
 
 Restricción: `UNIQUE(source, source_id)`.
 
@@ -90,15 +89,15 @@ La tabla representa referencias externas normalizadas.
 
 ### 4.3 playlists
 
-| Campo | Tipo | Restricción |
-|---|---|---|
-| id | UUID | PK |
-| user_id | UUID | FK users |
-| name | VARCHAR(150) | NOT NULL |
-| description | TEXT | NULL |
-| visibility | VARCHAR(20) | NOT NULL |
-| created_at | TIMESTAMPTZ | NOT NULL |
-| updated_at | TIMESTAMPTZ | NOT NULL |
+| Campo       | Tipo         | Restricción |
+| ----------- | ------------ | ----------- |
+| id          | UUID         | PK          |
+| user_id     | UUID         | FK users    |
+| name        | VARCHAR(150) | NOT NULL    |
+| description | TEXT         | NULL        |
+| visibility  | VARCHAR(20)  | NOT NULL    |
+| created_at  | TIMESTAMPTZ  | NOT NULL    |
+| updated_at  | TIMESTAMPTZ  | NOT NULL    |
 
 Valores de `visibility`: `private`, `public`.
 
@@ -106,13 +105,13 @@ Por defecto, las playlists son privadas.
 
 ### 4.4 playlist_tracks
 
-| Campo | Tipo | Restricción |
-|---|---|---|
-| id | UUID | PK |
-| playlist_id | UUID | FK playlists |
-| track_id | UUID | FK tracks |
-| position | INTEGER | NOT NULL |
-| added_at | TIMESTAMPTZ | NOT NULL |
+| Campo       | Tipo        | Restricción  |
+| ----------- | ----------- | ------------ |
+| id          | UUID        | PK           |
+| playlist_id | UUID        | FK playlists |
+| track_id    | UUID        | FK tracks    |
+| position    | INTEGER     | NOT NULL     |
+| added_at    | TIMESTAMPTZ | NOT NULL     |
 
 Se permiten canciones repetidas si el producto lo requiere.
 
@@ -120,24 +119,24 @@ Debe garantizarse una posición consistente dentro de cada playlist, utilizando 
 
 ### 4.5 favorites
 
-| Campo | Tipo | Restricción |
-|---|---|---|
-| user_id | UUID | FK users |
-| track_id | UUID | FK tracks |
-| created_at | TIMESTAMPTZ | NOT NULL |
+| Campo      | Tipo        | Restricción |
+| ---------- | ----------- | ----------- |
+| user_id    | UUID        | FK users    |
+| track_id   | UUID        | FK tracks   |
+| created_at | TIMESTAMPTZ | NOT NULL    |
 
 Clave primaria compuesta: `(user_id, track_id)`.
 
 ### 4.6 ratings
 
-| Campo | Tipo | Restricción |
-|---|---|---|
-| id | UUID | PK |
-| user_id | UUID | FK users |
-| track_id | UUID | FK tracks |
-| score | SMALLINT | CHECK 1–5 |
-| created_at | TIMESTAMPTZ | NOT NULL |
-| updated_at | TIMESTAMPTZ | NOT NULL |
+| Campo      | Tipo        | Restricción |
+| ---------- | ----------- | ----------- |
+| id         | UUID        | PK          |
+| user_id    | UUID        | FK users    |
+| track_id   | UUID        | FK tracks   |
+| score      | SMALLINT    | CHECK 1–5   |
+| created_at | TIMESTAMPTZ | NOT NULL    |
+| updated_at | TIMESTAMPTZ | NOT NULL    |
 
 Restricción: `UNIQUE(user_id, track_id)`.
 
@@ -145,15 +144,15 @@ Un usuario mantiene una calificación activa por canción.
 
 ### 4.7 comments
 
-| Campo | Tipo | Restricción |
-|---|---|---|
-| id | UUID | PK |
-| user_id | UUID | FK users |
-| track_id | UUID | FK tracks |
-| body | TEXT | NOT NULL |
-| status | VARCHAR(20) | NOT NULL |
-| created_at | TIMESTAMPTZ | NOT NULL |
-| updated_at | TIMESTAMPTZ | NOT NULL |
+| Campo      | Tipo        | Restricción |
+| ---------- | ----------- | ----------- |
+| id         | UUID        | PK          |
+| user_id    | UUID        | FK users    |
+| track_id   | UUID        | FK tracks   |
+| body       | TEXT        | NOT NULL    |
+| status     | VARCHAR(20) | NOT NULL    |
+| created_at | TIMESTAMPTZ | NOT NULL    |
+| updated_at | TIMESTAMPTZ | NOT NULL    |
 
 Estados: `visible`, `hidden`, `deleted`.
 
@@ -161,28 +160,28 @@ El contenido debe validarse, limitarse y moderarse.
 
 ### 4.8 listening_history
 
-| Campo | Tipo | Restricción |
-|---|---|---|
-| id | UUID | PK |
-| user_id | UUID | FK users |
-| track_id | UUID | FK tracks |
-| playback_session_id | UUID | UNIQUE |
-| started_at | TIMESTAMPTZ | NOT NULL |
-| listened_ms | BIGINT | NOT NULL |
-| completed | BOOLEAN | NOT NULL |
+| Campo               | Tipo        | Restricción |
+| ------------------- | ----------- | ----------- |
+| id                  | UUID        | PK          |
+| user_id             | UUID        | FK users    |
+| track_id            | UUID        | FK tracks   |
+| playback_session_id | UUID        | UNIQUE      |
+| started_at          | TIMESTAMPTZ | NOT NULL    |
+| listened_ms         | BIGINT      | NOT NULL    |
+| completed           | BOOLEAN     | NOT NULL    |
 
 `playback_session_id` permite evitar registros duplicados por reintentos.
 
 ### 4.9 comment_reports
 
-| Campo | Tipo | Restricción |
-|---|---|---|
-| id | UUID | PK |
-| reporter_id | UUID | FK users |
-| comment_id | UUID | FK comments |
-| reason | VARCHAR(100) | NOT NULL |
-| status | VARCHAR(20) | NOT NULL |
-| created_at | TIMESTAMPTZ | NOT NULL |
+| Campo       | Tipo         | Restricción |
+| ----------- | ------------ | ----------- |
+| id          | UUID         | PK          |
+| reporter_id | UUID         | FK users    |
+| comment_id  | UUID         | FK comments |
+| reason      | VARCHAR(100) | NOT NULL    |
+| status      | VARCHAR(20)  | NOT NULL    |
+| created_at  | TIMESTAMPTZ  | NOT NULL    |
 
 Estados: `pending`, `reviewed`, `dismissed`.
 
@@ -254,8 +253,8 @@ Ejemplo:
 ```typescript
 const playlists = await prisma.playlist.findMany({
   where: {
-    userId: authenticatedUser.id
-  }
+    userId: authenticatedUser.id,
+  },
 });
 ```
 
@@ -357,3 +356,16 @@ exclusivamente mediante Express.
 La restricción `(playlist_id, position)` evita órdenes ambiguos. Añadir, retirar y
 reordenar ocurrencias usa transacciones serializables, y el borrado de una playlist
 elimina sus ocurrencias en cascada sin borrar el catálogo normalizado.
+
+## 16. Biblioteca remota de YouTube
+
+La migración `20261112143000_create_youtube_library` agrega una conexión por usuario
+y snapshots de playlists, pistas, likes y suscripciones. Todos se vinculan a
+`users.id`; los identificadores externos son únicos dentro de cada propietario.
+No existe columna para access token, refresh token ni cookies.
+
+Cada sincronización reemplaza el snapshot dentro de una transacción y reutiliza
+`tracks` mediante `(source, source_id)`, por lo que repetir la misma sincronización
+no duplica registros. Las tablas mantienen RLS sin políticas para clientes directos.
+Duplicar una playlist remota crea una playlist local privada con referencias a las
+mismas pistas normalizadas.

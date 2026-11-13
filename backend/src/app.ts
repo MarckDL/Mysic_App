@@ -35,6 +35,12 @@ import { PrismaRatingRepository } from './infrastructure/database/prisma-rating-
 import { RatingService } from './modules/ratings/application/rating-service.js';
 import type { RatingRepository } from './modules/ratings/domain/rating-repository.js';
 import { createRatingRouter } from './modules/ratings/presentation/rating.routes.js';
+import { YoutubeDataLibraryClient } from './infrastructure/music/youtube-data-library-client.js';
+import { PrismaYoutubeLibraryRepository } from './infrastructure/database/prisma-youtube-library-repository.js';
+import { YoutubeLibraryService } from './modules/youtube-library/application/youtube-library-service.js';
+import type { YoutubeLibraryClient } from './modules/youtube-library/domain/youtube-library-client.js';
+import type { YoutubeLibraryRepository } from './modules/youtube-library/domain/youtube-library-repository.js';
+import { createYoutubeLibraryRouter } from './modules/youtube-library/presentation/youtube-library.routes.js';
 
 export function createApp(
   options: {
@@ -51,6 +57,9 @@ export function createApp(
     favoriteService?: FavoriteService;
     ratingRepository?: RatingRepository;
     ratingService?: RatingService;
+    youtubeLibraryClient?: YoutubeLibraryClient;
+    youtubeLibraryRepository?: YoutubeLibraryRepository;
+    youtubeLibraryService?: YoutubeLibraryService;
   } = {},
 ) {
   const app = express();
@@ -124,6 +133,18 @@ export function createApp(
         new RatingService(
           options.ratingRepository ?? new PrismaRatingRepository(),
           catalog,
+        ),
+    ),
+  );
+  app.use(
+    '/api/v1/integrations/youtube',
+    createYoutubeLibraryRouter(
+      verifier,
+      options.youtubeLibraryService ??
+        new YoutubeLibraryService(
+          options.youtubeLibraryRepository ??
+            new PrismaYoutubeLibraryRepository(),
+          options.youtubeLibraryClient ?? new YoutubeDataLibraryClient(),
         ),
     ),
   );

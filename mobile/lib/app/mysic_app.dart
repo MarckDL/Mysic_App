@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../features/authentication/presentation/auth_gate.dart';
+import 'mysic_theme.dart';
 
 class MysicApp extends StatelessWidget {
   const MysicApp({super.key, this.firebaseReady = false});
@@ -10,10 +11,7 @@ class MysicApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Mysic',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
+      theme: buildMysicTheme(),
       home: firebaseReady ? const AuthGate() : const _SetupPendingScreen(),
     );
   }

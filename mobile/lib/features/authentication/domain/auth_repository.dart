@@ -14,6 +14,7 @@ abstract interface class AuthRepository {
   AuthUser? get currentUser;
   Stream<AuthUser?> authStateChanges();
   Future<void> signInWithGoogle();
+  Future<String> authorizeYouTubeReadOnly();
   Future<void> signOut();
   Future<String?> getIdToken({bool forceRefresh = false});
 }

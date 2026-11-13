@@ -11,17 +11,18 @@ datasource db {
 }
 
 model User {
-  id          String     @id @default(uuid()) @db.Uuid
-  firebaseUid String     @unique @map("firebase_uid") @db.VarChar(128)
-  googleId    String?    @unique @map("google_id") @db.VarChar(255)
-  email       String?    @db.VarChar(320)
-  displayName String     @map("display_name") @db.VarChar(150)
-  photoUrl    String?    @map("photo_url") @db.Text
-  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
-  playlists   Playlist[]
-  favorites   Favorite[]
-  ratings     Rating[]
+  id                String             @id @default(uuid()) @db.Uuid
+  firebaseUid       String             @unique @map("firebase_uid") @db.VarChar(128)
+  googleId          String?            @unique @map("google_id") @db.VarChar(255)
+  email             String?            @db.VarChar(320)
+  displayName       String             @map("display_name") @db.VarChar(150)
+  photoUrl          String?            @map("photo_url") @db.Text
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  playlists         Playlist[]
+  favorites         Favorite[]
+  ratings           Rating[]
+  youtubeConnection YoutubeConnection?
 
   @@map("users")
   @@schema("mysic")
@@ -36,17 +37,19 @@ enum PlaylistVisibility {
 }
 
 model Track {
-  id                String          @id @default(uuid()) @db.Uuid
-  source            String          @db.VarChar(50)
-  sourceId          String          @map("source_id") @db.VarChar(255)
-  title             String          @db.VarChar(500)
-  artistName        String          @map("artist_name") @db.VarChar(255)
-  durationSeconds   Int?            @map("duration_seconds")
-  thumbnailUrl      String?         @map("thumbnail_url") @db.Text
-  metadataUpdatedAt DateTime        @default(now()) @map("metadata_updated_at") @db.Timestamptz(6)
-  playlistTracks    PlaylistTrack[]
-  favorites         Favorite[]
-  ratings           Rating[]
+  id                    String                       @id @default(uuid()) @db.Uuid
+  source                String                       @db.VarChar(50)
+  sourceId              String                       @map("source_id") @db.VarChar(255)
+  title                 String                       @db.VarChar(500)
+  artistName            String                       @map("artist_name") @db.VarChar(255)
+  durationSeconds       Int?                         @map("duration_seconds")
+  thumbnailUrl          String?                      @map("thumbnail_url") @db.Text
+  metadataUpdatedAt     DateTime                     @default(now()) @map("metadata_updated_at") @db.Timestamptz(6)
+  playlistTracks        PlaylistTrack[]
+  favorites             Favorite[]
+  ratings               Rating[]
+  youtubePlaylistTracks YoutubeRemotePlaylistTrack[]
+  youtubeLikes          YoutubeRemoteLike[]
 
   @@unique([source, sourceId])
   @@map("tracks")
@@ -111,5 +114,77 @@ model Rating {
   @@unique([userId, trackId])
   @@index([trackId])
   @@map("ratings")
+  @@schema("mysic")
+}
+
+model YoutubeConnection {
+  userId        String                      @id @map("user_id") @db.Uuid
+  channelId     String                      @map("channel_id") @db.VarChar(255)
+  displayName   String                      @map("display_name") @db.VarChar(255)
+  avatarUrl     String?                     @map("avatar_url") @db.Text
+  connectedAt   DateTime                    @default(now()) @map("connected_at") @db.Timestamptz(6)
+  lastSyncedAt  DateTime                    @map("last_synced_at") @db.Timestamptz(6)
+  user          User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  playlists     YoutubeRemotePlaylist[]
+  likes         YoutubeRemoteLike[]
+  subscriptions YoutubeRemoteSubscription[]
+
+  @@map("youtube_connections")
+  @@schema("mysic")
+}
+
+model YoutubeRemotePlaylist {
+  id           String                       @id @default(uuid()) @db.Uuid
+  userId       String                       @map("user_id") @db.Uuid
+  externalId   String                       @map("external_id") @db.VarChar(255)
+  title        String                       @db.VarChar(500)
+  thumbnailUrl String?                      @map("thumbnail_url") @db.Text
+  itemCount    Int                          @map("item_count")
+  connection   YoutubeConnection            @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  tracks       YoutubeRemotePlaylistTrack[]
+
+  @@unique([userId, externalId])
+  @@index([userId, title])
+  @@map("youtube_remote_playlists")
+  @@schema("mysic")
+}
+
+model YoutubeRemotePlaylistTrack {
+  id             String                @id @default(uuid()) @db.Uuid
+  playlistId     String                @map("playlist_id") @db.Uuid
+  trackId        String                @map("track_id") @db.Uuid
+  externalItemId String                @map("external_item_id") @db.VarChar(255)
+  position       Int
+  playlist       YoutubeRemotePlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  track          Track                 @relation(fields: [trackId], references: [id], onDelete: Restrict)
+
+  @@unique([playlistId, externalItemId])
+  @@unique([playlistId, position])
+  @@index([trackId])
+  @@map("youtube_remote_playlist_tracks")
+  @@schema("mysic")
+}
+
+model YoutubeRemoteLike {
+  userId     String            @map("user_id") @db.Uuid
+  trackId    String            @map("track_id") @db.Uuid
+  connection YoutubeConnection @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  track      Track             @relation(fields: [trackId], references: [id], onDelete: Restrict)
+
+  @@id([userId, trackId])
+  @@index([trackId])
+  @@map("youtube_remote_likes")
+  @@schema("mysic")
+}
+
+model YoutubeRemoteSubscription {
+  userId       String            @map("user_id") @db.Uuid
+  channelId    String            @map("channel_id") @db.VarChar(255)
+  title        String            @db.VarChar(500)
+  thumbnailUrl String?           @map("thumbnail_url") @db.Text
+  connection   YoutubeConnection @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@id([userId, channelId])
+  @@map("youtube_remote_subscriptions")
   @@schema("mysic")
 }

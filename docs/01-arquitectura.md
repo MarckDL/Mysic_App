@@ -579,3 +579,22 @@ y la cancela al cambiar o vaciarse. Las métricas no contienen IDs, URLs ni toke
 Referencias de implementación: https://pub.dev/packages/audio_service y su ejemplo
 Android. Notificación, bloqueo de pantalla, cola, controles y logout se verificaron
 en el dispositivo físico `23117RA68G` durante el cierre del Sprint 6.
+
+## 21. Shell móvil y biblioteca conectada de YouTube
+
+`CatalogNavigator` conserva una sola sesión y un solo reproductor, y expone cuatro
+destinos persistentes: Inicio, Explorar, Biblioteca y Perfil. Estadísticas no se
+monta hasta su Sprint. La capa visual usa tema claro y el reproductor completo
+aplica un tema oscuro aislado.
+
+La búsqueda y reproducción continúan detrás de `MusicProvider`. La biblioteca
+privada remota usa un contrato complementario `YoutubeLibraryClient`; así los
+módulos de dominio no dependen de respuestas de la API oficial ni de youtubei.js.
+Flutter obtiene incrementalmente `youtube.readonly` y envía el access token en un
+header dedicado solo para `POST /api/v1/integrations/youtube/sync`. Express no lo
+registra ni lo persiste. Firebase sigue determinando `users.id` para toda lectura,
+reemplazo, duplicación o desconexión.
+
+Los snapshots remotos son inmutables desde Mysic. Duplicar una playlist se realiza
+en una transacción y produce una playlist privada local. InnerTube, cookies y
+escritura bidireccional quedan fuera de esta etapa.

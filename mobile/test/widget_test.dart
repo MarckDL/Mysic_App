@@ -79,13 +79,15 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Bienvenido, Ana'), findsOneWidget);
+    expect(find.text('Hola, Ana 👋'), findsOneWidget);
+    await tester.tap(find.text('Perfil'));
+    await tester.pumpAndSettle();
     expect(find.text('ana@example.test'), findsOneWidget);
-    expect(find.text('Tu perfil está guardado en Mysic.'), findsOneWidget);
+    expect(find.text('Cuenta de Mysic'), findsOneWidget);
     await tester.tap(find.text('Cerrar sesión'));
     await tester.pumpAndSettle();
     expect(repository.signOutCount, 1);
-    expect(find.text('Bienvenido, Ana'), findsNothing);
+    expect(find.text('Hola, Ana 👋'), findsNothing);
     expect(find.text('Continuar con Google'), findsOneWidget);
   });
 }

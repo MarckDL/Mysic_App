@@ -24,8 +24,17 @@ class AuthenticatedApiClient {
   Future<Map<String, dynamic>> post(
     String path, {
     required Map<String, dynamic> body,
+    Map<String, String>? headers,
+    bool preserveSessionOnUnauthorized = false,
     CancelToken? cancelToken,
-  }) => _request('POST', path, body: body, cancelToken: cancelToken);
+  }) => _request(
+    'POST',
+    path,
+    body: body,
+    headers: headers,
+    preserveSessionOnUnauthorized: preserveSessionOnUnauthorized,
+    cancelToken: cancelToken,
+  );
 
   Future<Map<String, dynamic>> patch(
     String path, {
@@ -49,6 +58,8 @@ class AuthenticatedApiClient {
     String path, {
     Map<String, dynamic>? query,
     Map<String, dynamic>? body,
+    Map<String, String>? headers,
+    bool preserveSessionOnUnauthorized = false,
     CancelToken? cancelToken,
   }) async {
     final uid = _auth.currentUser?.uid;
@@ -70,7 +81,7 @@ class AuthenticatedApiClient {
           cancelToken: cancelToken,
           options: Options(
             method: method,
-            headers: {'Authorization': 'Bearer $token'},
+            headers: {...?headers, 'Authorization': 'Bearer $token'},
           ),
         );
         if (_auth.currentUser?.uid != uid) {
@@ -87,11 +98,14 @@ class AuthenticatedApiClient {
         }
         final status = error.response?.statusCode;
         if (method == 'GET' && status == 401 && attempt == 0) continue;
-        if (status == 401 || status == 403) {
+        if ((status == 401 || status == 403) &&
+            !preserveSessionOnUnauthorized) {
           await _auth.signOut();
           throw const AuthFailure('Tu sesión terminó. Inicia sesión de nuevo.');
         }
         final message = switch (status) {
+          401 =>
+            'La autorización de YouTube venció. Conecta la cuenta de nuevo.',
           404 => 'Esta pista no está disponible.',
           429 => 'Espera un minuto antes de buscar de nuevo.',
           504 => 'El catálogo tardó demasiado en responder.',

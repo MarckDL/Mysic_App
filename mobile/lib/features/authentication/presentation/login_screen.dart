@@ -11,7 +11,6 @@ class LoginScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final action = ref.watch(authActionsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Mysic')),
       body: SafeArea(
         child: Center(
           child: Padding(
@@ -19,18 +18,27 @@ class LoginScreen extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                Icon(
+                  Icons.graphic_eq,
+                  size: 56,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(height: 8),
+                Text('Mysic', style: Theme.of(context).textTheme.headlineLarge),
+                const SizedBox(height: 32),
                 Text(
-                  'Tu espacio musical',
+                  'Tu música, contigo',
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 const SizedBox(height: 12),
                 const Text('Inicia sesión con Google para acceder a Mysic.'),
                 const SizedBox(height: 24),
-                FilledButton(
+                FilledButton.icon(
                   onPressed: action.isLoading
                       ? null
                       : () => ref.read(authActionsProvider.notifier).signIn(),
-                  child: Text(
+                  icon: const Icon(Icons.login),
+                  label: Text(
                     action.isLoading
                         ? 'Iniciando sesión…'
                         : 'Continuar con Google',

@@ -191,6 +191,23 @@ class TrackPlaybackController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void reorder(int from, int to) {
+    if (!_active ||
+        from < 0 ||
+        from >= _queue.length ||
+        to < 0 ||
+        to >= _queue.length ||
+        from == to) {
+      return;
+    }
+    _engine.cancelPrefetch();
+    final playing = current;
+    final moved = _queue.removeAt(from);
+    _queue.insert(to, moved);
+    index = playing == null ? -1 : _queue.indexOf(playing);
+    notifyListeners();
+  }
+
   Future<void> pause() async {
     if (!_active) return;
     if (phase == TrackAudioPhase.loading) {

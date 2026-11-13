@@ -608,3 +608,12 @@ Cada Sprint debe registrar:
 - Enlace a la versión en GitHub.
 
 El Sprint no se considera cerrado hasta completar la validación y el procedimiento de versionado.
+
+## 21. Incremento transversal en rama visual
+
+La adaptación visual y la biblioteca oficial de YouTube se desarrollan en
+`codex/mobile-ui-youtube-integration`. No alteran el estado de cierre del Sprint 7
+ni del Sprint 8. La integración se considera lista para datos reales solo después
+de desplegar su migración, configurar el consentimiento OAuth y validar una cuenta
+en dispositivo. Comentarios, recientes/historial y Estadísticas continúan asignados
+a los Sprints 9, 10 y 11 respectivamente y permanecen ocultos hasta entonces.

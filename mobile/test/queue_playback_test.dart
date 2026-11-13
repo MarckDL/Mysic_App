@@ -64,6 +64,16 @@ void main() {
     expect(engine.plays, 2);
     expect(controller.phase, TrackAudioPhase.completed);
   });
+  test('reordenar conserva la pista activa y actualiza su índice', () async {
+    await controller.playQueue([a, b, c], initialIndex: 1);
+    controller.reorder(0, 2);
+    expect(controller.queue.map((track) => track.id), [b.id, c.id, a.id]);
+    expect(controller.current?.id, b.id);
+    expect(controller.index, 0);
+    controller.reorder(0, 2);
+    expect(controller.current?.id, b.id);
+    expect(controller.index, 2);
+  });
   test('selección B cancela A aunque A termine de cargar más tarde', () async {
     final pendingA = Completer<void>();
     engine.pendingLoad = pendingA;

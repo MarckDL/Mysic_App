@@ -130,7 +130,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Buscar música'));
+    await tester.tap(find.text('Explorar'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'artist');
     await tester.pump(const Duration(milliseconds: 400));
@@ -152,7 +152,7 @@ void main() {
     // Navegar ya no destruye el motor: la sesión mantiene el mini reproductor.
     await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.text('Buscar música'), findsOneWidget);
+    expect(find.text('Explorar'), findsWidgets);
     expect(audio.disposals, 0);
     await tester.tap(find.byTooltip('Pausar audio'));
     await tester.pumpAndSettle();

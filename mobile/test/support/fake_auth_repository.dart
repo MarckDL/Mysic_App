@@ -11,6 +11,10 @@ class FakeAuthRepository implements AuthRepository {
   final refreshes = <bool>[];
   bool emitOnTokenRefresh = false;
   Future<void> Function()? onSignIn;
+  String youtubeAccessToken = 'youtube-access-token-for-test';
+
+  @override
+  Future<String> authorizeYouTubeReadOnly() async => youtubeAccessToken;
 
   @override
   AuthUser? get currentUser => user;
