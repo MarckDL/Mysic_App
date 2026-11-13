@@ -4,13 +4,20 @@ import type {
 } from './youtube-library.js';
 
 export interface YoutubeLibraryView {
-  likes: YoutubeLibrarySnapshot['likes'];
+  likes: Array<
+    YoutubeLibrarySnapshot['likes'][number] & {
+      origin: 'youtube';
+      readOnly: true;
+    }
+  >;
   playlists: Array<{
     id: string;
     externalId: string;
     title: string;
     thumbnailUrl: string | null;
     itemCount: number;
+    origin: 'youtube';
+    readOnly: true;
   }>;
   subscriptions: YoutubeLibrarySnapshot['subscriptions'];
 }
@@ -34,6 +41,8 @@ export interface YoutubeLibraryRepository {
     trackCount: number;
     createdAt: string;
     updatedAt: string;
+    origin: 'mysic';
+    readOnly: false;
   } | null>;
   disconnect(ownerId: string): Promise<boolean>;
 }

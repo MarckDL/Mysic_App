@@ -98,13 +98,19 @@ export class PrismaYoutubeLibraryRepository implements YoutubeLibraryRepository 
       });
       if (!value) return { likes: [], playlists: [], subscriptions: [] };
       return {
-        likes: value.likes.map((item) => outputTrack(item.track)),
+        likes: value.likes.map((item) => ({
+          ...outputTrack(item.track),
+          origin: 'youtube' as const,
+          readOnly: true as const,
+        })),
         playlists: value.playlists.map((item) => ({
           id: item.id,
           externalId: item.externalId,
           title: item.title,
           thumbnailUrl: item.thumbnailUrl,
           itemCount: item.itemCount,
+          origin: 'youtube' as const,
+          readOnly: true as const,
         })),
         subscriptions: value.subscriptions.map((item) => ({
           channelId: item.channelId,
@@ -263,6 +269,8 @@ export class PrismaYoutubeLibraryRepository implements YoutubeLibraryRepository 
           trackCount: created._count.tracks,
           createdAt: created.createdAt.toISOString(),
           updatedAt: created.updatedAt.toISOString(),
+          origin: 'mysic' as const,
+          readOnly: false as const,
         };
       });
     } catch (error) {

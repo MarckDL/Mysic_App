@@ -80,7 +80,9 @@ describe('rutas de favoritos', () => {
       .get('/api/v1/favorites')
       .auth('a', { type: 'bearer' });
     expect(listed.status).toBe(200);
-    expect(listed.body.items).toEqual([favorite]);
+    expect(listed.body.items).toEqual([
+      { ...favorite, origin: 'mysic', readOnly: false },
+    ]);
     expect(repository.list).toHaveBeenCalledWith('owner-a');
     const other = await request(app)
       .get(`/api/v1/favorites/youtube/${sourceId}`)

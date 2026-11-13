@@ -34,6 +34,8 @@ function fixture() {
       trackCount: 2,
       createdAt: status.lastSyncedAt,
       updatedAt: status.lastSyncedAt,
+      origin: 'mysic' as const,
+      readOnly: false as const,
     })),
     disconnect: vi.fn(async () => true),
   };

@@ -23,8 +23,14 @@ export class PlaylistService {
     return ownerId;
   }
 
+  private local<T>(playlist: T) {
+    return { ...playlist, origin: 'mysic' as const, readOnly: false as const };
+  }
+
   async list(identity: AuthIdentity) {
-    return this.repository.listOwned(await this.owner(identity));
+    return (await this.repository.listOwned(await this.owner(identity))).map(
+      (playlist) => this.local(playlist),
+    );
   }
 
   async detail(identity: AuthIdentity, playlistId: string) {
@@ -33,11 +39,13 @@ export class PlaylistService {
       playlistId,
     );
     if (!playlist) throw new PlaylistNotFoundError();
-    return playlist;
+    return this.local(playlist);
   }
 
   async create(identity: AuthIdentity, input: PlaylistInput) {
-    return this.repository.create(await this.owner(identity), input);
+    return this.local(
+      await this.repository.create(await this.owner(identity), input),
+    );
   }
 
   async update(
@@ -51,7 +59,7 @@ export class PlaylistService {
       input,
     );
     if (!playlist) throw new PlaylistNotFoundError();
-    return playlist;
+    return this.local(playlist);
   }
 
   async delete(identity: AuthIdentity, playlistId: string) {
@@ -81,7 +89,7 @@ export class PlaylistService {
       PlaylistService.maximumItems,
     );
     if (!playlist) throw new PlaylistNotFoundError();
-    return playlist;
+    return this.local(playlist);
   }
 
   async removeTrack(
@@ -95,7 +103,7 @@ export class PlaylistService {
       itemId,
     );
     if (!playlist) throw new PlaylistNotFoundError();
-    return playlist;
+    return this.local(playlist);
   }
 
   async reorder(
@@ -109,6 +117,6 @@ export class PlaylistService {
       itemIds,
     );
     if (!playlist) throw new PlaylistNotFoundError();
-    return playlist;
+    return this.local(playlist);
   }
 }

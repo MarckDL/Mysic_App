@@ -18,8 +18,14 @@ export class FavoriteService {
     return ownerId;
   }
 
+  private local<T>(favorite: T) {
+    return { ...favorite, origin: 'mysic' as const, readOnly: false as const };
+  }
+
   async list(identity: AuthIdentity) {
-    return this.repository.list(await this.owner(identity));
+    return (await this.repository.list(await this.owner(identity))).map(
+      (favorite) => this.local(favorite),
+    );
   }
 
   async status(identity: AuthIdentity, source: string, sourceId: string) {
@@ -38,7 +44,7 @@ export class FavoriteService {
     const track = await this.catalog.getTrack(sourceId);
     if (!track || track.source !== source || track.sourceId !== sourceId)
       throw new FavoriteTrackUnavailableError();
-    return this.repository.upsert(ownerId, track);
+    return this.local(await this.repository.upsert(ownerId, track));
   }
 
   async remove(identity: AuthIdentity, source: string, sourceId: string) {
