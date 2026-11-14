@@ -430,9 +430,9 @@ Etiqueta: `sprint-08-v0.8.0`
 
 Plan y seguimiento: `docs/14-plan-sprint-08.md`.
 
-Estado al 12 de noviembre de 2026: implementación y pruebas locales completadas.
-Pendientes la batería PostgreSQL sobre base efímera, migración/despliegue remoto,
-aceptación física con dos cuentas y cierre formal en Git/GitHub.
+Estado al 14 de noviembre de 2026: implementación, CI con PostgreSQL efímero,
+migración Supabase y despliegue Render completados. Pendientes la aceptación física
+con dos cuentas y el cierre formal mediante la etiqueta del Sprint.
 
 ## 13. Sprint 09 — Comentarios
 

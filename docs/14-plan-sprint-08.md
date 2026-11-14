@@ -104,14 +104,22 @@ Completado:
 - Se añadieron tres casos PostgreSQL reales para concurrencia, aislamiento,
   restricciones, cascadas y RLS.
 
+Completado remotamente:
+
+- El commit `b4674e9` se publicó en `main` y GitHub Actions terminó verde.
+- CI aplicó las cuatro migraciones sobre PostgreSQL efímero y ejecutó las 160
+  pruebas backend, incluidas las 9 pruebas PostgreSQL reales.
+- Render desplegó `b4674e9` en `mysic-api-k03u` y alcanzó estado `live`.
+- El build remoto aplicó la migración Sprint 08 a Supabase; `prisma migrate status`
+  confirma cuatro migraciones y esquema al día.
+- `GET /api/v1/health` devuelve `200`; favoritos e interacciones sin token devuelven
+  `401 UNAUTHENTICATED`, confirmando que las rutas nuevas están activas y protegidas.
+
 Pendiente antes del cierre:
 
-- Las 9 pruebas PostgreSQL (incluidas 3 nuevas) requieren `TEST_DATABASE_URL` hacia
-  una base desechable. Docker está instalado pero su servicio local no está activo;
-  no se usó Supabase productivo para pruebas destructivas.
-- Aplicar la migración revisada a Supabase mediante el despliegue autorizado.
-- Validar HTTPS y APK físico con dos cuentas, sin `adb reverse`.
-- Confirmar GitHub Actions, publicar `main` y crear `sprint-08-v0.8.0` después de
-  recibir autorización explícita.
+- Validar el APK físico con dos cuentas, sin `adb reverse`, cubriendo aislamiento,
+  idempotencia, actualización de rating, promedio y persistencia. Al 14 de noviembre
+  de 2026 no hay un dispositivo Android conectado al equipo.
+- Crear y publicar `sprint-08-v0.8.0` únicamente después de esa aceptación.
 
 El Sprint no se considera cerrado mientras estas verificaciones sigan pendientes.
