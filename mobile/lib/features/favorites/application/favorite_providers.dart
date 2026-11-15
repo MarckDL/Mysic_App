@@ -36,18 +36,22 @@ final favoriteActionsProvider =
     );
 
 class FavoriteActions extends Notifier<AsyncValue<void>> {
+  late FavoriteRepository _repository;
+
   @override
-  AsyncValue<void> build() => const AsyncData(null);
+  AsyncValue<void> build() {
+    _repository = ref.watch(favoriteRepositoryProvider);
+    return const AsyncData(null);
+  }
 
   Future<bool> setFavorite(String trackId, bool favorite) async {
     if (state.isLoading) return false;
     state = const AsyncLoading();
     try {
-      final repository = ref.read(favoriteRepositoryProvider);
       if (favorite) {
-        await repository.add(trackId);
+        await _repository.add(trackId);
       } else {
-        await repository.remove(trackId);
+        await _repository.remove(trackId);
       }
       if (!ref.mounted) return false;
       ref.invalidate(favoritesProvider);

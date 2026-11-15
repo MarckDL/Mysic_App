@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../features/authentication/domain/auth_repository.dart';
 import 'api_dio.dart';
@@ -86,6 +87,10 @@ class AuthenticatedApiClient {
           throw const AuthFailure('La cuenta cambió.');
         }
         final status = error.response?.statusCode;
+        debugPrint(
+          'api_request_failed method=$method type=${error.type.name} '
+          'status=$status',
+        );
         if (method == 'GET' && status == 401 && attempt == 0) continue;
         if (status == 401 || status == 403) {
           await _auth.signOut();

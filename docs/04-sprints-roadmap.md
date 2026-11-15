@@ -430,9 +430,10 @@ Etiqueta: `sprint-08-v0.8.0`
 
 Plan y seguimiento: `docs/14-plan-sprint-08.md`.
 
-Estado al 14 de noviembre de 2026: implementación, CI con PostgreSQL efímero,
-migración Supabase y despliegue Render completados. Pendientes la aceptación física
-con dos cuentas y el cierre formal mediante la etiqueta del Sprint.
+Estado al 14 de noviembre de 2026: Sprint cerrado. Implementación, CI con PostgreSQL
+efímero, migración Supabase y despliegue Render completados. La aceptación física
+con dos cuentas confirmó aislamiento, promedio compartido, actualización sin
+duplicados, persistencia y retiro reversible. Versión `sprint-08-v0.8.0`.
 
 ## 13. Sprint 09 — Comentarios
 

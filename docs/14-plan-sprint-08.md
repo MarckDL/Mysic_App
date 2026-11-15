@@ -96,7 +96,7 @@ Completado:
 
 - Prisma valida y genera el cliente con los dos modelos nuevos.
 - Backend: lint, tipos y build correctos; 151 pruebas correctas.
-- Flutter: formato, análisis estático y 57 pruebas correctas.
+- Flutter: formato, análisis estático y 58 pruebas correctas.
 - APK release ARM64 construido contra el backend HTTPS: 22.517.278 bytes
   (22,5 MB), dentro del límite de 24 MB.
 - Los tests cubren contrato HTTP, idempotencia, aislamiento simulado, modificación
@@ -115,11 +115,23 @@ Completado remotamente:
 - `GET /api/v1/health` devuelve `200`; favoritos e interacciones sin token devuelven
   `401 UNAUTHENTICATED`, confirmando que las rutas nuevas están activas y protegidas.
 
-Pendiente antes del cierre:
+Aceptación física completada el 14 de noviembre de 2026:
 
-- Validar el APK físico con dos cuentas, sin `adb reverse`, cubriendo aislamiento,
-  idempotencia, actualización de rating, promedio y persistencia. Al 14 de noviembre
-  de 2026 no hay un dispositivo Android conectado al equipo.
-- Crear y publicar `sprint-08-v0.8.0` únicamente después de esa aceptación.
+- Se instaló el APK release ARM64 `0.8.0` (`versionCode 2008`) configurado contra
+  `https://mysic-api-k03u.onrender.com`, sin `adb reverse`.
+- La primera cuenta agregó una canción a favoritos, la calificó con 4 y luego con 5;
+  PostgreSQL conservó una sola fila de favorito y una sola fila de rating actualizado.
+- Tras forzar el cierre y abrir nuevamente la aplicación, la biblioteca recuperó el
+  favorito desde PostgreSQL.
+- La segunda cuenta mostró una biblioteca vacía y ninguna preferencia personal para
+  esa canción, pero sí el agregado compartido `5.0 de 5 · 1 voto`.
+- Al volver a la primera cuenta, el retiro directo desde la biblioteca dejó cero
+  favoritos sin eliminar su rating, confirmando el alcance reversible de la acción.
+- Durante la primera ejecución física se detectó que un repositorio `autoDispose`
+  podía cerrar Dio mientras una mutación estaba pendiente. Los controladores de
+  favoritos y ratings ahora observan el repositorio durante toda la operación y una
+  prueba de regresión demora ambas escrituras para verificar su ciclo de vida.
+- La batería final quedó en 151 pruebas backend, 58 Flutter y 5 pruebas de herramientas;
+  lint, tipos, formato, análisis y compilaciones backend/APK finalizaron correctamente.
 
-El Sprint no se considera cerrado mientras estas verificaciones sigan pendientes.
+Sprint verificado y cerrado como `sprint-08-v0.8.0`.

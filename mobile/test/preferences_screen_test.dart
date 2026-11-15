@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -82,7 +84,100 @@ class FakeRatings implements RatingRepository {
   }
 }
 
+class DelayedFavorites implements FavoriteRepository {
+  final gate = Completer<void>();
+  bool disposed = false;
+
+  @override
+  Future<void> add(String trackId, {CancelToken? cancelToken}) async {
+    await gate.future;
+  }
+
+  @override
+  Future<List<FavoriteItem>> list({CancelToken? cancelToken}) async => const [];
+
+  @override
+  Future<void> remove(String trackId, {CancelToken? cancelToken}) async {}
+}
+
+class DelayedRatings implements RatingRepository {
+  final gate = Completer<void>();
+  bool disposed = false;
+
+  @override
+  Future<TrackInteractions> interactions(
+    String trackId, {
+    CancelToken? cancelToken,
+  }) async => const TrackInteractions(
+    isFavorite: false,
+    myRating: null,
+    ratingAverage: null,
+    ratingCount: 0,
+  );
+
+  @override
+  Future<TrackInteractions> rate(
+    String trackId,
+    int score, {
+    required bool isFavorite,
+    CancelToken? cancelToken,
+  }) async {
+    await gate.future;
+    return TrackInteractions(
+      isFavorite: isFavorite,
+      myRating: score,
+      ratingAverage: score.toDouble(),
+      ratingCount: 1,
+    );
+  }
+}
+
 void main() {
+  test('mantiene clientes vivos durante mutaciones asíncronas', () async {
+    final favorites = DelayedFavorites();
+    final ratings = DelayedRatings();
+    final container = ProviderContainer(
+      overrides: [
+        favoriteRepositoryProvider.overrideWith((ref) {
+          ref.onDispose(() => favorites.disposed = true);
+          return favorites;
+        }),
+        ratingRepositoryProvider.overrideWith((ref) {
+          ref.onDispose(() => ratings.disposed = true);
+          return ratings;
+        }),
+      ],
+    );
+    final favoriteSubscription = container.listen(
+      favoriteActionsProvider,
+      (previous, next) {},
+      fireImmediately: true,
+    );
+    final ratingSubscription = container.listen(
+      ratingActionsProvider,
+      (previous, next) {},
+      fireImmediately: true,
+    );
+    final favoriteFuture = container
+        .read(favoriteActionsProvider.notifier)
+        .setFavorite(trackId, true);
+    final ratingFuture = container
+        .read(ratingActionsProvider.notifier)
+        .rate(trackId, 4, false);
+    await Future<void>.delayed(Duration.zero);
+    expect(favorites.disposed, isFalse);
+    expect(ratings.disposed, isFalse);
+    favorites.gate.complete();
+    ratings.gate.complete();
+    expect(await favoriteFuture, isTrue);
+    expect(await ratingFuture, isTrue);
+    favoriteSubscription.close();
+    ratingSubscription.close();
+    container.dispose();
+    expect(favorites.disposed, isTrue);
+    expect(ratings.disposed, isTrue);
+  });
+
   testWidgets('lista, abre y retira favoritos sin confirmación', (
     tester,
   ) async {

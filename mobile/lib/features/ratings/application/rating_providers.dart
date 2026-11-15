@@ -34,16 +34,23 @@ final ratingActionsProvider =
     );
 
 class RatingActions extends Notifier<AsyncValue<void>> {
+  late RatingRepository _repository;
+
   @override
-  AsyncValue<void> build() => const AsyncData(null);
+  AsyncValue<void> build() {
+    _repository = ref.watch(ratingRepositoryProvider);
+    return const AsyncData(null);
+  }
 
   Future<bool> rate(String trackId, int score, bool isFavorite) async {
     if (state.isLoading) return false;
     state = const AsyncLoading();
     try {
-      final updated = await ref
-          .read(ratingRepositoryProvider)
-          .rate(trackId, score, isFavorite: isFavorite);
+      final updated = await _repository.rate(
+        trackId,
+        score,
+        isFavorite: isFavorite,
+      );
       if (!ref.mounted) return false;
       ref.invalidate(trackInteractionsProvider(trackId));
       state = const AsyncData(null);
