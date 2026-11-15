@@ -61,8 +61,8 @@ await auth.revokeRefreshTokens(uid);
 - Backend con PostgreSQL real. Comprobar propiedad, paginación estable, reportes
   duplicados, resolución concurrente, baja con reportes pendientes y RLS.
 - Android físico ARM64 contra HTTPS. Dos cuentas comunes prueban publicación,
-  edición, reporte, eliminación y persistencia al reabrir la app. La cuenta
-  moderadora comprueba ocultar y desestimar. Tras revocar el permiso, verificar
+  edición, reporte, eliminación y persistencia al reabrir la app. Una de las
+  cuentas recibe temporalmente el permiso y comprueba ocultar y desestimar. Tras revocar el permiso, verificar
   que una sesión renovada pierde el acceso. Presupuesto del APK de 24 MB.
 - Confirmar CI, despliegue en Render y migración de Supabase antes de publicar
   `sprint-09-v0.9.0`.
@@ -75,3 +75,38 @@ await auth.revokeRefreshTokens(uid);
   y generación Prisma, lint, tipos, formato y build.
 - Mobile: 62 pruebas Flutter y 5 de herramientas, con formato y análisis
   estático correctos.
+- APK release ARM64 0.9.0 (`versionCode 2009`) compilado contra el backend
+  HTTPS. Tamaño de 22.517.338 bytes, dentro del presupuesto de 24 MB.
+
+## Evidencia remota — 14 de noviembre de 2026
+
+- GitHub Actions terminó correctamente en el commit `536c719`, incluido
+  PostgreSQL 17 y el build Android.
+- Render desplegó el mismo commit y alcanzó el estado `live`. Supabase reportó
+  cinco migraciones aplicadas y el esquema al día.
+- La ruta HTTPS `/api/v1/health` devolvió `200`. Las rutas de comentarios por
+  canción y la cola de moderación devolvieron `401 UNAUTHENTICATED` sin token.
+
+## Aceptación física — 14 de noviembre de 2026
+
+- Se instaló el APK ARM64 release 0.9.0 en el Android conectado, contra el backend
+  HTTPS y sin redirecciones de puertos.
+- La cuenta A publicó dos comentarios sobre «One More Time (Radio Edit)», editó
+  uno y comprobó su persistencia al forzar el cierre y abrir nuevamente la app.
+- La cuenta B consultó los comentarios de A y mostró únicamente la acción
+  Reportar sobre ellos. Registró un reporte por spam y otro por acoso.
+- Por disponibilidad de cuentas propias, se utilizaron dos cuentas Google y se
+  concedió temporalmente el rol de moderador a B. La cuenta adicional pertenece
+  a un amigo del usuario. Las pruebas PostgreSQL cubren moderadores separados de
+  los autores y denunciantes.
+- B renovó su sesión y abrió la cola desde el perfil. Desestimó el reporte de
+  spam y ocultó el comentario reportado por acoso, previa confirmación. Supabase
+  conservó ambos reportes con moderador y fecha de resolución.
+- Se retiró el claim temporal y se revocaron las sesiones de B. El intento de
+  volver a abrir la cola recibió HTTP 401 y cerró la sesión. Después de entrar
+  nuevamente, el perfil perdió la opción de moderación.
+- B consultó la canción y encontró solo el comentario visible. Al volver a A,
+  se eliminó ese comentario desde Android y el listado quedó vacío. Los registros
+  de prueba conservan su estado lógico y los reportes resueltos como evidencia.
+
+Sprint verificado y cerrado como `sprint-09-v0.9.0`.
