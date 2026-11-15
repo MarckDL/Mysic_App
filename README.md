@@ -8,6 +8,12 @@ Permite explorar un catálogo musical, gestionar playlists, guardar favoritos, c
 
 La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 
+> Sprint 10: historial verificado con 183 pruebas backend, 75 Flutter y aceptación
+> asistida en teléfono y emulador propio, incluyendo privacidad, persistencia,
+> segundo plano y recuperación de una escucha pendiente sin red.
+> Backend desplegado en Render y datos en Supabase. Versión de cierre:
+> `sprint-10-v0.10.1`. Ver [evidencia y cierre](docs/16-plan-sprint-10.md).
+>
 > Estado: Sprints 1 a 9 cerrados y verificados. Sprint 9 incorporó comentarios,
 > reportes y [moderación en Android](docs/15-plan-sprint-09.md), con aceptación
 > física en dos cuentas y permiso temporal de moderador retirado al finalizar.

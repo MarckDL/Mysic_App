@@ -498,7 +498,7 @@ Aceptación:
 - No se duplican eventos por reintentos.
 - La información se recupera desde otro dispositivo.
 
-Etiqueta: `sprint-10-v0.10.0`
+Versión verificada: 0.10.1. Etiqueta de cierre: `sprint-10-v0.10.1`.
 
 ## 15. Sprint 11 — Estadísticas
 
@@ -651,6 +651,9 @@ El Sprint no se considera cerrado hasta completar la validación y el procedimie
 
 ## Seguimiento Sprint 10
 
-Implementación desplegada en Render, migración aplicada en Supabase y CI correcto
-para `a3f753a`. Ver [plan y pendientes](16-plan-sprint-10.md).
-Sprint todavía abierto, pendiente de aceptación física y etiqueta de cierre.
+Historial validado con 183 pruebas backend, 75 Flutter, CI correcto del parche
+`56718a5` y aceptación asistida en teléfono y emulador propio contra Render y
+Supabase. Incluye persistencia, aislamiento, segundo plano, seek y recuperación
+de escucha pendiente tras cierre sin red. Ver [evidencia](16-plan-sprint-10.md).
+Publicación formal mediante `tool/close-sprint-10.sh`, etiqueta
+`sprint-10-v0.10.1`; comprobar el push antes de declarar cerrado el versionado.

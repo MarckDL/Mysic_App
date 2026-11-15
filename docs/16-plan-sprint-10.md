@@ -1,7 +1,9 @@
 # Sprint 10 — Historial de escucha
 
-Estado: implementación desplegada en Render y migración aplicada en Supabase;
-CI correcto. Pendiente de aceptación física y cierre. US-010, RF-047 a RF-050.
+Estado: implementación y aceptación asistida verificadas; backend desplegado en
+Render, migración aplicada en Supabase y CI correcto. Publicación formal de cierre
+preparada para `sprint-10-v0.10.1`; verificar commit/push/etiqueta con el script de
+cierre antes de declarar completado el versionado. US-010, RF-047 a RF-050.
 
 ## Reglas
 
@@ -357,3 +359,86 @@ Logs revisados de `/tmp/mysic-sprint10-cloud-apk.0LkfYH/`:
   automatizada de reintentos y persistencia del tracker.
 - Pendientes: segundo dispositivo, comprobación física de cola sin red y
   publicación del parche 0.10.1 (commit/push y CI). No se cierra el sprint.
+
+### Publicación del parche y estado de cierre
+
+- Parche publicado en `main` como
+  `56718a56c9ffe175d4ad1d10216c023d2b3d38ec`, mensaje
+  `fix(playback): preserve position and listening session on retry`.
+- CI [Quality](https://github.com/MarckDL/Mysic_App/actions/runs/43670846697)
+  todavía en curso al comprobar el cierre; no se declara aprobado aún.
+- Render continúa sirviendo el backend compatible `a3f753a`; este parche cambia
+  reproducción móvil, pruebas, herramientas y documentación, sin cambios backend.
+- El usuario no dispone de otro teléfono y no se le solicita iniciar su cuenta
+  Google en un dispositivo ajeno. La aceptación de recuperación desde otro
+  dispositivo sigue pendiente; un emulador propio puede servir como segundo
+  cliente independiente si se configura con la misma cuenta.
+- Recuperación física de una escucha elegible persistida sin red: inconclusa por
+  el búfer; cubierta en automatización, sin sustituir la evidencia física.
+- Sin commit de cierre ni etiqueta remota `sprint-10-*`. Sprint aún abierto:
+  los criterios pendientes no se marcan cumplidos por falta de dispositivo.
+
+### Preparación del segundo cliente en emulador propio
+
+El usuario propone usar su emulador Android Studio con la misma cuenta Google.
+Se encontraron `Pixel_7` y `Medium_Phone_API_37.0`, ambos x86_64 con imagen Google
+Play. El instalador HTTPS acepta ahora `emulator` como argumento: selecciona un
+único emulador conectado, comprueba arranque y ABI, genera el release x86_64 y lo
+instala solo en ese serial. Para el teléfono ARM64 mantiene el APK correspondiente.
+Comando desde el host: `bash tool/install-sprint-10-cloud.sh emulator`.
+No utiliza datos ni copias locales del teléfono ni `adb reverse`: se comprobará
+la recuperación desde Supabase mediante login independiente en el emulador.
+Instalación y aceptación de este segundo cliente todavía pendientes.
+
+CI del parche `56718a5` volvió a comprobarse: workflow `43670846697` completado
+con conclusión `success`. El instalador adaptado se verificó con `bash -n`;
+su ejecución requiere la terminal del host con acceso a ADB.
+
+### Segundo cliente — aceptación en emulador
+
+Después de instalar en el emulador e iniciar sesión con la misma cuenta siguiendo
+la secuencia propuesta, el usuario confirmó que funciona y que su historial se
+sigue guardando. Se registra como aceptación asistida de recuperación del
+historial desde un segundo cliente independiente contra Render/Supabase, sin
+copiar datos del teléfono. No se afirma una inspección directa por ADB ni de las
+filas de producción. El criterio de segundo dispositivo queda cubierto con el
+teléfono y el emulador propio.
+
+Logs del instalador en `/tmp/mysic-sprint10-cloud-apk.rfgagO/`: análisis sin
+incidencias, 75 pruebas Flutter correctas y release x86_64 generado de 24074490
+bytes, SHA-256 `db3dfde644f7eb9a033d19f8c86f20289fe0771e25f99cd50f747ea9dc0c43e4`.
+
+La comprobación pendiente de cola sin red se ajusta al búfer: escuchar 25 segundos
+online, pausar, desconectar Wi-Fi y datos, continuar al menos ocho segundos
+audibles offline, pausar y esperar cinco segundos de persistencia. Forzar cierre,
+reconectar y reabrir; verificar una sola entrada de esa sesión. El tiempo audible
+offline es necesario para superar el umbral de 30 segundos mientras el backend
+no está accesible; si no se logra, el resultado sigue inconcluso.
+
+## Aceptación final y cierre preparado
+
+El usuario confirmó «ya cargó, sí, solo una entrada» después de la prueba ajustada
+de 25 segundos online, pausa, corte de Wi-Fi/datos, ocho segundos audibles offline,
+pausa y espera de persistencia, cierre forzado y reapertura con internet. Se
+registra como aceptación asistida de recuperación de una escucha elegible
+pendiente persistida sin duplicado. Como el resto de pruebas físicas, es evidencia
+comunicada por el operador, sin inspección directa por ADB ni extracción de tokens.
+
+Los tres criterios de US-010 quedan cubiertos: historial privado persistente,
+reintentos sin duplicados y recuperación desde un segundo cliente (teléfono y
+emulador propio). Backend: 183 pruebas con PostgreSQL real; Flutter: 75 casos
+convencionales y cinco pruebas Python. CI correcto para el código de aplicación
+`56718a56c9ffe175d4ad1d10216c023d2b3d38ec`. El instalador de emulador y su APK
+se comprobaron posteriormente en el host y por aceptación asistida.
+
+El cierre usa `sprint-10-v0.10.1`, en lugar de la etiqueta inicial prevista
+`sprint-10-v0.10.0`, porque incorpora la corrección de recuperación instalada como
+versión 0.10.1. No se crea ni se reescribe ninguna etiqueta anterior.
+
+Ejecutar desde el host: `bash tool/close-sprint-10.sh`. El script verifica rama,
+remoto y que el código de aplicación coincide con el commit probado; prepara solo
+README, seguimiento y herramientas de instalación/cierre, crea el commit
+`chore(sprint-10): complete listening history`, hace push normal y crea/publica una
+etiqueta anotada. Comprueba que el HEAD y la etiqueta remotos apuntan al commit
+de cierre. No desinstala apps ni modifica datos de Supabase. La ejecución y
+verificación remota final están pendientes al preparar este documento.
