@@ -73,9 +73,11 @@ La validación física anterior cubre el rediseño inicial. Después se rediseñ
 pantalla de acceso, se limitó el saludo a dos líneas y se añadió un editor de
 apodo en Cuenta. El APK ARM64 se recompiló, pasaron 79 pruebas Flutter y 186
 pruebas del backend, y las siete migraciones se aplicaron en una base
-PostgreSQL de prueba. El despliegue debe aplicar la migración de Prisma antes de
-servir el nuevo backend. Hay que probar el guardado y borrado del apodo en un
-Android físico con ese backend antes de etiquetar la versión.
+PostgreSQL de prueba. GitHub Actions pasó para `b6ab0a3`. El backend se desplegó en Render y respondió
+correctamente en salud y en la ruta autenticada de perfil. Se instaló el APK
+actualizado en el teléfono y se comprobó que el apodo se guarda, aparece en
+Cuenta e Inicio, persiste tras reabrir Mysic y se puede quitar para recuperar
+el nombre de Google. Se retiró el apodo de prueba.
 
 El Sprint 12 incorporará a Inicio rankings personales de canciones y artistas
 y tendencias agregadas de Mysic, según el [roadmap](04-sprints-roadmap.md).

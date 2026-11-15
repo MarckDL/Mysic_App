@@ -529,7 +529,7 @@ volver a mi búsqueda o al reproductor sin perder contexto.
   el nombre de Google.
 - Dos cuentas en Android verifican el flujo y los controles permanecen utilizables con texto ampliado.
 
-Etiqueta prevista: `sprint-11-v0.11.0`.
+Versión verificada: `0.11.0`. Etiqueta de cierre: `sprint-11-v0.11.0`.
 
 Plan y seguimiento: [Sprint 11](17-plan-sprint-11.md).
 
