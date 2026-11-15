@@ -5,9 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mysic/core/network/authenticated_api_client.dart';
 import 'package:mysic/features/authentication/domain/auth_repository.dart';
 import 'package:mysic/features/history/application/listening_tracker.dart';
+import 'package:mysic/features/playback/application/track_playback_controller.dart';
 import 'package:mysic/features/playback/domain/track_audio_engine.dart';
 import 'package:mysic/features/search/domain/catalog_track.dart';
 import 'support/fake_auth_repository.dart';
+import 'support/fake_track_audio_engine.dart';
 
 class TestClock implements Stopwatch {
   int ms = 0;
@@ -112,6 +114,42 @@ void main() {
   tearDown(
     () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null),
+  );
+  test(
+    'recuperar audio conserva UUID y excluye el tiempo sin reproducción',
+    () async {
+      final tracker = create();
+      final engine = FakeTrackAudioEngine();
+      final controller = TrackPlaybackController(
+        auth,
+        engine,
+        'a',
+        history: tracker,
+      );
+      try {
+        await controller.playTrack(track);
+        clock.advance(30000);
+        tracker.checkpoint();
+        await drain();
+        final path = sent.first['path'];
+        engine.positionEvents.add(const Duration(seconds: 30));
+        engine.events.add(TrackAudioPhase.error);
+        clock.advance(60000);
+        await controller.resume();
+        clock.advance(15000);
+        await controller.pause();
+        await drain();
+        // A checkpoint updated during an in-flight PUT is sent on the next tick.
+        tracker.checkpoint();
+        await drain();
+        expect(sent.map((e) => e['path']).toSet(), {path});
+        expect(sent.last['listenedMs'], 45000);
+        expect(engine.seeks, [const Duration(seconds: 30)]);
+      } finally {
+        controller.dispose();
+        await drain();
+      }
+    },
   );
   test(
     'counts playing time, excludes pauses and preserves session identity',

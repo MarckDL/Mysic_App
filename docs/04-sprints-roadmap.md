@@ -651,5 +651,6 @@ El Sprint no se considera cerrado hasta completar la validación y el procedimie
 
 ## Seguimiento Sprint 10
 
-Implementación local en validación. Ver [plan y pendientes](16-plan-sprint-10.md).
-Sprint todavía abierto, sin despliegue ni etiqueta de cierre.
+Implementación desplegada en Render, migración aplicada en Supabase y CI correcto
+para `a3f753a`. Ver [plan y pendientes](16-plan-sprint-10.md).
+Sprint todavía abierto, pendiente de aceptación física y etiqueta de cierre.

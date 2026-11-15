@@ -1,6 +1,7 @@
 # Sprint 10 — Historial de escucha
 
-Estado: implementación local; pendiente de aceptación y cierre. US-010, RF-047 a RF-050.
+Estado: implementación desplegada en Render y migración aplicada en Supabase;
+CI correcto. Pendiente de aceptación física y cierre. US-010, RF-047 a RF-050.
 
 ## Reglas
 
@@ -248,3 +249,111 @@ ni las operaciones autenticadas. Los scripts se comprobaron sintácticamente;
 publicación, despliegue y nueva instalación siguen pendientes. El conector GitHub
 de esta sesión no tiene permiso de escritura en el repositorio; el push debe
 realizarse desde la terminal del host con su acceso SSH configurado.
+
+## Despliegue verificado — 14 de noviembre de 2026
+
+- Commit publicado en `main`: `a3f753ada30695bf35e63ae4497247e818453810`.
+- GitHub Actions [Quality #93](https://github.com/MarckDL/Mysic_App/actions/runs/43666264843):
+  jobs backend y mobile completados con `success`, incluidos pruebas y APK.
+- Workspace Render confirmado por el usuario: Marck's workspace.
+- Servicio `mysic-api-k03u`, deploy `dep-dbshbctckfvc73dldokg`, commit exacto
+  `a3f753a`: estado `live` confirmado a las 21:16:51 de Lima.
+- Logs de build: `20261115020000_create_history` aplicada correctamente sobre
+  Supabase a las 21:15:49, seis migraciones encontradas, build exitoso.
+- Logs de runtime: `server_started` en el puerto 10000 y servicio live, con
+  health check configurado en `/api/v1/health`.
+- URL: `https://mysic-api-k03u.onrender.com`.
+
+No se ha completado todavía una solicitud autenticada de historial ni instalado
+el APK HTTPS nuevo en el teléfono. El siguiente paso es ejecutar desde el host
+`bash tool/install-sprint-10-cloud.sh`, comprobar instalación y continuar con
+aceptación física. El script comprobará también la respuesta 401 sin token.
+La consulta pública directa mediante la herramienta web de esta sesión no pudo
+acceder a los endpoints y no se cuenta como verificación HTTP independiente.
+No se publicó etiqueta de cierre.
+
+## Aceptación física asistida — resultados comunicados por el usuario
+
+- El usuario confirmó que la actualización quedó instalada en su teléfono.
+- Umbral de escucha: una canción de Ado reproducida durante 10 segundos no
+  apareció en el historial; otra reproducida durante 40 segundos sí apareció,
+  una sola vez, según la confirmación del usuario a la secuencia propuesta.
+  Títulos recordados de forma aproximada: «Eien no Akuruhi» y «Tsumi to Batsu»;
+  no se verificaron los títulos ni su orden exacto.
+- Estos resultados son observaciones del operador en el teléfono; no se
+  observaron directamente por ADB ni se inspeccionaron filas autenticadas.
+- Nueva selección: el usuario reprodujo una canción identificada como Luma,
+  después dos de Ado y volvió a seleccionar Luma; apareció una nueva entrada
+  posterior a Ado, compatible con una nueva sesión explícita.
+- Pausa/reanudación: siguiendo la secuencia de pausar, esperar 10 segundos,
+  continuar desde el reproductor 15 segundos y refrescar, el usuario confirmó
+  que no se agrega otra entrada. No se inspeccionó el acumulado de milisegundos.
+- Persistencia: después de la secuencia propuesta de pausar, forzar detención
+  desde Android y reabrir con la misma cuenta, el usuario confirmó que todo sigue
+  bien: canciones conservadas en el mismo orden y sin entradas nuevas.
+- Segundo plano: el usuario confirmó reproducción continua y una sola entrada
+  nueva tras seleccionar otra canción de más de un minuto, permanecer 45 segundos
+  en la pantalla de inicio de Android, regresar, pausar y refrescar el historial.
+- Seek: el usuario confirmó que una canción de más de dos minutos, escuchada
+  cinco segundos y adelantada a unos diez segundos del final, no apareció en el
+  historial al terminar. El salto no se convirtió en escucha válida.
+- Aislamiento y cambio de cuenta: siguiendo la secuencia de cerrar sesión,
+  entrar con otra cuenta Google, consultar historial y volver a la original,
+  el usuario confirmó que la segunda no muestra escuchas de la primera y que
+  el historial original se mantiene intacto al regresar.
+- Continúan pendientes recuperación de red con cola persistida y otro dispositivo.
+- Intento sin red: el usuario reportó que el audio se detiene antes de completar
+  los 35 segundos adicionales y que el indicador vuelve al segundo 10, posición
+  donde pausó para desactivar datos. La prueba de cola persistida queda
+  inconclusa, no aprobada ni fallida. El motor configura un búfer máximo de 15
+  segundos; el procedimiento solicitaba más reproducción offline de la que
+  garantiza ese búfer. La vuelta del indicador al segundo 10 no se diagnosticó
+  con logs y queda como observación pendiente.
+- Recuperación posterior: al reactivar internet y pulsar continuar, el usuario
+  confirmó que la canción reinició desde el principio y luego se agregó al
+  historial. Esto verifica que volvió a reproducir/registrar, pero revela una
+  pérdida de posición y no acredita conservar la sesión ni recuperar la cola.
+
+### Corrección de recuperación de audio — pendiente de nueva aceptación
+
+Se identificó en `TrackPlaybackController.resume` que los estados de error se
+recuperaban con `jump`, que reiniciaba posición y UUID. La recarga por error ahora
+conserva la sesión de historial y hace seek a la última posición conservada antes
+de reproducir. Los eventos nativos posteriores a un error no sobrescriben esa
+posición. Pausar durante buffering de una fuente ya cargada conserva el motor,
+mientras cancelar una carga inicial sigue impidiendo autoplay tardío.
+
+Cuatro regresiones nuevas cubren posición tras error, pausa durante buffering,
+fallo de una recuperación y cambio de pista durante recuperación. Una prueba
+integrada de controlador y tracker verifica mismo UUID y 45 segundos acumulados
+tras 30 segundos de reproducción, 60 sin reproducir y otros 15 reproduciendo.
+
+Comprobaciones locales: análisis Flutter sin incidencias, formato correcto,
+14 casos de cola y nueve de tracker correctos en el motor Flutter directo con
+harness temporal (no equivalen al runner convencional). Cinco casos son nuevos.
+La suite convencional completa queda pendiente del host: el script de
+instalación HTTPS ahora ejecuta formato, análisis y tests antes de compilar.
+
+Versión preparada `0.10.1+11`, APK release ARM64 código 2011. La instalación y
+aceptación de esta corrección siguen pendientes, al igual que su commit/push.
+El backend desplegado permanece compatible. El script de publicación incluye
+las pruebas y el fake de motor nuevos; admite un mensaje de commit como argumento.
+
+### Revalidación 0.10.1 en el host y teléfono
+
+Logs revisados de `/tmp/mysic-sprint10-cloud-apk.0LkfYH/`:
+
+- Suite Flutter convencional: 75 casos correctos, incluidos los cinco de
+  regresión de recuperación nuevos. Análisis Flutter sin incidencias.
+- Release ARM64 compilado correctamente: 22517494 bytes, SHA-256
+  `8f1f8ac57866991749d3d3b1abb560a965783c96ba72f5f8dc3b2bc3673c883e`.
+- Tras probar la actualización, el usuario confirmó que continuar después de
+  una desconexión conserva el avance y que la escucha se registra al segundo
+  30. Se valida recuperación de reproducción según su observación, sin una
+  inspección física directa de UUID o milisegundos en la base.
+- No pudo mantener los 35 segundos adicionales de audio offline por agotamiento
+  del búfer; la recuperación de una escucha nueva elegible y persistida durante
+  esa desconexión sigue inconclusa en dispositivo, aunque existe cobertura
+  automatizada de reintentos y persistencia del tracker.
+- Pendientes: segundo dispositivo, comprobación física de cola sin red y
+  publicación del parche 0.10.1 (commit/push y CI). No se cierra el sprint.

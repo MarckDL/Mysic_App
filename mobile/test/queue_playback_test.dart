@@ -40,6 +40,74 @@ void main() {
     expect(engine.warmUps, 1);
   });
   test(
+    'reintentar un error conserva posición pese a eventos nativos tardíos',
+    () async {
+      await controller.playTrack(a);
+      engine.positionEvents.add(const Duration(seconds: 42));
+      engine.events.add(TrackAudioPhase.error);
+      engine.positionEvents.add(Duration.zero);
+      engine.events.add(TrackAudioPhase.paused);
+      expect(controller.phase, TrackAudioPhase.error);
+      expect(controller.position, const Duration(seconds: 42));
+      await controller.resume();
+      expect(controller.phase, TrackAudioPhase.playing);
+      expect(engine.seeks, [const Duration(seconds: 42)]);
+      expect(controller.position, const Duration(seconds: 42));
+    },
+  );
+  test(
+    'pausar durante buffering conserva la fuente y permite continuar',
+    () async {
+      await controller.playTrack(a);
+      engine.positionEvents.add(const Duration(seconds: 10));
+      engine.events.add(TrackAudioPhase.loading);
+      final stops = engine.stops;
+      await controller.pause();
+      expect(controller.phase, TrackAudioPhase.paused);
+      expect(engine.stops, stops);
+      await controller.resume();
+      expect(controller.phase, TrackAudioPhase.playing);
+      expect(controller.position, const Duration(seconds: 10));
+      expect(engine.stops, stops);
+      expect(engine.seeks, isEmpty);
+    },
+  );
+  test(
+    'otro fallo durante recuperación no pierde la posición guardada',
+    () async {
+      await controller.playTrack(a);
+      engine.positionEvents.add(const Duration(seconds: 42));
+      engine.events.add(TrackAudioPhase.error);
+      engine.fail = true;
+      await controller.resume();
+      expect(controller.phase, TrackAudioPhase.error);
+      expect(controller.position, const Duration(seconds: 42));
+      engine.fail = false;
+      await controller.resume();
+      expect(engine.seeks, [const Duration(seconds: 42)]);
+      expect(controller.phase, TrackAudioPhase.playing);
+    },
+  );
+  test(
+    'seleccionar otra pista cancela la recuperación sin seek tardío',
+    () async {
+      await controller.playTrack(a);
+      engine.positionEvents.add(const Duration(seconds: 42));
+      engine.events.add(TrackAudioPhase.error);
+      final pending = Completer<void>();
+      engine.pendingLoad = pending;
+      final retry = controller.resume();
+      await Future<void>.delayed(Duration.zero);
+      engine.pendingLoad = null;
+      await controller.playTrack(b);
+      pending.complete();
+      await retry;
+      expect(controller.current!.id, b.id);
+      expect(engine.seeks, isEmpty);
+      expect(engine.plays, 2);
+    },
+  );
+  test(
     'cola conserva orden y metadatos; anterior/siguiente reproducen ID exacto',
     () async {
       await controller.playQueue([a, b, c], initialIndex: 1);

@@ -12,6 +12,9 @@ done
 [[ "$($adb_bin -s "$device_serial" get-state)" == device ]]
 docker info >/dev/null
 [[ -f "$project_dir/mobile/config/firebase.android.json" ]]
+version_code="$(awk '/^version:/ {split($2, v, "+"); print v[2]}' "$project_dir/mobile/pubspec.yaml")"
+[[ "$version_code" =~ ^[0-9]+$ ]]
+debug_version_code=$((2000 + version_code))
 if "$adb_bin" -s "$device_serial" reverse --list | awk '{print $2}' | grep -qx "tcp:$api_port"; then
   echo "Ya existe un reverse en tcp:$api_port; no se reemplazó." >&2
   exit 1
@@ -83,7 +86,7 @@ done
 reverse_added=true
 (
   cd "$project_dir/mobile"
-  flutter build apk --debug --no-pub --build-number=2010 \
+  flutter build apk --debug --no-pub --build-number="$debug_version_code" \
     --dart-define-from-file=config/firebase.android.json \
     --dart-define=API_BASE_URL="http://127.0.0.1:$api_port"
 ) 2>&1 | tee "$report_dir/apk.log"

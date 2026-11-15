@@ -15,6 +15,8 @@ class TrackPlaybackController extends ChangeNotifier {
         return;
       }
       if (!_eventsEnabled) return;
+      // Keep the last position when a failed native source emits reset events.
+      if (value == TrackAudioPhase.error) _eventsEnabled = false;
       _set(value);
       if (value == TrackAudioPhase.completed && hasNext) {
         final generation = _generation;
@@ -137,16 +139,20 @@ class TrackPlaybackController extends ChangeNotifier {
     await jump(initialIndex);
   }
 
-  Future<void> jump(int target) async {
+  Future<void> jump(int target) => _loadTrack(target);
+
+  Future<void> _loadTrack(int target, {Duration? resumeAt}) async {
     if (!_active || target < 0 || target >= _queue.length) return;
-    history?.begin(_queue[target]);
+    // Only an explicit selection starts a new listening session. Retrying a
+    // failed source keeps both its accumulated listening time and position.
+    if (resumeAt == null) history?.begin(_queue[target]);
     _engine.markPlaybackRequested();
     final generation = ++_generation;
     _eventsEnabled = false;
     index = target;
     sourceId = current!.id.substring(8);
     final requestedId = sourceId!;
-    position = Duration.zero;
+    position = resumeAt ?? Duration.zero;
     duration = current!.durationSeconds == null
         ? null
         : Duration(seconds: current!.durationSeconds!);
@@ -169,12 +175,21 @@ class TrackPlaybackController extends ChangeNotifier {
       stage = 'audio-load';
       await _engine.load(requestedId, token);
       if (!_valid(generation)) return;
-      _eventsEnabled = true;
       final actualDuration = _engine.duration;
       if (actualDuration != null && actualDuration > Duration.zero) {
         history?.duration(actualDuration);
         duration = actualDuration;
       }
+      if (resumeAt != null && resumeAt > Duration.zero) {
+        final limit = duration;
+        final destination = limit != null && resumeAt > limit
+            ? limit
+            : resumeAt;
+        await _engine.seek(destination);
+        if (!_valid(generation)) return;
+        position = destination;
+      }
+      _eventsEnabled = true;
       await _engine.play();
       if (_valid(generation) && hasNext) {
         final nextId = _queue[index + 1].id.substring(8);
@@ -212,17 +227,23 @@ class TrackPlaybackController extends ChangeNotifier {
 
   Future<void> pause() async {
     if (!_active) return;
-    if (phase == TrackAudioPhase.loading) {
+    if (phase == TrackAudioPhase.error) return;
+    if (phase == TrackAudioPhase.loading && !_eventsEnabled) {
       await stop();
       return;
     }
+    final generation = _generation;
     await _engine.pause();
-    if (_active) _set(TrackAudioPhase.paused);
+    if (_valid(generation) && phase != TrackAudioPhase.error) {
+      _set(TrackAudioPhase.paused);
+    }
   }
 
   Future<void> resume() async {
     if (!_active) return;
-    if (phase == TrackAudioPhase.paused) {
+    if (phase == TrackAudioPhase.error && current != null) {
+      await _loadTrack(index, resumeAt: position);
+    } else if (phase == TrackAudioPhase.paused) {
       await _engine.play();
     } else if (current != null &&
         phase != TrackAudioPhase.loading &&

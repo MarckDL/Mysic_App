@@ -17,6 +17,10 @@ if [[ "$status" != 401 ]]; then
   exit 1
 fi
 cd "$project_dir/mobile"
+flutter pub get --enforce-lockfile
+dart format --output=none --set-exit-if-changed lib test
+flutter analyze 2>&1 | tee "$report_dir/analyze.log"
+flutter test --no-enable-impeller 2>&1 | tee "$report_dir/tests.log"
 flutter build apk --release --split-per-abi --target-platform android-arm64 \
   --dart-define-from-file=config/firebase.android.json \
   --dart-define=API_BASE_URL="$api_base" 2>&1 | tee "$report_dir/build.log"

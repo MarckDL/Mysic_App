@@ -3,6 +3,7 @@ import 'package:mysic/features/playback/domain/track_audio_engine.dart';
 
 class FakeTrackAudioEngine implements TrackAudioEngine {
   final events = StreamController<TrackAudioPhase>.broadcast(sync: true);
+  final positionEvents = StreamController<Duration>.broadcast(sync: true);
   Completer<void>? pendingLoad;
   bool fail = false;
   String? sourceId;
@@ -19,7 +20,7 @@ class FakeTrackAudioEngine implements TrackAudioEngine {
   @override
   Stream<TrackAudioPhase> get states => events.stream;
   @override
-  Stream<Duration> get positions => const Stream.empty();
+  Stream<Duration> get positions => positionEvents.stream;
   @override
   Stream<Duration?> get durations => const Stream.empty();
   @override
@@ -73,5 +74,6 @@ class FakeTrackAudioEngine implements TrackAudioEngine {
   Future<void> dispose() async {
     disposals++;
     await events.close();
+    await positionEvents.close();
   }
 }

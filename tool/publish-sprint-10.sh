@@ -40,6 +40,8 @@ files=(
   mobile/lib/features/history/application/listening_tracker.dart
   mobile/lib/features/history/presentation/history_screen.dart
   mobile/test/listening_tracker_test.dart
+  mobile/test/queue_playback_test.dart
+  mobile/test/support/fake_track_audio_engine.dart
   tool/device-sprint-10.sh
   tool/verify-sprint-10.sh
   tool/publish-sprint-10.sh
@@ -49,7 +51,7 @@ git diff --check
 git add -- "${files[@]}"
 git diff --cached --stat
 if ! git diff --cached --quiet; then
-  git commit -m "feat(history): add private listening history and Android tracking"
+  git commit -m "${1:-feat(history): add private listening history and Android tracking}"
 fi
 git push origin main
 git log -1 --format='Commit publicado: %H'
