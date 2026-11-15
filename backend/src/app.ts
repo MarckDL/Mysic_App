@@ -39,6 +39,11 @@ import {
   createRatingRouter,
 } from './modules/ratings/presentation/rating.routes.js';
 
+import { PrismaCommentRepository } from './infrastructure/database/prisma-comment-repository.js';
+import { CommentService } from './modules/comments/application/comment-service.js';
+import type { CommentRepository } from './modules/comments/domain/comment.js';
+import { createCommentRouter } from './modules/comments/presentation/comment.routes.js';
+
 export function createApp(
   options: {
     tokenVerifier?: TokenVerifier;
@@ -54,6 +59,7 @@ export function createApp(
     favoriteService?: FavoriteService;
     ratingRepository?: RatingRepository;
     ratingService?: RatingService;
+    commentRepository?: CommentRepository;
   } = {},
 ) {
   const app = express();
@@ -122,6 +128,16 @@ export function createApp(
     );
   app.use('/api/v1/favorites', createFavoriteRouter(verifier, favorites));
   app.use('/api/v1/ratings', createRatingRouter(verifier, ratings));
+  app.use(
+    '/api/v1',
+    createCommentRouter(
+      verifier,
+      new CommentService(
+        options.commentRepository ?? new PrismaCommentRepository(),
+        catalog,
+      ),
+    ),
+  );
   app.use(
     '/api/v1/tracks',
     createInteractionRouter(verifier, favorites, ratings),

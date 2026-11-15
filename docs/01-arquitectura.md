@@ -380,6 +380,10 @@ Cada feature debe separar, cuando sea útil:
 - Protección frente a enumeración de usuarios.
 - Eliminación de cuenta y datos personales.
 
+Los endpoints de moderación del Sprint 09 verifican el claim booleano
+`moderator` en el token de Firebase. La capacidad en el perfil solo controla
+la navegación en Android. Express vuelve a autorizar cada operación.
+
 ## 12. Estrategia de despliegue
 
 ### Desarrollo

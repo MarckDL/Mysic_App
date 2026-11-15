@@ -8,7 +8,9 @@ Permite explorar un catálogo musical, gestionar playlists, guardar favoritos, c
 
 La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 
-> Estado: Sprints 1 a 8 cerrados y verificados. Sprint 8 incorporó favoritos,
+> Estado: Sprints 1 a 8 cerrados y verificados. Sprint 9 incorpora comentarios,
+> reportes y [moderación en Android](docs/15-plan-sprint-09.md).
+> Sprint 8 incorporó favoritos,
 > calificaciones, promedios y aislamiento multiusuario, con aceptación física
 > en dos cuentas contra el backend HTTPS. Sprint 7 incorporó playlists
 > multiusuario, privacidad, orden transaccional, persistencia en Supabase y uso

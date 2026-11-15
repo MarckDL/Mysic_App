@@ -11,10 +11,15 @@ class ApiFailure implements Exception {
 }
 
 class AuthenticatedApiClient {
-  AuthenticatedApiClient(this._auth, {required String baseUrl, Dio? dio})
-    : _dio = configureApiDio(baseUrl, dio);
+  AuthenticatedApiClient(
+    this._auth, {
+    required String baseUrl,
+    Dio? dio,
+    this.keepSessionOnForbidden = false,
+  }) : _dio = configureApiDio(baseUrl, dio);
   final AuthRepository _auth;
   final Dio _dio;
+  final bool keepSessionOnForbidden;
 
   Future<Map<String, dynamic>> get(
     String path, {
@@ -77,6 +82,7 @@ class AuthenticatedApiClient {
         if (_auth.currentUser?.uid != uid) {
           throw const AuthFailure('La cuenta cambió.');
         }
+        if (response.statusCode == 204) return const {};
         if (response.data == null) {
           throw const ApiFailure('Respuesta de catálogo inválida.');
         }
@@ -92,11 +98,17 @@ class AuthenticatedApiClient {
           'status=$status',
         );
         if (method == 'GET' && status == 401 && attempt == 0) continue;
-        if (status == 401 || status == 403) {
+        final responseData = error.response?.data;
+        final errorDetails = responseData is Map ? responseData['error'] : null;
+        final googleRequired =
+            errorDetails is Map && errorDetails['code'] == 'GOOGLE_REQUIRED';
+        if (status == 401 ||
+            (status == 403 && (!keepSessionOnForbidden || googleRequired))) {
           await _auth.signOut();
           throw const AuthFailure('Tu sesión terminó. Inicia sesión de nuevo.');
         }
         final message = switch (status) {
+          403 => 'No tienes permiso para realizar esta acción.',
           404 => 'Esta pista no está disponible.',
           429 => 'Espera un minuto antes de buscar de nuevo.',
           504 => 'El catálogo tardó demasiado en responder.',

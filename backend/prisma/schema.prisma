@@ -11,17 +11,20 @@ datasource db {
 }
 
 model User {
-  id          String     @id @default(uuid()) @db.Uuid
-  firebaseUid String     @unique @map("firebase_uid") @db.VarChar(128)
-  googleId    String?    @unique @map("google_id") @db.VarChar(255)
-  email       String?    @db.VarChar(320)
-  displayName String     @map("display_name") @db.VarChar(150)
-  photoUrl    String?    @map("photo_url") @db.Text
-  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
-  playlists   Playlist[]
-  favorites   Favorite[]
-  ratings     Rating[]
+  id                     String          @id @default(uuid()) @db.Uuid
+  firebaseUid            String          @unique @map("firebase_uid") @db.VarChar(128)
+  googleId               String?         @unique @map("google_id") @db.VarChar(255)
+  email                  String?         @db.VarChar(320)
+  displayName            String          @map("display_name") @db.VarChar(150)
+  photoUrl               String?         @map("photo_url") @db.Text
+  createdAt              DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  playlists              Playlist[]
+  favorites              Favorite[]
+  ratings                Rating[]
+  comments               Comment[]
+  commentReports         CommentReport[] @relation("Reporter")
+  resolvedCommentReports CommentReport[] @relation("Moderator")
 
   @@map("users")
   @@schema("mysic")
@@ -47,6 +50,7 @@ model Track {
   playlistTracks    PlaylistTrack[]
   favorites         Favorite[]
   ratings           Rating[]
+  comments          Comment[]
 
   @@unique([source, sourceId])
   @@map("tracks")
@@ -111,5 +115,71 @@ model PlaylistTrack {
   @@unique([playlistId, position])
   @@index([trackId])
   @@map("playlist_tracks")
+  @@schema("mysic")
+}
+
+enum CommentStatus {
+  visible
+  hidden
+  deleted
+
+  @@map("comment_status")
+  @@schema("mysic")
+}
+
+enum CommentReportReason {
+  spam
+  harassment
+  other
+
+  @@map("comment_report_reason")
+  @@schema("mysic")
+}
+
+enum CommentReportStatus {
+  pending
+  dismissed
+  hidden
+  deleted
+
+  @@map("comment_report_status")
+  @@schema("mysic")
+}
+
+model Comment {
+  id        String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String          @map("user_id") @db.Uuid
+  trackId   String          @map("track_id") @db.Uuid
+  body      String
+  status    CommentStatus   @default(visible)
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track     Track           @relation(fields: [trackId], references: [id], onDelete: Restrict)
+  reports   CommentReport[]
+
+  @@index([trackId, status, createdAt, id])
+  @@index([userId])
+  @@map("comments")
+  @@schema("mysic")
+}
+
+model CommentReport {
+  commentId   String              @map("comment_id") @db.Uuid
+  reporterId  String              @map("reporter_id") @db.Uuid
+  reason      CommentReportReason
+  status      CommentReportStatus @default(pending)
+  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  moderatorId String?             @map("moderator_id") @db.Uuid
+  resolvedAt  DateTime?           @map("resolved_at") @db.Timestamptz(3)
+  comment     Comment             @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  reporter    User                @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  moderator   User?               @relation("Moderator", fields: [moderatorId], references: [id], onDelete: SetNull)
+
+  @@id([commentId, reporterId])
+  @@index([status, commentId, createdAt])
+  @@index([reporterId])
+  @@index([moderatorId])
+  @@map("comment_reports")
   @@schema("mysic")
 }

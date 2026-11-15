@@ -159,13 +159,31 @@ usuario, RLS habilitado y permisos públicos revocados.
 | user_id | UUID | FK users |
 | track_id | UUID | FK tracks |
 | body | TEXT | NOT NULL |
-| status | VARCHAR(20) | NOT NULL |
-| created_at | TIMESTAMPTZ | NOT NULL |
-| updated_at | TIMESTAMPTZ | NOT NULL |
+| status | comment_status | NOT NULL, por defecto `visible` |
+| created_at | TIMESTAMPTZ(3) | NOT NULL |
+| updated_at | TIMESTAMPTZ(3) | NOT NULL |
 
-Estados: `visible`, `hidden`, `deleted`.
+Estados `visible`, `hidden` y `deleted`. El texto admite de 1 a 500 caracteres.
+El listado usa el índice `(track_id, status, created_at, id)`. La eliminación
+lógica retira el comentario del listado y cierra sus reportes pendientes.
 
-El contenido debe validarse, limitarse y moderarse.
+### 4.7.1 comment_reports
+
+| Campo | Tipo | Restricción |
+|---|---|---|
+| comment_id | UUID | PK compuesta, FK comments |
+| reporter_id | UUID | PK compuesta, FK users |
+| reason | comment_report_reason | `spam`, `harassment`, `other` |
+| status | comment_report_status | `pending`, `dismissed`, `hidden`, `deleted` |
+| created_at | TIMESTAMPTZ(3) | NOT NULL |
+| moderator_id | UUID | FK users, opcional |
+| resolved_at | TIMESTAMPTZ(3) | Requerido al cerrar |
+
+La clave compuesta garantiza un reporte por cuenta y comentario, incluso tras
+resolverlo. El índice `(status, comment_id, created_at)` respalda la cola.
+Ambas tablas tienen RLS y permisos públicos revocados. Las operaciones sobre
+un comentario existente lo bloquean durante la transacción para serializar
+edición, baja, reportes y moderación.
 
 ### 4.8 listening_history
 

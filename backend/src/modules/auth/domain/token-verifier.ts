@@ -1,6 +1,7 @@
 export interface AuthIdentity {
   firebaseUid: string;
   provider: string;
+  moderator?: boolean;
   googleId?: string;
   email?: string;
   displayName?: string;

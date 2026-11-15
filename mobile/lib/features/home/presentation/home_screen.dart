@@ -26,7 +26,7 @@ class HomeScreen extends ConsumerWidget {
       ),
       body: SafeArea(
         child: Center(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -37,6 +37,12 @@ class HomeScreen extends ConsumerWidget {
                 const Text('Tu sesión con Google está verificada.'),
                 const SizedBox(height: 12),
                 const Text('Tu perfil está guardado en Mysic.'),
+                if (profile.canModerateComments)
+                  TextButton.icon(
+                    onPressed: () => context.push('/moderation/comments'),
+                    icon: const Icon(Icons.flag_outlined),
+                    label: const Text('Moderar comentarios'),
+                  ),
                 const SizedBox(height: 24),
                 FilledButton.icon(
                   onPressed: () => context.push('/search'),

@@ -42,7 +42,9 @@ export function profileHandler(
         });
         return;
       }
-      response.status(200).json(user);
+      response
+        .status(200)
+        .json({ ...user, canModerateComments: identity.moderator === true });
     } catch (error) {
       const conflict = error instanceof UserConflictError;
       response.status(conflict ? 409 : 503).json({

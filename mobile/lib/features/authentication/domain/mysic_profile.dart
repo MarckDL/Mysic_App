@@ -6,12 +6,14 @@ class MysicProfile {
     required this.firebaseUid,
     required this.displayName,
     this.email,
+    this.canModerateComments = false,
   });
 
   final String id;
   final String firebaseUid;
   final String displayName;
   final String? email;
+  final bool canModerateComments;
 
   factory MysicProfile.fromJson(Map<String, dynamic> data) {
     final id = data['id'];
@@ -34,6 +36,7 @@ class MysicProfile {
       firebaseUid: uid,
       displayName: name,
       email: email as String?,
+      canModerateComments: data['canModerateComments'] == true,
     );
   }
 }

@@ -44,6 +44,22 @@ describe('Firebase TokenVerifier', () => {
     });
   });
 
+  it.each([true, false, 'true', undefined])(
+    'limita el permiso de moderación al claim booleano true (%s)',
+    async (moderator) => {
+      const verifier = createFirebaseTokenVerifier(async () => ({
+        verifyIdToken: async () => ({
+          uid: 'moderator',
+          moderator,
+          firebase: { sign_in_provider: 'google.com' },
+        }),
+      }));
+      expect((await verifier.verify('id-token')).moderator).toBe(
+        moderator === true ? true : undefined,
+      );
+    },
+  );
+
   it.each([
     'auth/argument-error',
     'auth/invalid-argument',

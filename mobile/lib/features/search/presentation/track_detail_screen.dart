@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/catalog_providers.dart';
 import 'catalog_widgets.dart';
+import '../../comments/presentation/comment_feed_panel.dart';
 import '../../playback/presentation/playback_availability_panel.dart';
 import '../../playlists/presentation/add_to_playlist_button.dart';
 import '../../ratings/presentation/track_preferences_panel.dart';
@@ -50,6 +51,8 @@ class TrackDetailScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 12),
                 TrackPreferencesPanel(trackId: track.id),
+                const SizedBox(height: 24),
+                CommentFeedPanel(key: ValueKey(track.id), trackId: track.id),
               ],
             ),
           ),

@@ -10,6 +10,7 @@ export interface VerifiedFirebaseToken {
   uid: string;
   email?: unknown;
   name?: unknown;
+  moderator?: unknown;
   picture?: unknown;
   firebase: {
     sign_in_provider: string;
@@ -119,6 +120,7 @@ export function createFirebaseTokenVerifier(
           ...(photoUrl ? { photoUrl } : {}),
           firebaseUid: decoded.uid,
           provider: decoded.firebase.sign_in_provider,
+          ...(decoded.moderator === true ? { moderator: true } : {}),
           ...(Array.isArray(googleIds) &&
           typeof googleIds[0] === 'string' &&
           googleIds[0].length > 0 &&

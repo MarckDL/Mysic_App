@@ -463,7 +463,10 @@ Aceptación:
 - Reportes quedan registrados.
 - Comentarios ocultos no aparecen públicamente.
 
-Etiqueta: `sprint-09-v0.9.0`
+La cola de moderación se abre desde el perfil de Android con un permiso
+verificado por Firebase. Ver [contrato y operación](15-plan-sprint-09.md).
+
+Etiqueta objetivo: `sprint-09-v0.9.0`
 
 ## 14. Sprint 10 — Historial
 

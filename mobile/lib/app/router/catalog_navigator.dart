@@ -13,6 +13,7 @@ import '../../features/search/presentation/track_detail_screen.dart';
 import '../../features/playlists/presentation/playlists_screen.dart';
 import '../../features/playlists/presentation/playlist_detail_screen.dart';
 import '../../features/favorites/presentation/favorites_screen.dart';
+import '../../features/comments/presentation/moderation_screen.dart';
 
 // Solo se monta dentro de AuthGate tras verificar y sincronizar el perfil.
 // Al cerrar/cambiar cuenta se elimina el navegador y todo su estado.
@@ -58,6 +59,11 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
       GoRoute(
         path: '/favorites',
         builder: (context, state) => const FavoritesScreen(),
+      ),
+      GoRoute(
+        path: '/moderation/comments',
+        builder: (context, state) =>
+            ModerationScreen(canModerate: widget.profile.canModerateComments),
       ),
       GoRoute(
         path: '/tracks/:id',
