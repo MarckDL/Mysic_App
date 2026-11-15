@@ -67,7 +67,7 @@ void main() {
       find.text('No se pudieron cargar tus escuchas recientes.'),
       findsOneWidget,
     );
-    await tester.tap(find.text('Buscar'));
+    await tester.tap(find.text('Explorar'));
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsOneWidget);
     await tester.tap(find.text('Inicio'));
@@ -115,7 +115,7 @@ void main() {
         Theme.of(tester.element(find.byType(HomeScreen))).brightness,
         brightness,
       );
-      for (final label in ['Inicio', 'Buscar', 'Biblioteca']) {
+      for (final label in ['Inicio', 'Explorar', 'Biblioteca']) {
         final destination = find.text(label);
         expect(destination.hitTestable(), findsOneWidget);
         await tester.tap(destination);
@@ -123,7 +123,8 @@ void main() {
       }
       expect(find.text('Playlists').hitTestable(), findsOneWidget);
       expect(find.text('Favoritos').hitTestable(), findsOneWidget);
-      expect(find.text('Historial').hitTestable(), findsOneWidget);
+      expect(find.text('Descargas').hitTestable(), findsOneWidget);
+      expect(find.text('Próximamente'), findsOneWidget);
       await tester.tap(find.byTooltip('Abrir cuenta'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(find.text('Cerrar sesión'), 100);

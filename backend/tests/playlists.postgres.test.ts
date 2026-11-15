@@ -32,7 +32,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       title: 'Pista de integración',
       artistName: 'Mysic Test',
       durationSeconds: 180,
-      thumbnailUrl: null,
+      thumbnailUrl: 'https://images.example.com/first.jpg',
     };
 
     beforeAll(async () => {
@@ -67,6 +67,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       playlistId = created.id;
       expect(created.visibility).toBe('private');
       expect(created.trackCount).toBe(0);
+      expect(created.thumbnailUrl).toBeNull();
       expect(
         (await repository.listOwned(ownerA)).map((item) => item.id),
       ).toContain(playlistId);
@@ -98,6 +99,9 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
         500,
       );
       expect(second?.tracks.map((item) => item.position)).toEqual([0, 1]);
+      expect((await repository.listOwned(ownerA))[0]?.thumbnailUrl).toBe(
+        track.thumbnailUrl,
+      );
       expect(new Set(second?.tracks.map((item) => item.id)).size).toBe(2);
       const reversedIds = [...(second?.tracks ?? [])]
         .reverse()

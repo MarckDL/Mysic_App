@@ -644,3 +644,26 @@ autenticado `PATCH /api/v1/users/me` recibe `nickname` como texto o como `null`
 para quitarlo. Express toma el UID del token y PostgreSQL actualiza solo ese
 perfil. El saludo y Cuenta reflejan el cambio en la sesión actual. Los comentarios
 siguen mostrando el nombre sincronizado de Google.
+
+### Entrada directa al reproductor
+
+En Inicio, Buscar, Historial, Favoritos y el contenido de una playlist, tocar
+una canción inicia el audio y abre `/player`. Volver conserva la vista de
+origen y el minirreproductor sigue enlazado al controlador de la sesión. Los
+detalles, las calificaciones, los comentarios y la incorporación a playlists
+se acceden desde el menú de la canción. La cola se abre como un panel del
+reproductor.
+
+
+### Ajustes de Explorar y Biblioteca
+
+La pestaña Explorar usa la búsqueda existente por canción o artista. Sus
+categorías inician consultas de texto al catálogo. Biblioteca reúne Favoritos,
+Playlists y el acceso futuro a Descargas. Historial se abre desde «Ver todo» en
+Recientes de Inicio. Descargas aparece deshabilitada hasta implementar su soporte.
+
+Favoritos permite reproducir una cola en orden o mezclada. La cola admite hasta
+100 canciones y el botón indica el límite cuando la colección lo supera.
+El listado de playlists incluye `thumbnailUrl` opcional, derivada de la primera
+pista según su posición. El backend consulta solo esa pista y el conteo para
+cada resumen. Las playlists vacías usan un icono de respaldo.

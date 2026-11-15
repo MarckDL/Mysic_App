@@ -179,7 +179,7 @@ class _CatalogShell extends ConsumerWidget {
                     ),
                     NavigationDestination(
                       icon: Icon(Icons.search),
-                      label: 'Buscar',
+                      label: 'Explorar',
                     ),
                     NavigationDestination(
                       icon: Icon(Icons.library_music_outlined),

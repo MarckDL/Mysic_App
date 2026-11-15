@@ -3,7 +3,7 @@ import '../../playback/application/track_playback_controller.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import '../../playback/presentation/open_player.dart';
 import '../application/catalog_providers.dart';
 import '../domain/catalog_track.dart';
 import 'catalog_widgets.dart';
@@ -18,6 +18,7 @@ class SearchScreen extends ConsumerStatefulWidget {
 
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   late TrackPlaybackController _playback;
+  final _input = TextEditingController();
   Timer? _debounce;
   Timer? _prefetchDebounce;
   String? _query;
@@ -55,6 +56,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   @override
   void dispose() {
+    _input.dispose();
     _debounce?.cancel();
     _prefetchDebounce?.cancel();
     _playback.cancelPrefetch();
@@ -70,7 +72,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         : ref.watch(searchResultsProvider(query));
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Buscar música'),
+        title: const Text('Explorar'),
         actions: [?widget.accountAction],
       ),
       body: SafeArea(
@@ -79,20 +81,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             Padding(
               padding: const EdgeInsets.all(16),
               child: TextField(
+                controller: _input,
                 maxLength: 120,
                 onChanged: _changed,
                 decoration: const InputDecoration(
                   labelText: 'Canción o artista',
-                  hintText: 'Escribe al menos 2 caracteres',
+                  counterText: '',
                   prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(28)),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
               ),
             ),
             Expanded(
               child: query == null
-                  ? const Center(
-                      child: Text('Busca canciones por título o artista.'),
+                  ? _ExploreCategories(
+                      onSelected: (category) {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        _input.text = category;
+                        _changed(category);
+                      },
                     )
                   : result!.when(
                       loading: () =>
@@ -120,12 +130,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                 itemBuilder: (context, index) {
                                   if (index == 0) {
                                     return TextButton.icon(
-                                      onPressed: () => unawaited(
-                                        ref
-                                            .read(
-                                              trackPlaybackControllerProvider,
-                                            )
-                                            .playQueue(tracks),
+                                      onPressed: () => playTracksAndOpenPlayer(
+                                        context,
+                                        ref,
+                                        tracks,
                                       ),
                                       icon: const Icon(Icons.playlist_play),
                                       label: const Text(
@@ -154,12 +162,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                         IconButton(
                                           tooltip: 'Reproducir canción',
                                           icon: const Icon(Icons.play_arrow),
-                                          onPressed: () => unawaited(
-                                            ref
-                                                .read(
-                                                  trackPlaybackControllerProvider,
-                                                )
-                                                .playTrack(track),
+                                          onPressed: () => playAndOpenPlayer(
+                                            context,
+                                            ref,
+                                            track,
                                           ),
                                         ),
                                         IconButton(
@@ -185,12 +191,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                         ),
                                       ],
                                     ),
-                                    onTap: () {
-                                      FocusScope.of(context).unfocus();
-                                      context.push(
-                                        '/tracks/${Uri.encodeComponent(track.id)}',
-                                      );
-                                    },
+                                    onTap: () =>
+                                        playAndOpenPlayer(context, ref, track),
                                   );
                                 },
                               );
@@ -202,4 +204,74 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       ),
     );
   }
+}
+
+class _ExploreCategories extends StatelessWidget {
+  const _ExploreCategories({required this.onSelected});
+
+  final ValueChanged<String> onSelected;
+
+  static const _categories = [
+    ('Pop', Icons.auto_awesome_rounded, Color(0xFF554687)),
+    ('Rock', Icons.electric_bolt_rounded, Color(0xFF793E40)),
+    ('Lo-fi', Icons.headphones_rounded, Color(0xFF494965)),
+    ('Urbano', Icons.location_city_rounded, Color(0xFF37516E)),
+    ('Anime', Icons.animation_rounded, Color(0xFF854865)),
+    ('Cumbias', Icons.music_note_rounded, Color(0xFF376258)),
+  ];
+
+  @override
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+    children: [
+      Text('Categorías', style: Theme.of(context).textTheme.titleLarge),
+      const SizedBox(height: 12),
+      GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 150 * MediaQuery.textScalerOf(context).scale(1),
+          mainAxisExtent: 90 + MediaQuery.textScalerOf(context).scale(28),
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+        ),
+        itemCount: _categories.length,
+        itemBuilder: (context, index) {
+          final (name, icon, color) = _categories[index];
+          return Material(
+            color: color,
+            borderRadius: BorderRadius.circular(16),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () => onSelected(name),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Align(
+                      alignment: Alignment.topRight,
+                      child: Icon(
+                        icon,
+                        size: 26,
+                        color: const Color(0xCCFFFFFF),
+                      ),
+                    ),
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    ],
+  );
 }

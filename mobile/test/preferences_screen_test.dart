@@ -16,7 +16,9 @@ import 'package:mysic/features/ratings/domain/rating_repository.dart';
 import 'package:mysic/features/ratings/domain/track_interactions.dart';
 import 'package:mysic/features/ratings/presentation/track_preferences_panel.dart';
 import 'package:mysic/features/search/domain/catalog_track.dart';
+import 'package:mysic/features/playback/application/playback_providers.dart';
 import 'support/fake_auth_repository.dart';
+import 'support/fake_track_audio_engine.dart';
 
 const trackId = 'youtube:abcdefghijk';
 
@@ -182,12 +184,13 @@ void main() {
     tester,
   ) async {
     final favorites = FakeFavorites();
+    final audio = FakeTrackAudioEngine();
     final router = GoRouter(
       routes: [
         GoRoute(path: '/', builder: (_, _) => const FavoritesScreen()),
         GoRoute(
-          path: '/tracks/:id',
-          builder: (_, _) => const Scaffold(body: Text('Detalle abierto')),
+          path: '/player',
+          builder: (_, _) => const Scaffold(body: Text('Reproductor abierto')),
         ),
       ],
     );
@@ -199,15 +202,28 @@ void main() {
             FakeAuthRepository(user: const AuthUser(uid: 'a')),
           ),
           favoriteRepositoryProvider.overrideWithValue(favorites),
+          trackAudioEngineFactoryProvider.overrideWithValue(() => audio),
         ],
-        child: MaterialApp.router(routerConfig: router),
+        child: Consumer(
+          builder: (context, ref, child) {
+            ref.watch(trackPlaybackControllerProvider);
+            return MaterialApp.router(routerConfig: router);
+          },
+        ),
       ),
     );
     await tester.pumpAndSettle();
     expect(find.text('Song'), findsOneWidget);
     await tester.tap(find.text('Song'));
     await tester.pumpAndSettle();
-    expect(find.text('Detalle abierto'), findsOneWidget);
+    expect(find.text('Reproductor abierto'), findsOneWidget);
+    expect(audio.sourceId, 'abcdefghijk');
+    router.go('/');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Reproducir todo'));
+    await tester.pumpAndSettle();
+    expect(find.text('Reproductor abierto'), findsOneWidget);
+    expect(audio.sourceId, 'abcdefghijk');
     router.go('/');
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Quitar de favoritos'));

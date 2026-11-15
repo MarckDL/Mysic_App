@@ -8,6 +8,7 @@ export interface PlaylistSummary {
   description: string | null;
   visibility: PlaylistVisibility;
   trackCount: number;
+  thumbnailUrl?: string | null;
   createdAt: string;
   updatedAt: string;
 }

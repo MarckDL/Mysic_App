@@ -41,7 +41,7 @@ void main() {
     tester,
   ) async {
     await app.main();
-    await pumpUntil(tester, find.text('Buscar música'));
+    await pumpUntil(tester, find.text('Descubre nuevas canciones'));
 
     const playlistName = 'Validación cloud Sprint 7';
     await tester.tap(find.text('Biblioteca'));
@@ -57,8 +57,8 @@ void main() {
     }
 
     await tester.pageBack();
-    await pumpUntil(tester, find.text('Buscar'));
-    await tester.tap(find.text('Buscar'));
+    await pumpUntil(tester, find.text('Explorar'));
+    await tester.tap(find.text('Explorar'));
     await pumpUntil(tester, find.byType(TextField));
     await tester.enterText(find.byType(TextField), 'Coldplay');
     await pumpUntil(tester, find.text('Reproducir resultados'));
@@ -70,21 +70,22 @@ void main() {
     expect(results, findsWidgets);
     await tester.ensureVisible(results.first);
     await tester.tap(results.first);
+    await pumpUntil(tester, find.text('Reproductor'));
+    await pumpUntil(tester, find.byTooltip('Pausar'));
+    await tester.tap(find.byTooltip('Opciones de la canción'));
+    await pumpUntil(tester, find.text('Detalles de la canción'));
+    await tester.tap(find.text('Detalles de la canción'));
     await pumpUntil(tester, find.text('Detalle de canción'));
     await pumpUntil(tester, find.text('Añadir a playlist'));
 
     await tester.tap(find.text('Añadir a playlist'));
     await pumpUntil(tester, find.text(playlistName));
     await tester.tap(find.text(playlistName).first);
-    await pumpUntil(tester, find.text('Reproducir audio'));
-    await tester.pumpAndSettle();
-
-    await tester.ensureVisible(find.text('Reproducir audio'));
-    await tester.tap(find.text('Reproducir audio'));
-    await pumpUntil(tester, find.text('Pausar'));
+    await tester.pageBack();
+    await pumpUntil(tester, find.byTooltip('Pausar'));
     await waitRealTime(tester, const Duration(seconds: 75));
-    expect(find.text('Pausar'), findsOneWidget);
-    await tester.tap(find.text('Pausar'));
+    expect(find.byTooltip('Pausar'), findsOneWidget);
+    await tester.tap(find.byTooltip('Pausar'));
 
     await tester.pageBack();
     await pumpUntil(tester, find.text('Reproducir resultados'));

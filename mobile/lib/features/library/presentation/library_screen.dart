@@ -1,63 +1,63 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-class LibraryScreen extends StatelessWidget {
+import '../../favorites/application/favorite_providers.dart';
+import '../../playlists/application/playlist_providers.dart';
+
+class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key, required this.accountAction});
 
   final Widget accountAction;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text('Tu biblioteca'),
-      actions: [accountAction],
-    ),
-    body: SafeArea(
-      top: false,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-        children: const [
-          _LibraryLink(
-            title: 'Playlists',
-            icon: Icons.queue_music_rounded,
-            path: '/playlists',
-          ),
-          _LibraryLink(
-            title: 'Favoritos',
-            icon: Icons.favorite_outline,
-            path: '/favorites',
-          ),
-          _LibraryLink(
-            title: 'Historial',
-            icon: Icons.history,
-            path: '/history',
-          ),
-        ],
+  Widget build(BuildContext context, WidgetRef ref) {
+    final favorites = ref.watch(favoritesProvider).asData?.value.length;
+    final playlists = ref.watch(playlistsProvider).asData?.value.length;
+    final colors = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Biblioteca'), actions: [accountAction]),
+      body: SafeArea(
+        top: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          children: [
+            ListTile(
+              leading: Icon(
+                Icons.favorite_border_rounded,
+                color: colors.primary,
+              ),
+              title: const Text('Favoritos'),
+              subtitle: favorites == null
+                  ? null
+                  : Text(
+                      '$favorites ${favorites == 1 ? 'canción' : 'canciones'}',
+                    ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => context.push('/favorites'),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: Icon(Icons.queue_music_rounded, color: colors.primary),
+              title: const Text('Playlists'),
+              subtitle: playlists == null
+                  ? null
+                  : Text(
+                      '$playlists ${playlists == 1 ? 'playlist' : 'playlists'}',
+                    ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => context.push('/playlists'),
+            ),
+            const Divider(height: 1),
+            const ListTile(
+              leading: Icon(Icons.download_outlined),
+              title: Text('Descargas'),
+              subtitle: Text('Próximamente'),
+              enabled: false,
+            ),
+          ],
+        ),
       ),
-    ),
-  );
-}
-
-class _LibraryLink extends StatelessWidget {
-  const _LibraryLink({
-    required this.title,
-    required this.icon,
-    required this.path,
-  });
-
-  final String title;
-  final IconData icon;
-  final String path;
-
-  @override
-  Widget build(BuildContext context) => Card.filled(
-    margin: const EdgeInsets.only(bottom: 12),
-    child: ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
-      title: Text(title),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => context.push(path),
-    ),
-  );
+    );
+  }
 }

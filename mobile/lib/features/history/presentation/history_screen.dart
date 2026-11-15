@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import '../../playback/presentation/open_player.dart';
 import '../../search/presentation/catalog_widgets.dart';
 import '../data/history_client.dart';
 
@@ -75,8 +75,7 @@ class _HistoryState extends ConsumerState<HistoryScreen> {
                   subtitle: Text(
                     '${track.artistName} · ${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}',
                   ),
-                  onTap: () =>
-                      context.push('/tracks/${Uri.encodeComponent(track.id)}'),
+                  onTap: () => playAndOpenPlayer(context, ref, track),
                 );
               },
             ),

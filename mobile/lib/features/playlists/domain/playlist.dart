@@ -18,11 +18,13 @@ class PlaylistSummary {
     required this.createdAt,
     required this.updatedAt,
     this.description,
+    this.thumbnailUrl,
   });
 
   final String id;
   final String name;
   final String? description;
+  final String? thumbnailUrl;
   final PlaylistVisibility visibility;
   final int trackCount;
   final DateTime createdAt;
@@ -32,6 +34,8 @@ class PlaylistSummary {
     final id = data['id'];
     final name = data['name'];
     final description = data['description'];
+    final thumbnail = data['thumbnailUrl'];
+    final thumbnailUri = thumbnail is String ? Uri.tryParse(thumbnail) : null;
     final visibility = switch (data['visibility']) {
       'private' => PlaylistVisibility.private,
       'public' => PlaylistVisibility.public,
@@ -60,6 +64,13 @@ class PlaylistSummary {
       id: id,
       name: name,
       description: description as String?,
+      thumbnailUrl:
+          thumbnailUri != null &&
+              thumbnailUri.scheme == 'https' &&
+              thumbnailUri.host.isNotEmpty &&
+              thumbnailUri.userInfo.isEmpty
+          ? thumbnail as String
+          : null,
       visibility: visibility,
       trackCount: count,
       createdAt: created,
@@ -112,6 +123,7 @@ class PlaylistDetail extends PlaylistSummary {
     required this.ownedByCurrentUser,
     required this.tracks,
     super.description,
+    super.thumbnailUrl,
   });
 
   final bool ownedByCurrentUser;
@@ -144,6 +156,9 @@ class PlaylistDetail extends PlaylistSummary {
       id: base.id,
       name: base.name,
       description: base.description,
+      thumbnailUrl:
+          base.thumbnailUrl ??
+          (items.isEmpty ? null : items.first.track.thumbnailUrl),
       visibility: base.visibility,
       trackCount: base.trackCount,
       createdAt: base.createdAt,

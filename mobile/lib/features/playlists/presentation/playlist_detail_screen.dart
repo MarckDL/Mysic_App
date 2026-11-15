@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../playback/presentation/open_player.dart';
 import '../../search/presentation/catalog_widgets.dart';
 import '../application/playlist_providers.dart';
 import '../domain/playlist.dart';
-import 'playlist_form_dialog.dart';
 import 'playlists_screen.dart';
 
 class PlaylistDetailScreen extends ConsumerWidget {
@@ -46,6 +46,19 @@ class PlaylistDetailScreen extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Center(
+                      child: TrackArtwork(
+                        url:
+                            playlist.thumbnailUrl ??
+                            (playlist.tracks.isEmpty
+                                ? null
+                                : playlist.tracks.first.track.thumbnailUrl),
+                        size: 90,
+                        borderRadius: 14,
+                        fallbackIcon: Icons.queue_music_rounded,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     Text(
                       playlist.name,
                       style: Theme.of(context).textTheme.headlineSmall,
@@ -67,7 +80,7 @@ class PlaylistDetailScreen extends ConsumerWidget {
                           OutlinedButton.icon(
                             onPressed: action.isLoading
                                 ? null
-                                : () => _edit(context, ref, playlist),
+                                : () => editPlaylist(context, ref, playlist),
                             icon: const Icon(Icons.edit_outlined),
                             label: const Text('Editar'),
                           ),
@@ -116,9 +129,8 @@ class PlaylistDetailScreen extends ConsumerWidget {
                             leading: TrackArtwork(url: item.track.thumbnailUrl),
                             title: Text(item.track.title),
                             subtitle: Text(item.track.artistName),
-                            onTap: () => context.push(
-                              '/tracks/${Uri.encodeComponent(item.track.id)}',
-                            ),
+                            onTap: () =>
+                                playAndOpenPlayer(context, ref, item.track),
                             trailing: playlist.ownedByCurrentUser
                                 ? Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -155,31 +167,6 @@ class PlaylistDetailScreen extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _edit(
-    BuildContext context,
-    WidgetRef ref,
-    PlaylistDetail playlist,
-  ) async {
-    final form = await showPlaylistFormDialog(context, initial: playlist);
-    if (form == null || !context.mounted) return;
-    final success = await ref
-        .read(playlistActionsProvider.notifier)
-        .update(
-          id,
-          name: form.name,
-          description: form.description,
-          visibility: form.visibility,
-        );
-    if (!success && context.mounted) {
-      _message(
-        context,
-        playlistErrorText(
-          ref.read(playlistActionsProvider).error ?? Exception(),
-        ),
-      );
-    }
   }
 
   Future<void> _delete(

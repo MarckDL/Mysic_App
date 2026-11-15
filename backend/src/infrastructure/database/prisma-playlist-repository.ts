@@ -37,13 +37,18 @@ function databaseVisibility(value: PlaylistVisibility): DatabaseVisibility {
     : DatabaseVisibility.PRIVATE;
 }
 
-function summary(value: DetailRecord): PlaylistSummary {
+function summary(
+  value: Omit<DetailRecord, 'tracks'> & {
+    tracks: { track: { thumbnailUrl: string | null } }[];
+  },
+): PlaylistSummary {
   return {
     id: value.id,
     name: value.name,
     description: value.description,
     visibility: visibility(value.visibility),
     trackCount: value._count.tracks,
+    thumbnailUrl: value.tracks[0]?.track.thumbnailUrl ?? null,
     createdAt: value.createdAt.toISOString(),
     updatedAt: value.updatedAt.toISOString(),
   };
@@ -113,7 +118,14 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
         await getDatabase().playlist.findMany({
           where: { userId: ownerId },
           orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
-          include: detailInclude,
+          include: {
+            tracks: {
+              orderBy: { position: 'asc' },
+              take: 1,
+              select: { track: { select: { thumbnailUrl: true } } },
+            },
+            _count: detailInclude._count,
+          },
         })
       ).map(summary);
     } catch (error) {

@@ -41,6 +41,27 @@ Map<String, dynamic> detailJson() => {
 };
 
 void main() {
+  test(
+    'acepta portada opcional y mantiene compatibilidad con listas antiguas',
+    () {
+      expect(PlaylistSummary.fromJson(summaryJson()).thumbnailUrl, isNull);
+      expect(
+        PlaylistSummary.fromJson({
+          ...summaryJson(),
+          'thumbnailUrl': 'https://images.example.com/cover.jpg',
+        }).thumbnailUrl,
+        'https://images.example.com/cover.jpg',
+      );
+      expect(
+        PlaylistSummary.fromJson({
+          ...summaryJson(),
+          'thumbnailUrl': 'http://images.example.com/cover.jpg',
+        }).thumbnailUrl,
+        isNull,
+      );
+    },
+  );
+
   test('ejecuta todo el contrato de playlists con token Firebase', () async {
     final auth = FakeAuthRepository(user: const AuthUser(uid: 'a'));
     final dio = Dio();

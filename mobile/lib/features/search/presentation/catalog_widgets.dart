@@ -4,17 +4,25 @@ import '../../authentication/domain/auth_repository.dart';
 import '../domain/catalog_track.dart';
 
 class TrackArtwork extends StatelessWidget {
-  const TrackArtwork({super.key, this.url, this.size = 56});
+  const TrackArtwork({
+    super.key,
+    this.url,
+    this.size = 56,
+    this.borderRadius = 8,
+    this.fallbackIcon = Icons.music_note,
+  });
   final String? url;
   final double size;
+  final double borderRadius;
+  final IconData fallbackIcon;
   @override
   Widget build(BuildContext context) {
     final fallback = ColoredBox(
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      child: Center(child: Icon(Icons.music_note, size: size / 2)),
+      child: Center(child: Icon(fallbackIcon, size: size / 2)),
     );
     return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(borderRadius),
       child: SizedBox(
         width: size,
         height: size,

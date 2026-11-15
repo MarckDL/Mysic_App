@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/network/authenticated_api_client.dart';
+import '../../search/presentation/catalog_widgets.dart';
 import '../application/playlist_providers.dart';
 import '../domain/playlist.dart';
 import 'playlist_form_dialog.dart';
@@ -9,6 +10,34 @@ import 'playlist_form_dialog.dart';
 String playlistErrorText(Object error) => error is ApiFailure
     ? error.message
     : 'No se pudo completar la operación. Inténtalo de nuevo.';
+
+Future<void> editPlaylist(
+  BuildContext context,
+  WidgetRef ref,
+  PlaylistSummary playlist,
+) async {
+  final form = await showPlaylistFormDialog(context, initial: playlist);
+  if (form == null || !context.mounted) return;
+  final success = await ref
+      .read(playlistActionsProvider.notifier)
+      .update(
+        playlist.id,
+        name: form.name,
+        description: form.description,
+        visibility: form.visibility,
+      );
+  if (!success && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          playlistErrorText(
+            ref.read(playlistActionsProvider).error ?? Exception(),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class PlaylistsScreen extends ConsumerWidget {
   const PlaylistsScreen({super.key});
@@ -18,7 +47,7 @@ class PlaylistsScreen extends ConsumerWidget {
     final action = ref.watch(playlistActionsProvider);
     final playlists = ref.watch(playlistsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Mis playlists')),
+      appBar: AppBar(title: const Text('Playlists')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: action.isLoading
             ? null
@@ -80,25 +109,36 @@ class PlaylistsScreen extends ConsumerWidget {
               : RefreshIndicator(
                   onRefresh: () => ref.refresh(playlistsProvider.future),
                   child: ListView.separated(
-                    padding: const EdgeInsets.only(bottom: 96),
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 96),
                     itemCount: items.length,
                     separatorBuilder: (context, index) =>
                         const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final item = items[index];
                       return ListTile(
-                        leading: const CircleAvatar(
-                          child: Icon(Icons.queue_music),
+                        contentPadding: EdgeInsets.zero,
+                        leading: TrackArtwork(
+                          url: item.thumbnailUrl,
+                          size: 64,
+                          borderRadius: 12,
+                          fallbackIcon: Icons.queue_music_rounded,
                         ),
                         title: Text(item.name),
                         subtitle: Text(
                           '${item.trackCount} ${item.trackCount == 1 ? 'canción' : 'canciones'} · '
                           '${item.visibility == PlaylistVisibility.private ? 'Privada' : 'Pública'}',
                         ),
-                        trailing: Icon(
-                          item.visibility == PlaylistVisibility.private
-                              ? Icons.lock_outline
-                              : Icons.public,
+                        trailing: PopupMenuButton<String>(
+                          tooltip: 'Opciones de playlist',
+                          icon: const Icon(Icons.more_horiz),
+                          enabled: !action.isLoading,
+                          onSelected: (_) => editPlaylist(context, ref, item),
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(
+                              value: 'edit',
+                              child: Text('Editar playlist'),
+                            ),
+                          ],
                         ),
                         onTap: () => context.push('/playlists/${item.id}'),
                       );

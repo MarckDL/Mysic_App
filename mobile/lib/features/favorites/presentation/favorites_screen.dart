@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import '../../playback/presentation/open_player.dart';
 import '../../search/presentation/catalog_widgets.dart';
 import '../application/favorite_providers.dart';
 
@@ -12,7 +12,7 @@ class FavoritesScreen extends ConsumerWidget {
     final favorites = ref.watch(favoritesProvider);
     final action = ref.watch(favoriteActionsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Mis favoritos')),
+      appBar: AppBar(title: const Text('Favoritos')),
       body: SafeArea(
         child: favorites.when(
           loading: () => const Center(child: CircularProgressIndicator()),
@@ -48,10 +48,55 @@ class FavoritesScreen extends ConsumerWidget {
                   )
                 : ListView.separated(
                     padding: const EdgeInsets.all(16),
-                    itemCount: items.length,
-                    separatorBuilder: (context, index) => const Divider(),
+                    itemCount: items.length + 1,
+                    separatorBuilder: (context, index) => index == 0
+                        ? const SizedBox(height: 8)
+                        : const Divider(height: 1),
                     itemBuilder: (context, index) {
-                      final item = items[index];
+                      if (index == 0) {
+                        final tracks = items.map((item) => item.track).toList();
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${items.length} ${items.length == 1 ? 'canción' : 'canciones'}',
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: FilledButton.icon(
+                                    onPressed: () => playTracksAndOpenPlayer(
+                                      context,
+                                      ref,
+                                      tracks,
+                                    ),
+                                    icon: const Icon(Icons.play_arrow_rounded),
+                                    label: Text(
+                                      tracks.length <= 100
+                                          ? 'Reproducir todo'
+                                          : 'Reproducir primeras 100',
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                IconButton.filledTonal(
+                                  tooltip: tracks.length <= 100
+                                      ? 'Reproducción aleatoria'
+                                      : 'Reproducir 100 al azar',
+                                  onPressed: () => playTracksAndOpenPlayer(
+                                    context,
+                                    ref,
+                                    tracks.toList()..shuffle(),
+                                  ),
+                                  icon: const Icon(Icons.shuffle_rounded),
+                                ),
+                              ],
+                            ),
+                          ],
+                        );
+                      }
+                      final item = items[index - 1];
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: TrackArtwork(
@@ -59,8 +104,14 @@ class FavoritesScreen extends ConsumerWidget {
                           size: 56,
                         ),
                         title: Text(item.track.title),
-                        subtitle: Text(item.track.artistName),
-                        onTap: () => context.push('/tracks/${item.track.id}'),
+                        subtitle: Text(
+                          [
+                            item.track.artistName,
+                            ?item.track.durationLabel,
+                          ].join(' · '),
+                        ),
+                        onTap: () =>
+                            playAndOpenPlayer(context, ref, item.track),
                         trailing: IconButton(
                           tooltip: 'Quitar de favoritos',
                           onPressed: action.isLoading
@@ -79,6 +130,7 @@ class FavoritesScreen extends ConsumerWidget {
                                     );
                                   }
                                 },
+                          color: Theme.of(context).colorScheme.primary,
                           icon: const Icon(Icons.favorite),
                         ),
                       );
