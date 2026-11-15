@@ -70,7 +70,7 @@ producción.
   estado, cola y metadatos correctos.
 - La prueba se realizó por Wi-Fi externo ordinario, sin `adb reverse` ni backend
   local. No había datos móviles disponibles; la repetición por red del operador se
-  traslada al Sprint 12 y no invalida la conectividad HTTPS externa comprobada.
+  traslada al Sprint 13 y no invalida la conectividad HTTPS externa comprobada.
 
 Los primeros intentos detectaron dos problemas de configuración ya corregidos:
 `corepack enable` no podía modificar `/usr/bin` en Render y las variables de
@@ -101,7 +101,7 @@ flutter build apk --debug \
 - El proxy de audio consume tráfico de entrada y salida del backend y puede superar
   las cuotas gratuitas.
 - Para la demostración estable se debe usar una instancia siempre activa si las
-  mediciones del Sprint 12 confirman cortes, arranques fríos o falta de capacidad.
+  mediciones del Sprint 13 confirman cortes, arranques fríos o falta de capacidad.
 
 El despliegue no se considera verificado hasta registrar URL, fecha, health check,
 prueba autenticada y reproducción real desde una red externa, sin publicar secretos.

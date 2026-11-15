@@ -620,3 +620,27 @@ en el dispositivo físico `23117RA68G` durante el cierre del Sprint 6.
 Historial privado mediante HistoryService, repositorio Prisma y ListeningTracker.
 La cola Android acotada usa preferencias privadas por cuenta mediante MethodChannel.
 Contrato, decisiones y límites en [Sprint 10](16-plan-sprint-10.md).
+
+## Sprint 11 — Navegación autenticada
+
+`AuthGate` monta `CatalogNavigator` con una clave por UID. GoRouter conserva
+Inicio, Buscar y Biblioteca en ramas independientes de
+`StatefulShellRoute.indexedStack`. Las listas de Biblioteca, Cuenta, los detalles
+y el reproductor a pantalla completa se abren sobre la rama activa. Al volver se
+recupera la vista anterior. El minirreproductor se ubica encima de la barra de
+navegación y utiliza el mismo controlador de audio que el reproductor completo.
+
+Inicio consulta hasta cinco escuchas mediante el mismo cliente autenticado que
+Historial. El resumen tiene carga y reintento propios y se actualiza al volver
+a la pestaña Inicio. Cada cambio de UID
+desmonta las vistas anteriores y restaura Inicio para la nueva sesión. La ruta de
+moderación aplica el permiso del perfil y Express vuelve a validar cada
+operación de moderación. Las rutas de diagnóstico de audio se registran en
+compilaciones de depuración.
+
+
+El apodo se guarda por separado del nombre sincronizado de Google. El endpoint
+autenticado `PATCH /api/v1/users/me` recibe `nickname` como texto o como `null`
+para quitarlo. Express toma el UID del token y PostgreSQL actualiza solo ese
+perfil. El saludo y Cuenta reflejan el cambio en la sesión actual. Los comentarios
+siguen mostrando el nombre sincronizado de Google.

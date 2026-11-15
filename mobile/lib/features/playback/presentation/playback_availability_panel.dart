@@ -64,9 +64,6 @@ class PlaybackAvailabilityPanel extends ConsumerWidget {
               const Text(
                 'No se pudo reproducir esta pista. Puedes reintentar o elegir otra.',
               ),
-            const Text(
-              'El audio continúa al navegar o bloquear la pantalla. Puedes controlarlo desde el mini reproductor.',
-            ),
           ],
         );
       },

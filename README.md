@@ -23,7 +23,7 @@ La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 > multiusuario, privacidad, orden transaccional, persistencia en Supabase y uso
 > desde un Android físico contra el backend HTTPS, sin `adb reverse`.
 > La matriz específica con red móvil del operador y las optimizaciones de latencia
-> no anticipada continúan como trabajo del Sprint 12.
+> no anticipada continúan como trabajo del Sprint 13.
 >
 > El catálogo experimental utiliza `youtubei.js` desde el backend. La disponibilidad
 > de metadatos no garantiza que un stream sea completo o reproducible. La resolución,
@@ -372,12 +372,14 @@ La configuración de Firebase, la firma Android y la URL del backend deben verif
 | 08     | Favoritos y ratings        |
 | 09     | Comentarios                |
 | 10     | Historial                  |
-| 11     | Estadísticas               |
-| 12     | Optimización               |
-| 13     | Pruebas                    |
-| 14     | Entrega académica          |
+| 11     | Interfaz y navegación     |
+| 12     | Estadísticas               |
+| 13     | Optimización               |
+| 14     | Pruebas                    |
+| 15     | Entrega académica          |
 
-Cada Sprint tiene una duración estimada de dos semanas.
+El roadmap contempla 15 sprints de dos semanas. El Sprint 11 reúne Inicio,
+Buscar y Biblioteca en una barra inferior, con acceso a Cuenta desde cada pestaña.
 
 Consultar `docs/04-sprints-roadmap.md`.
 

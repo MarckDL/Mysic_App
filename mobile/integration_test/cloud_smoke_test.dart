@@ -44,7 +44,9 @@ void main() {
     await pumpUntil(tester, find.text('Buscar música'));
 
     const playlistName = 'Validación cloud Sprint 7';
-    await tester.tap(find.text('Mis playlists'));
+    await tester.tap(find.text('Biblioteca'));
+    await pumpUntil(tester, find.text('Playlists'));
+    await tester.tap(find.text('Playlists'));
     await pumpUntil(tester, find.text('Nueva'));
     if (find.text(playlistName).evaluate().isEmpty) {
       await tester.tap(find.text('Nueva'));
@@ -55,8 +57,8 @@ void main() {
     }
 
     await tester.pageBack();
-    await pumpUntil(tester, find.text('Buscar música'));
-    await tester.tap(find.text('Buscar música'));
+    await pumpUntil(tester, find.text('Buscar'));
+    await tester.tap(find.text('Buscar'));
     await pumpUntil(tester, find.byType(TextField));
     await tester.enterText(find.byType(TextField), 'Coldplay');
     await pumpUntil(tester, find.text('Reproducir resultados'));
@@ -86,9 +88,9 @@ void main() {
 
     await tester.pageBack();
     await pumpUntil(tester, find.text('Reproducir resultados'));
-    await tester.pageBack();
-    await pumpUntil(tester, find.text('Mis playlists'));
-    await tester.tap(find.text('Mis playlists'));
+    await tester.tap(find.text('Biblioteca'));
+    await pumpUntil(tester, find.text('Playlists'));
+    await tester.tap(find.text('Playlists'));
     await pumpUntil(tester, find.text(playlistName));
     await tester.tap(find.text(playlistName).first);
     await pumpUntil(tester, find.textContaining('1 canción'));

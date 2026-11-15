@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/network/authenticated_api_client.dart';
 import '../../authentication/domain/auth_repository.dart';
+import '../domain/catalog_track.dart';
 
 class TrackArtwork extends StatelessWidget {
   const TrackArtwork({super.key, this.url, this.size = 56});
@@ -25,6 +26,36 @@ class TrackArtwork extends StatelessWidget {
                 errorBuilder: (context, error, stack) => fallback,
               ),
       ),
+    );
+  }
+}
+
+class TrackHeading extends StatelessWidget {
+  const TrackHeading({super.key, required this.track});
+
+  final CatalogTrack track;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        TrackArtwork(url: track.thumbnailUrl, size: 184),
+        const SizedBox(height: 16),
+        Text(
+          track.title,
+          style: theme.textTheme.headlineSmall,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          track.artistName,
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 }

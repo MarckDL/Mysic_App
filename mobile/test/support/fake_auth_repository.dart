@@ -26,11 +26,15 @@ class FakeAuthRepository implements AuthRepository {
     await onSignIn?.call();
   }
 
+  void changeUser(AuthUser? value) {
+    user = value;
+    _changes.add(value);
+  }
+
   @override
   Future<void> signOut() async {
     signOutCount++;
-    user = null;
-    _changes.add(null);
+    changeUser(null);
   }
 
   @override

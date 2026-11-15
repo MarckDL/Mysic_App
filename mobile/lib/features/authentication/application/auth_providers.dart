@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../../core/network/api_config.dart';
+import '../../../core/network/authenticated_api_client.dart';
 import '../data/backend_session_client.dart';
 import '../data/firebase_auth_repository.dart';
 import '../domain/auth_repository.dart';
@@ -37,6 +38,41 @@ final verifiedSessionProvider = FutureProvider.autoDispose<MysicProfile>((
   if (user == null) throw const AuthFailure('Inicia sesión con Google.');
   return ref.watch(backendSessionClientProvider).syncProfile();
 }, retry: (retryCount, error) => null);
+
+final editedProfileProvider = NotifierProvider<EditedProfile, MysicProfile?>(
+  EditedProfile.new,
+);
+
+class EditedProfile extends Notifier<MysicProfile?> {
+  @override
+  MysicProfile? build() {
+    ref.watch(authStateProvider);
+    return null;
+  }
+
+  Future<void> updateNickname(String uid, String? nickname) async {
+    final auth = ref.read(authRepositoryProvider);
+    if (auth.currentUser?.uid != uid) {
+      throw const AuthFailure('La cuenta cambió.');
+    }
+    final api = AuthenticatedApiClient(auth, baseUrl: ApiConfig.baseUrl);
+    try {
+      final data = await api.patch(
+        '/api/v1/users/me',
+        body: {'nickname': nickname},
+      );
+      final profile = MysicProfile.fromJson(data);
+      if (!ref.mounted ||
+          auth.currentUser?.uid != uid ||
+          profile.firebaseUid != uid) {
+        throw const AuthFailure('La cuenta cambió.');
+      }
+      state = profile;
+    } finally {
+      api.close();
+    }
+  }
+}
 
 final authActionsProvider = NotifierProvider<AuthActions, AsyncValue<void>>(
   AuthActions.new,

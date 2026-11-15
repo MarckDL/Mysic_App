@@ -14,6 +14,10 @@ export class UserService {
     });
   }
 
+  updateNickname(identity: AuthIdentity, nickname: string | null) {
+    return this.repository.updateNickname(identity.firebaseUid, nickname);
+  }
+
   me(identity: AuthIdentity) {
     return this.repository.findByFirebaseUid(identity.firebaseUid);
   }

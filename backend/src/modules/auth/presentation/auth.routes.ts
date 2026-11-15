@@ -25,7 +25,7 @@ export function createAuthRouter(verifier: TokenVerifier, users: UserService) {
     '/sync',
     requireAuth(verifier),
     rejectProfileInput,
-    profileHandler(users, 'sync'),
+    profileHandler((identity) => users.sync(identity)),
   );
   return router;
 }

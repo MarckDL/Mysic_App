@@ -1,4 +1,5 @@
 import 'package:mysic/features/playback/application/playback_providers.dart';
+import 'package:mysic/features/history/data/history_client.dart';
 import 'support/fake_track_audio_engine.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +17,9 @@ import 'package:mysic/app/mysic_app.dart';
 import 'package:mysic/features/authentication/domain/mysic_profile.dart';
 
 class SearchFake implements CatalogRepository {
+  SearchFake({this.extraTracks = 0});
+
+  final int extraTracks;
   final calls = <String>[];
   final tokens = <CancelToken?>[];
   final detailCalls = <String>[];
@@ -36,6 +40,12 @@ class SearchFake implements CatalogRepository {
               title: 'Song',
               artistName: 'Artist',
             ),
+            for (var index = 0; index < extraTracks; index++)
+              CatalogTrack(
+                id: 'youtube:x${index.toString().padLeft(10, '0')}',
+                title: 'Resultado $index',
+                artistName: 'Artista',
+              ),
           ];
   }
 
@@ -137,11 +147,12 @@ void main() {
     final auth = FakeAuthRepository(user: const AuthUser(uid: 'a'))
       ..emitOnTokenRefresh = true;
     final audio = FakeTrackAudioEngine();
-    final repository = SearchFake();
+    final repository = SearchFake(extraTracks: 30);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(auth),
+          recentListeningProvider.overrideWith((ref, uid) async => []),
           verifiedSessionProvider.overrideWith((ref) async {
             // Reproducir la dependencia real: antes, un evento de token de
             // la misma cuenta invalidaba el perfil y desmontaba el audio.
@@ -188,6 +199,30 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Continuar audio'));
     await tester.pumpAndSettle();
+    final results = find.descendant(
+      of: find.byType(ListView),
+      matching: find.byType(Scrollable),
+    );
+    await tester.drag(results, const Offset(0, -440));
+    await tester.pumpAndSettle();
+    final scrollOffset = tester.state<ScrollableState>(results).position.pixels;
+    expect(scrollOffset, greaterThan(0));
+    await tester.tap(find.text('Biblioteca'));
+    await tester.pumpAndSettle();
+    expect(find.text('Tu biblioteca'), findsOneWidget);
+    await tester.tap(find.text('Inicio'));
+    await tester.pumpAndSettle();
+    expect(find.text('Bienvenido, Ana'), findsOneWidget);
+    await tester.tap(find.text('Buscar'));
+    await tester.pumpAndSettle();
+    expect(find.text('artist'), findsOneWidget);
+    expect(repository.calls, ['artist']);
+    expect(
+      tester.state<ScrollableState>(results).position.pixels,
+      scrollOffset,
+    );
+    expect(audio.disposals, 0);
+    expect(find.byTooltip('Pausar audio'), findsOneWidget);
     final stops = audio.stops;
     for (final state in [
       AppLifecycleState.inactive,
@@ -210,6 +245,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Reproductor'), findsOneWidget);
     expect(find.text('Cola (1/100)'), findsOneWidget);
+    expect(find.byType(NavigationBar), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('artist'), findsOneWidget);
     await auth.signOut();
     await tester.pumpAndSettle();
     expect(find.text('Continuar con Google'), findsOneWidget);

@@ -6,6 +6,7 @@ class MysicProfile {
     required this.firebaseUid,
     required this.displayName,
     this.email,
+    this.nickname,
     this.canModerateComments = false,
   });
 
@@ -13,6 +14,9 @@ class MysicProfile {
   final String firebaseUid;
   final String displayName;
   final String? email;
+  final String? nickname;
+
+  String get preferredName => nickname ?? displayName;
   final bool canModerateComments;
 
   factory MysicProfile.fromJson(Map<String, dynamic> data) {
@@ -20,6 +24,7 @@ class MysicProfile {
     final uid = data['firebaseUid'];
     final name = data['displayName'];
     final email = data['email'];
+    final nickname = data['nickname'];
     if (id is! String ||
         !RegExp(
           r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
@@ -28,7 +33,8 @@ class MysicProfile {
         uid.isEmpty ||
         name is! String ||
         name.trim().isEmpty ||
-        (email != null && email is! String)) {
+        (email != null && email is! String) ||
+        (nickname != null && (nickname is! String || nickname.isEmpty))) {
       throw const AuthFailure('No se pudo confirmar tu perfil.');
     }
     return MysicProfile(
@@ -36,6 +42,7 @@ class MysicProfile {
       firebaseUid: uid,
       displayName: name,
       email: email as String?,
+      nickname: nickname as String?,
       canModerateComments: data['canModerateComments'] == true,
     );
   }

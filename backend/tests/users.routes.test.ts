@@ -19,6 +19,7 @@ function fixture() {
         googleId: null,
         email: null,
         displayName: 'Usuario Mysic',
+        nickname: null,
         photoUrl: null,
         createdAt: now,
         updatedAt: now,
@@ -27,6 +28,13 @@ function fixture() {
       };
       records.set(profile.firebaseUid, user);
       return user;
+    },
+    async updateNickname(uid, nickname) {
+      const user = records.get(uid);
+      if (!user) return null;
+      const updated = { ...user, nickname };
+      records.set(uid, updated);
+      return updated;
     },
     async findByFirebaseUid(uid) {
       return records.get(uid) ?? null;
@@ -74,6 +82,7 @@ describe('perfiles privados', () => {
   it.each([
     ['post', '/api/v1/auth/sync'],
     ['get', '/api/v1/users/me'],
+    ['patch', '/api/v1/users/me'],
   ] as const)('%s %s requiere autenticación y Google', async (method, path) => {
     const { app } = fixture();
     expect((await request(app)[method](path)).status).toBe(401);
@@ -104,6 +113,34 @@ describe('perfiles privados', () => {
       (await request(app).get('/api/v1/users/b').auth('a', { type: 'bearer' }))
         .status,
     ).toBe(404);
+  });
+  it('guarda y quita el apodo privado sin cambiar el nombre Google ni otras cuentas', async () => {
+    const { app } = fixture();
+    for (const uid of ['a', 'b']) {
+      await request(app)
+        .post('/api/v1/auth/sync')
+        .auth(uid, { type: 'bearer' });
+    }
+    const patch = (nickname: unknown) =>
+      request(app)
+        .patch('/api/v1/users/me')
+        .auth('a', { type: 'bearer' })
+        .send(nickname as object);
+    expect((await patch({ nickname: 'x'.repeat(25) })).status).toBe(400);
+    expect((await patch({ nickname: ' ', userId: 'b' })).status).toBe(400);
+    expect((await patch({ nickname: '  Melo  ' })).body.nickname).toBe('Melo');
+    const updated = await request(app)
+      .post('/api/v1/auth/sync')
+      .auth('a', { type: 'bearer' });
+    expect(updated.body).toMatchObject({
+      nickname: 'Melo',
+      displayName: 'Usuario a',
+    });
+    const other = await request(app)
+      .get('/api/v1/users/me')
+      .auth('b', { type: 'bearer' });
+    expect(other.body.nickname).toBeNull();
+    expect((await patch({ nickname: null })).body.nickname).toBeNull();
   });
   it('indica cuándo el perfil aún no existe', async () => {
     const { app } = fixture();

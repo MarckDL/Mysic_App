@@ -4,6 +4,7 @@ export interface UserProfile {
   googleId: string | null;
   email: string | null;
   displayName: string;
+  nickname: string | null;
   photoUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -20,6 +21,10 @@ export interface VerifiedProfile {
 export interface UserRepository {
   sync(profile: VerifiedProfile): Promise<UserProfile>;
   findByFirebaseUid(firebaseUid: string): Promise<UserProfile | null>;
+  updateNickname(
+    firebaseUid: string,
+    nickname: string | null,
+  ): Promise<UserProfile | null>;
 }
 
 export class UserConflictError extends Error {}

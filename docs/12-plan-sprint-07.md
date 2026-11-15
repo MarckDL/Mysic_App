@@ -373,9 +373,9 @@ Desviación aprobada y trabajo posterior:
 - No había datos móviles disponibles en el dispositivo. La prueba externa se hizo
   por Wi-Fi, sin túneles ni servicios locales, por lo que valida el acceso HTTPS y
   la independencia de la red de desarrollo. La repetición por red del operador se
-  traslada al Sprint 12.
+  traslada al Sprint 13.
 - La latencia caliente no anticipada p95 de 1.722,8 ms sigue como línea base de
-  optimización del Sprint 12. No bloquea RF-025 a RF-031 ni la aceptación funcional
+  optimización del Sprint 13. No bloquea RF-025 a RF-031 ni la aceptación funcional
   de playlists.
 - Resultado final local: backend con 146 pruebas correctas y 6 omitidas de forma
   explícita; Flutter con 53 pruebas correctas; formato, análisis, tipos, build,

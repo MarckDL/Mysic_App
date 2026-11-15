@@ -1,10 +1,10 @@
 # Mysic — Roadmap y planificación de sprints
 
-**Metodología:** Scrum adaptado  
-**Duración de Sprint:** 2 semanas  
-**Total inicial:** 14 sprints  
-**Horizonte:** 28 semanas  
-**Estado:** Planificación base
+- **Metodología:** Scrum adaptado
+- **Duración de Sprint:** 2 semanas
+- **Total planificado:** 15 sprints
+- **Horizonte:** 30 semanas
+- **Estado:** Planificación actualizada
 
 ## 1. Objetivo
 
@@ -354,7 +354,7 @@ permanece bajo el límite. El 12 de noviembre, 20 inicios anticipados alcanzaron
 0,588 s y 20 cambios de cola p95 0,865 s. Las 20 selecciones calientes no anticipadas
 quedaron en p50 1,601 s y p95 1,723 s; el PSS aumentó 36,3 MiB. Latencia anticipada
 y APK cumplen. La latencia no anticipada y la repetición de la matriz mediante la
-red móvil del operador se conservan como línea base y trabajo del Sprint 12; no
+red móvil del operador se conservan como línea base y trabajo del Sprint 13; no
 bloquean los requisitos funcionales RF-025 a RF-031 de playlists.
 
 El 12 de noviembre de 2026 se completó la aceptación física final mediante una red
@@ -363,7 +363,7 @@ aisladas, y se verificaron creación, cambio de privacidad, incorporación,
 reproducción, retiro, persistencia remota y eliminación. El backend público, las
 migraciones y las baterías automatizadas quedaron en verde. Sprint cerrado como
 `sprint-07-v0.7.0`. La prueba por red móvil del operador no se ejecutó por falta de
-datos y queda documentada para el Sprint 12.
+datos y queda documentada para el Sprint 13.
 
 ## 11. Sprint 07 — Playlists
 
@@ -394,7 +394,7 @@ Aceptación:
 - La información se recupera después de reinstalar la app.
 - El backend es accesible por HTTPS y la app funciona desde una red externa, sin
   depender de `adb reverse` ni de servicios locales. La matriz por red móvil del
-  operador se registra para el Sprint 12 cuando no haya datos disponibles.
+  operador se registra para el Sprint 13 cuando no haya datos disponibles.
 
 Etiqueta: `sprint-07-v0.7.0`
 
@@ -500,7 +500,40 @@ Aceptación:
 
 Versión verificada: 0.10.1. Etiqueta de cierre: `sprint-10-v0.10.1`.
 
-## 15. Sprint 11 — Estadísticas
+## 15. Sprint 11 — Rediseño de interfaz y navegación
+
+### Objetivo
+
+Facilitar el acceso al catálogo y a la biblioteca personal sin interrumpir la
+reproducción al cambiar de sección.
+
+### Historia US-015
+
+Como usuario, quiero encontrar mi música y mi actividad desde secciones claras y
+volver a mi búsqueda o al reproductor sin perder contexto.
+
+- Organizar Inicio, Buscar y Biblioteca como destinos de una barra inferior.
+- Mostrar las cinco escuchas recientes en Inicio y agrupar playlists, favoritos e
+  historial en Biblioteca.
+- Mover perfil, cierre de sesión y moderación autorizada a Cuenta.
+- Rediseñar el acceso con Google, limitar el saludo a dos líneas y permitir un
+  apodo opcional de hasta 24 caracteres desde Cuenta.
+- Integrar el minirreproductor y adaptar los estilos a los temas claro y oscuro.
+
+### Aceptación
+
+- Playlists, favoritos e historial se abren en dos toques desde una pestaña principal.
+- La búsqueda y la reproducción se conservan mientras se recorre la app.
+- Cambiar de cuenta descarta el estado privado y aplica los permisos de la nueva sesión.
+- El apodo se guarda por cuenta y actualiza el saludo. Quitar el apodo recupera
+  el nombre de Google.
+- Dos cuentas en Android verifican el flujo y los controles permanecen utilizables con texto ampliado.
+
+Etiqueta prevista: `sprint-11-v0.11.0`.
+
+Plan y seguimiento: [Sprint 11](17-plan-sprint-11.md).
+
+## 16. Sprint 12 — Estadísticas
 
 ### Objetivo
 
@@ -517,7 +550,12 @@ Tareas:
 - Calcular canciones más frecuentes.
 - Calcular artistas más frecuentes.
 - Crear filtros temporales.
-- Diseñar dashboard.
+- Diseñar el dashboard y abrirlo desde Biblioteca.
+- Añadir a Inicio «Tus canciones más escuchadas» y «Tus artistas más escuchados»
+  con las escuchas confirmadas de los últimos 30 días.
+- Añadir «Tendencias en Mysic», con el ranking agregado de canciones de los
+  últimos siete días. Mostrar resultados agregados sin identidades ni historiales
+  individuales.
 - Probar coherencia de cálculos.
 
 Aceptación:
@@ -525,10 +563,12 @@ Aceptación:
 - Métricas coinciden con historial.
 - Los filtros funcionan.
 - Ningún usuario accede a estadísticas privadas ajenas.
+- El ranking personal se calcula para la cuenta activa. Tendencias muestra el
+  mismo ranking agregado a todas las cuentas.
 
-Etiqueta: `sprint-11-v0.11.0`
+Etiqueta: `sprint-12-v0.12.0`
 
-## 16. Sprint 12 — Optimización
+## 17. Sprint 13 — Optimización
 
 ### Objetivo
 
@@ -556,9 +596,9 @@ Aceptación:
 - Fallos externos no bloquean toda la app.
 - Se cumplen objetivos medibles prioritarios.
 
-Etiqueta: `sprint-12-v0.12.0`
+Etiqueta: `sprint-13-v0.13.0`
 
-## 17. Sprint 13 — Calidad y pruebas
+## 18. Sprint 14 — Calidad y pruebas
 
 ### Objetivo
 
@@ -585,9 +625,9 @@ Aceptación:
 - No hay defectos bloqueantes conocidos.
 - Resultados de pruebas documentados.
 
-Etiqueta: `sprint-13-v0.13.0`
+Etiqueta: `sprint-14-v0.14.0`
 
-## 18. Sprint 14 — Entrega académica
+## 19. Sprint 15 — Entrega académica
 
 ### Objetivo
 
@@ -619,9 +659,9 @@ Aceptación:
 - Demo reproducible sin corte al primer minuto.
 - Documentación completa.
 
-Etiqueta: `sprint-14-v1.0.0`
+Etiqueta: `sprint-15-v1.0.0`
 
-## 19. Riesgos
+## 20. Riesgos
 
 | Riesgo                         | Impacto | Mitigación                                        |
 | ------------------------------ | ------- | ------------------------------------------------- |
@@ -633,7 +673,7 @@ Etiqueta: `sprint-14-v1.0.0`
 | Tiempo insuficiente            | Alto    | Priorización del backlog                          |
 | Problemas Android              | Medio   | Pruebas en dispositivo físico                     |
 
-## 20. Seguimiento
+## 21. Seguimiento
 
 Cada Sprint debe registrar:
 

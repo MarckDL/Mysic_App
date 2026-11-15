@@ -1,11 +1,15 @@
 import { Router, type RequestHandler } from 'express';
+import { z } from 'zod';
 import { requireAuth } from '../../../middleware/auth.middleware.js';
 import type {
   AuthIdentity,
   TokenVerifier,
 } from '../../auth/domain/token-verifier.js';
 import type { UserService } from '../application/user-service.js';
-import { UserConflictError } from '../domain/user-repository.js';
+import {
+  UserConflictError,
+  type UserProfile,
+} from '../domain/user-repository.js';
 
 // Los endpoints no aceptan parámetros que puedan seleccionar otra identidad.
 export const rejectProfileInput: RequestHandler = (request, response, next) => {
@@ -26,13 +30,12 @@ export const rejectProfileInput: RequestHandler = (request, response, next) => {
 };
 
 export function profileHandler(
-  service: UserService,
-  operation: 'sync' | 'me',
+  operation: (identity: AuthIdentity) => Promise<UserProfile | null>,
 ): RequestHandler {
   return async (_request, response) => {
     try {
       const identity = response.locals.auth as AuthIdentity;
-      const user = await service[operation](identity);
+      const user = await operation(identity);
       if (!user) {
         response.status(404).json({
           error: {
@@ -59,6 +62,19 @@ export function profileHandler(
   };
 }
 
+const nicknameInput = z.strictObject({
+  nickname: z
+    .string()
+    .trim()
+    .refine(
+      (value) =>
+        value.length > 0 &&
+        Array.from(value).length <= 24 &&
+        !/[\p{Cc}\p{Zl}\p{Zp}]/u.test(value),
+    )
+    .nullable(),
+});
+
 export function createUsersRouter(
   verifier: TokenVerifier,
   service: UserService,
@@ -72,7 +88,22 @@ export function createUsersRouter(
     '/me',
     requireAuth(verifier),
     rejectProfileInput,
-    profileHandler(service, 'me'),
+    profileHandler((identity) => service.me(identity)),
   );
+  router.patch('/me', requireAuth(verifier), (request, response, next) => {
+    const parsed = nicknameInput.safeParse(request.body);
+    if (!parsed.success || Object.keys(request.query).length > 0) {
+      response.status(400).json({
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'Usa un apodo de hasta 24 caracteres',
+        },
+      });
+      return;
+    }
+    return profileHandler((identity) =>
+      service.updateNickname(identity, parsed.data.nickname),
+    )(request, response, next);
+  });
   return router;
 }

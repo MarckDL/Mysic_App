@@ -1,33 +1,77 @@
-import '../../features/history/presentation/history_screen.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../features/authentication/domain/mysic_profile.dart';
+import '../../features/authentication/presentation/account_screen.dart';
+import '../../features/comments/presentation/moderation_screen.dart';
+import '../../features/favorites/presentation/favorites_screen.dart';
+import '../../features/history/data/history_client.dart';
+import '../../features/history/presentation/history_screen.dart';
+import '../../features/home/presentation/home_screen.dart';
+import '../../features/library/presentation/library_screen.dart';
 import '../../features/playback/application/playback_providers.dart';
+import '../../features/playback/presentation/demo_audio_screen.dart';
 import '../../features/playback/presentation/player_screen.dart';
 import '../../features/playback/presentation/player_widgets.dart';
 import '../../features/playback/presentation/youtube_audio_test_screen.dart';
-import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-import '../../features/playback/presentation/demo_audio_screen.dart';
-import '../../features/authentication/domain/mysic_profile.dart';
-import '../../features/home/presentation/home_screen.dart';
+import '../../features/playlists/presentation/playlist_detail_screen.dart';
+import '../../features/playlists/presentation/playlists_screen.dart';
 import '../../features/search/presentation/search_screen.dart';
 import '../../features/search/presentation/track_detail_screen.dart';
-import '../../features/playlists/presentation/playlists_screen.dart';
-import '../../features/playlists/presentation/playlist_detail_screen.dart';
-import '../../features/favorites/presentation/favorites_screen.dart';
-import '../../features/comments/presentation/moderation_screen.dart';
 
-// Solo se monta dentro de AuthGate tras verificar y sincronizar el perfil.
-// Al cerrar/cambiar cuenta se elimina el navegador y todo su estado.
+// AuthGate elimina el navegador y su estado al cerrar sesión o cambiar de UID.
 class CatalogNavigator extends ConsumerStatefulWidget {
   const CatalogNavigator({super.key, required this.profile});
+
   final MysicProfile profile;
+
   @override
   ConsumerState<CatalogNavigator> createState() => _CatalogNavigatorState();
 }
 
 class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
   late final GoRouter _router = GoRouter(
+    initialLocation: '/',
     routes: [
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, shell) => _CatalogShell(
+          shell: shell,
+          firebaseUid: widget.profile.firebaseUid,
+        ),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/',
+                builder: (context, state) => HomeScreen(
+                  profile: widget.profile,
+                  accountAction: const AccountAction(),
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/search',
+                builder: (context, state) =>
+                    const SearchScreen(accountAction: AccountAction()),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/library',
+                builder: (context, state) =>
+                    const LibraryScreen(accountAction: AccountAction()),
+              ),
+            ],
+          ),
+        ],
+      ),
       GoRoute(
         path: '/history',
         builder: (context, state) => const HistoryScreen(),
@@ -37,21 +81,19 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
         builder: (context, state) => const PlayerScreen(),
       ),
       GoRoute(
-        path: '/youtube-audio-test',
-        builder: (context, state) => const YoutubeAudioTestScreen(),
+        path: '/account',
+        builder: (context, state) => AccountScreen(profile: widget.profile),
       ),
-      GoRoute(
-        path: '/audio-test',
-        builder: (context, state) => const DemoAudioScreen(),
-      ),
-      GoRoute(
-        path: '/',
-        builder: (context, state) => HomeScreen(profile: widget.profile),
-      ),
-      GoRoute(
-        path: '/search',
-        builder: (context, state) => const SearchScreen(),
-      ),
+      if (kDebugMode) ...[
+        GoRoute(
+          path: '/youtube-audio-test',
+          builder: (context, state) => const YoutubeAudioTestScreen(),
+        ),
+        GoRoute(
+          path: '/audio-test',
+          builder: (context, state) => const DemoAudioScreen(),
+        ),
+      ],
       GoRoute(
         path: '/playlists',
         builder: (context, state) => const PlaylistsScreen(),
@@ -67,8 +109,9 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
       ),
       GoRoute(
         path: '/moderation/comments',
-        builder: (context, state) =>
-            ModerationScreen(canModerate: widget.profile.canModerateComments),
+        redirect: (context, state) =>
+            widget.profile.canModerateComments ? null : '/account',
+        builder: (context, state) => const ModerationScreen(canModerate: true),
       ),
       GoRoute(
         path: '/tracks/:id',
@@ -86,6 +129,7 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
       ),
     ),
   );
+
   @override
   void dispose() {
     _router.dispose();
@@ -93,21 +137,59 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    // Este listener mantiene una única instancia mientras la sesión está montada.
+  Widget build(BuildContext context) => Router.withConfig(config: _router);
+}
+
+class _CatalogShell extends ConsumerWidget {
+  const _CatalogShell({required this.shell, required this.firebaseUid});
+
+  final StatefulNavigationShell shell;
+  final String firebaseUid;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.watch(trackPlaybackControllerProvider);
-    return Column(
-      children: [
-        Expanded(child: Router.withConfig(config: _router)),
-        MiniPlayer(
-          controller: controller,
-          open: () {
-            if (_router.routeInformationProvider.value.uri.path != '/player') {
-              _router.push('/player');
-            }
-          },
-        ),
-      ],
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    return Scaffold(
+      body: shell,
+      bottomNavigationBar: keyboardOpen
+          ? null
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                MiniPlayer(
+                  controller: controller,
+                  open: () => context.push('/player'),
+                ),
+                NavigationBar(
+                  selectedIndex: shell.currentIndex,
+                  labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                  onDestinationSelected: (index) {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    if (index == 0 && shell.currentIndex != 0) {
+                      ref.invalidate(recentListeningProvider(firebaseUid));
+                    }
+                    shell.goBranch(index);
+                  },
+                  destinations: const [
+                    NavigationDestination(
+                      icon: Icon(Icons.home_outlined),
+                      selectedIcon: Icon(Icons.home),
+                      label: 'Inicio',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.search),
+                      label: 'Buscar',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.library_music_outlined),
+                      selectedIcon: Icon(Icons.library_music),
+                      label: 'Biblioteca',
+                    ),
+                  ],
+                ),
+              ],
+            ),
     );
   }
 }

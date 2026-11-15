@@ -57,7 +57,7 @@ Definir los requisitos funcionales y no funcionales de Mysic, una aplicación m�
 | RF-003 | Crear perfil automáticamente en PostgreSQL | Obligatoria |
 | RF-004 | Recuperar la sesión autenticada | Obligatoria |
 | RF-005 | Cerrar sesión | Obligatoria |
-| RF-006 | Consultar y actualizar datos editables del perfil | Obligatoria |
+| RF-006 | Consultar el perfil y editar o quitar el apodo privado | Obligatoria |
 | RF-007 | Eliminar cuenta y datos asociados | Obligatoria |
 | RF-008 | Impedir acceso a recursos privados de otros usuarios | Obligatoria |
 
@@ -153,6 +153,10 @@ el promedio es nulo y la cantidad es cero.
 | RF-053 | Mostrar artistas más escuchados | Obligatoria |
 | RF-054 | Filtrar estadísticas por período | Obligatoria |
 | RF-055 | Aislar estadísticas por usuario | Obligatoria |
+
+Sprint 12 incorpora a Inicio los rankings personales de los últimos 30 días y
+las tendencias agregadas de Mysic de los últimos siete días. Los conteos se
+basan en las sesiones confirmadas de historial.
 
 ### Módulo de letras
 

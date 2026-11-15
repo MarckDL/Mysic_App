@@ -25,21 +25,10 @@ class TrackDetailScreen extends ConsumerWidget {
             data: (track) => ListView(
               padding: const EdgeInsets.all(24),
               children: [
-                Center(child: TrackArtwork(url: track.thumbnailUrl, size: 200)),
-                const SizedBox(height: 24),
-                Text(
-                  track.title,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 8),
-                Text(track.artistName),
-                if (track.durationLabel != null)
-                  Text('Duración: ${track.durationLabel}'),
-                const SizedBox(height: 24),
-                const Text('Fuente: YouTube Music · Catálogo experimental'),
-                const SizedBox(height: 8),
-                const Text('Reproducción de audio experimental'),
-                const SizedBox(height: 12),
+                TrackHeading(track: track),
+                if (track.durationLabel case final duration?)
+                  Text(duration, textAlign: TextAlign.center),
+                const SizedBox(height: 16),
                 AddToPlaylistButton(trackId: track.id),
                 if (track.id == 'youtube:aqz-KE-bpKQ')
                   const Text(

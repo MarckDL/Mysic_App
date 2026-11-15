@@ -20,7 +20,8 @@ La tabla `users` almacena:
 - `firebase_uid`: UID único emitido por Firebase Authentication.
 - `google_id`: identificador del proveedor Google, cuando esté disponible y verificado.
 - `email`: correo asociado a la cuenta.
-- `display_name`: nombre mostrado.
+- `display_name`: nombre sincronizado desde Google.
+- `nickname`: apodo privado y opcional de Mysic, de hasta 24 caracteres.
 - `photo_url`: URL de fotografía.
 - `created_at`: fecha de creación.
 - `updated_at`: última actualización.
@@ -65,6 +66,7 @@ erDiagram
 | google_id | VARCHAR(255) | UNIQUE, NULL |
 | email | VARCHAR(320) | NULL |
 | display_name | VARCHAR(150) | NOT NULL |
+| nickname | VARCHAR(24) | NULL |
 | photo_url | TEXT | NULL |
 | created_at | TIMESTAMPTZ | NOT NULL |
 | updated_at | TIMESTAMPTZ | NOT NULL |

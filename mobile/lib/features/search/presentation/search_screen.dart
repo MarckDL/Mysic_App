@@ -9,7 +9,9 @@ import '../domain/catalog_track.dart';
 import 'catalog_widgets.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
-  const SearchScreen({super.key});
+  const SearchScreen({super.key, this.accountAction});
+
+  final Widget? accountAction;
   @override
   ConsumerState<SearchScreen> createState() => _SearchScreenState();
 }
@@ -67,14 +69,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ? null
         : ref.watch(searchResultsProvider(query));
     return Scaffold(
-      appBar: AppBar(title: const Text('Buscar música')),
+      appBar: AppBar(
+        title: const Text('Buscar música'),
+        actions: [?widget.accountAction],
+      ),
       body: SafeArea(
         child: Column(
           children: [
             Padding(
               padding: const EdgeInsets.all(16),
               child: TextField(
-                autofocus: true,
                 maxLength: 120,
                 onChanged: _changed,
                 decoration: const InputDecoration(
@@ -107,6 +111,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                 ),
                               )
                             : ListView.separated(
+                                key: PageStorageKey(query),
+                                keyboardDismissBehavior:
+                                    ScrollViewKeyboardDismissBehavior.onDrag,
                                 itemCount: tracks.length + 1,
                                 separatorBuilder: (context, index) =>
                                     const Divider(height: 1),
@@ -178,9 +185,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                         ),
                                       ],
                                     ),
-                                    onTap: () => context.push(
-                                      '/tracks/${Uri.encodeComponent(track.id)}',
-                                    ),
+                                    onTap: () {
+                                      FocusScope.of(context).unfocus();
+                                      context.push(
+                                        '/tracks/${Uri.encodeComponent(track.id)}',
+                                      );
+                                    },
                                   );
                                 },
                               );

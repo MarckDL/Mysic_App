@@ -67,6 +67,18 @@ export class PrismaUserRepository implements UserRepository {
     }
   }
 
+  async updateNickname(firebaseUid: string, nickname: string | null) {
+    try {
+      const [updated] = await getDatabase().user.updateManyAndReturn({
+        where: { firebaseUid },
+        data: { nickname },
+      });
+      return updated ?? null;
+    } catch (error) {
+      translateError(error);
+    }
+  }
+
   async findByFirebaseUid(firebaseUid: string) {
     try {
       return await getDatabase().user.findUnique({ where: { firebaseUid } });

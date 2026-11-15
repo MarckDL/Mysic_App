@@ -64,6 +64,7 @@ class MiniPlayer extends StatelessWidget {
         return Material(
           child: SafeArea(
             top: false,
+            bottom: false,
             child: ListTile(
               leading: const Icon(Icons.queue_music),
               title: Text('Cola (${controller.queue.length})'),
@@ -83,6 +84,7 @@ class MiniPlayer extends StatelessWidget {
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         child: SafeArea(
           top: false,
+          bottom: false,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

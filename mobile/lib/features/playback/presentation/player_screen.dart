@@ -23,15 +23,7 @@ class PlayerScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(20),
               children: [
                 if (track != null) ...[
-                  Center(
-                    child: TrackArtwork(url: track.thumbnailUrl, size: 180),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    track.title,
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  Text(track.artistName),
+                  TrackHeading(track: track),
                   const SizedBox(height: 16),
                   Slider(
                     value: duration == null || duration.inMilliseconds <= 0
@@ -52,6 +44,7 @@ class PlayerScreen extends ConsumerWidget {
                   ),
                   Text(
                     '${audioTime(controller.position)} / ${duration == null ? '—' : audioTime(duration)}',
+                    textAlign: TextAlign.center,
                   ),
                   if (controller.phase == TrackAudioPhase.loading)
                     const Text('Preparando audio…'),

@@ -10,13 +10,26 @@ class MysicApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Mysic',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
+      theme: _theme(Brightness.light),
+      darkTheme: _theme(Brightness.dark),
       home: firebaseReady ? const AuthGate() : const _SetupPendingScreen(),
     );
   }
+
+  ThemeData _theme(Brightness brightness) => ThemeData(
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: Colors.deepPurple,
+      brightness: brightness,
+    ),
+    useMaterial3: true,
+    inputDecorationTheme: const InputDecorationThemeData(
+      border: OutlineInputBorder(),
+      filled: true,
+    ),
+    listTileTheme: const ListTileThemeData(
+      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+    ),
+  );
 }
 
 class _SetupPendingScreen extends StatelessWidget {

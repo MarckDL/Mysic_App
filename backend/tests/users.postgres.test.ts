@@ -58,6 +58,26 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
         (await repository.findByFirebaseUid(profile.firebaseUid))?.displayName,
       ).toBe('Cuenta actualizada');
     }, 20_000);
+    it('conserva el apodo en una nueva sincronización y lo puede quitar', async () => {
+      const firebaseUid = `${prefix}-nickname`;
+      expect(await repository.updateNickname(firebaseUid, 'Melo')).toBeNull();
+      await repository.sync({ firebaseUid, displayName: 'Ana' });
+      expect(
+        await repository.updateNickname(firebaseUid, 'Melo'),
+      ).toMatchObject({
+        displayName: 'Ana',
+        nickname: 'Melo',
+      });
+      expect(
+        await repository.sync({ firebaseUid, displayName: 'Ana Actualizada' }),
+      ).toMatchObject({
+        displayName: 'Ana Actualizada',
+        nickname: 'Melo',
+      });
+      expect(
+        (await repository.updateNickname(firebaseUid, null))?.nickname,
+      ).toBeNull();
+    });
     it('rechaza google_id duplicado sin fusionar usuarios', async () => {
       await repository.sync({
         firebaseUid: `${prefix}-c`,

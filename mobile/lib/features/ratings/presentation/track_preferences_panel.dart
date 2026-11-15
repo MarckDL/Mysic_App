@@ -70,12 +70,11 @@ class TrackPreferencesPanel extends ConsumerWidget {
               ),
               const Divider(),
               const Text('Tu calificación'),
-              Row(
+              Wrap(
                 children: List.generate(5, (index) {
                   final score = index + 1;
                   return IconButton(
                     tooltip: '$score ${score == 1 ? 'estrella' : 'estrellas'}',
-                    visualDensity: VisualDensity.compact,
                     onPressed: mutating
                         ? null
                         : () async {
