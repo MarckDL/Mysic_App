@@ -301,3 +301,9 @@ Cada pull request o conjunto de cambios debe indicar:
 - Pruebas realizadas.
 - Resultado de validación.
 - Riesgos o limitaciones pendientes.
+
+## Reglas propuestas implementadas para RF-047 a RF-050
+
+Umbral: mínimo entre 30 segundos y 50 % de duración conocida; si se desconoce,
+30 segundos. Solo tiempo en reproducción efectiva, sin pausas, buffering ni seek.
+Ver [Sprint 10](16-plan-sprint-10.md) para restricciones y aceptación pendiente.

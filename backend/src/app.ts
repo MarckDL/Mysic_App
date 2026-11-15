@@ -1,3 +1,6 @@
+import { createHistoryRouter } from './modules/history/presentation/history.routes.js';
+import { HistoryService } from './modules/history/application/history-service.js';
+import { PrismaHistoryRepository } from './infrastructure/database/prisma-history-repository.js';
 import {
   YoutubeAudioStream,
   type AudioStreamTransport,
@@ -112,6 +115,13 @@ export function createApp(
           options.playlistRepository ?? new PrismaPlaylistRepository(),
           catalog,
         ),
+    ),
+  );
+  app.use(
+    '/api/v1/history',
+    createHistoryRouter(
+      verifier,
+      new HistoryService(new PrismaHistoryRepository(), catalog),
     ),
   );
   const favorites =

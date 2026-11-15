@@ -648,3 +648,8 @@ Cada Sprint debe registrar:
 - Enlace a la versión en GitHub.
 
 El Sprint no se considera cerrado hasta completar la validación y el procedimiento de versionado.
+
+## Seguimiento Sprint 10
+
+Implementación local en validación. Ver [plan y pendientes](16-plan-sprint-10.md).
+Sprint todavía abierto, sin despliegue ni etiqueta de cierre.

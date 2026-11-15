@@ -1,3 +1,4 @@
+import '../../features/history/presentation/history_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/playback/application/playback_providers.dart';
 import '../../features/playback/presentation/player_screen.dart';
@@ -27,6 +28,10 @@ class CatalogNavigator extends ConsumerStatefulWidget {
 class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
   late final GoRouter _router = GoRouter(
     routes: [
+      GoRoute(
+        path: '/history',
+        builder: (context, state) => const HistoryScreen(),
+      ),
       GoRoute(
         path: '/player',
         builder: (context, state) => const PlayerScreen(),

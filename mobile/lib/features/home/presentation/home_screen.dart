@@ -37,6 +37,11 @@ class HomeScreen extends ConsumerWidget {
                 const Text('Tu sesión con Google está verificada.'),
                 const SizedBox(height: 12),
                 const Text('Tu perfil está guardado en Mysic.'),
+                TextButton.icon(
+                  onPressed: () => context.push('/history'),
+                  icon: const Icon(Icons.history),
+                  label: const Text('Mi historial'),
+                ),
                 if (profile.canModerateComments)
                   TextButton.icon(
                     onPressed: () => context.push('/moderation/comments'),

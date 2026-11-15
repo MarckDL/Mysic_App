@@ -1,3 +1,4 @@
+import '../../history/application/listening_tracker.dart';
 import '../data/mysic_audio_handler.dart';
 import '../data/just_audio_track_engine.dart';
 import '../domain/track_audio_engine.dart';
@@ -68,6 +69,11 @@ final trackPlaybackControllerProvider =
         auth,
         ref.watch(trackAudioEngineFactoryProvider)(),
         uid,
+        history: ListeningTracker(
+          AuthenticatedApiClient(auth, baseUrl: ApiConfig.baseUrl),
+          () => auth.currentUser?.uid == uid,
+          uid,
+        ),
       );
       final handler = ref.watch(mediaHandlerProvider);
       handler?.bind(controller);

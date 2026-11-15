@@ -11,20 +11,21 @@ datasource db {
 }
 
 model User {
-  id                     String          @id @default(uuid()) @db.Uuid
-  firebaseUid            String          @unique @map("firebase_uid") @db.VarChar(128)
-  googleId               String?         @unique @map("google_id") @db.VarChar(255)
-  email                  String?         @db.VarChar(320)
-  displayName            String          @map("display_name") @db.VarChar(150)
-  photoUrl               String?         @map("photo_url") @db.Text
-  createdAt              DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt              DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                     String             @id @default(uuid()) @db.Uuid
+  firebaseUid            String             @unique @map("firebase_uid") @db.VarChar(128)
+  googleId               String?            @unique @map("google_id") @db.VarChar(255)
+  email                  String?            @db.VarChar(320)
+  displayName            String             @map("display_name") @db.VarChar(150)
+  photoUrl               String?            @map("photo_url") @db.Text
+  createdAt              DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  history                ListeningHistory[]
   playlists              Playlist[]
   favorites              Favorite[]
   ratings                Rating[]
   comments               Comment[]
-  commentReports         CommentReport[] @relation("Reporter")
-  resolvedCommentReports CommentReport[] @relation("Moderator")
+  commentReports         CommentReport[]    @relation("Reporter")
+  resolvedCommentReports CommentReport[]    @relation("Moderator")
 
   @@map("users")
   @@schema("mysic")
@@ -39,14 +40,15 @@ enum PlaylistVisibility {
 }
 
 model Track {
-  id                String          @id @default(uuid()) @db.Uuid
-  source            String          @db.VarChar(50)
-  sourceId          String          @map("source_id") @db.VarChar(255)
-  title             String          @db.VarChar(500)
-  artistName        String          @map("artist_name") @db.VarChar(255)
-  durationSeconds   Int?            @map("duration_seconds")
-  thumbnailUrl      String?         @map("thumbnail_url") @db.Text
-  metadataUpdatedAt DateTime        @default(now()) @map("metadata_updated_at") @db.Timestamptz(6)
+  id                String             @id @default(uuid()) @db.Uuid
+  source            String             @db.VarChar(50)
+  sourceId          String             @map("source_id") @db.VarChar(255)
+  title             String             @db.VarChar(500)
+  artistName        String             @map("artist_name") @db.VarChar(255)
+  durationSeconds   Int?               @map("duration_seconds")
+  thumbnailUrl      String?            @map("thumbnail_url") @db.Text
+  metadataUpdatedAt DateTime           @default(now()) @map("metadata_updated_at") @db.Timestamptz(6)
+  history           ListeningHistory[]
   playlistTracks    PlaylistTrack[]
   favorites         Favorite[]
   ratings           Rating[]
@@ -181,5 +183,22 @@ model CommentReport {
   @@index([reporterId])
   @@index([moderatorId])
   @@map("comment_reports")
+  @@schema("mysic")
+}
+
+model ListeningHistory {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  trackId           String   @map("track_id") @db.Uuid
+  playbackSessionId String   @unique @map("playback_session_id") @db.Uuid
+  startedAt         DateTime @map("started_at") @db.Timestamptz(3)
+  listenedMs        BigInt   @map("listened_ms")
+  completed         Boolean  @default(false)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track             Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
+
+  @@index([userId, startedAt, id])
+  @@index([userId, trackId])
+  @@map("listening_history")
   @@schema("mysic")
 }

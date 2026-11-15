@@ -1,3 +1,4 @@
+import '../../history/application/listening_tracker.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../../authentication/domain/auth_repository.dart';
@@ -5,7 +6,7 @@ import '../../search/domain/catalog_track.dart';
 import '../domain/track_audio_engine.dart';
 
 class TrackPlaybackController extends ChangeNotifier {
-  TrackPlaybackController(this._auth, this._engine, this._uid) {
+  TrackPlaybackController(this._auth, this._engine, this._uid, {this.history}) {
     unawaited(_engine.warmUp().catchError((Object _) {}));
     _subscription = _engine.states.listen((value) {
       if (!_active) return;
@@ -31,6 +32,7 @@ class TrackPlaybackController extends ChangeNotifier {
     _durations = _engine.durations.listen((value) {
       if (_active && _eventsEnabled && value != null) {
         duration = value;
+        history?.duration(value);
         notifyListeners();
       }
     });
@@ -38,6 +40,7 @@ class TrackPlaybackController extends ChangeNotifier {
       if (!_disposed && user?.uid != _uid) unawaited(clear());
     });
   }
+  final ListeningTracker? history;
   final AuthRepository _auth;
   final TrackAudioEngine _engine;
   final String _uid;
@@ -63,6 +66,7 @@ class TrackPlaybackController extends ChangeNotifier {
   Future<void> _preparation = Future.value();
   bool _valid(int generation) => _active && generation == _generation;
   void _set(TrackAudioPhase value) {
+    history?.phase(value);
     phase = value;
     if (!_disposed) notifyListeners();
   }
@@ -126,6 +130,7 @@ class TrackPlaybackController extends ChangeNotifier {
         initialIndex >= tracks.length) {
       return;
     }
+    history?.finish();
     _queue
       ..clear()
       ..addAll(tracks);
@@ -134,6 +139,7 @@ class TrackPlaybackController extends ChangeNotifier {
 
   Future<void> jump(int target) async {
     if (!_active || target < 0 || target >= _queue.length) return;
+    history?.begin(_queue[target]);
     _engine.markPlaybackRequested();
     final generation = ++_generation;
     _eventsEnabled = false;
@@ -166,6 +172,7 @@ class TrackPlaybackController extends ChangeNotifier {
       _eventsEnabled = true;
       final actualDuration = _engine.duration;
       if (actualDuration != null && actualDuration > Duration.zero) {
+        history?.duration(actualDuration);
         duration = actualDuration;
       }
       await _engine.play();
@@ -236,7 +243,9 @@ class TrackPlaybackController extends ChangeNotifier {
       return;
     }
     final bounded = target > limit ? limit : target;
+    history?.phase(TrackAudioPhase.paused);
     await _engine.seek(bounded);
+    history?.phase(phase);
     if (_active) {
       position = bounded;
       notifyListeners();
@@ -244,6 +253,7 @@ class TrackPlaybackController extends ChangeNotifier {
   }
 
   Future<void> stop() async {
+    history?.finish();
     _engine.cancelPrefetch();
     ++_generation;
     _eventsEnabled = false;
@@ -271,6 +281,7 @@ class TrackPlaybackController extends ChangeNotifier {
   @override
   void dispose() {
     if (_disposed) return;
+    history?.dispose();
     _disposed = true;
     _engine.cancelPrefetch();
     ++_generation;

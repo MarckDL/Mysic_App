@@ -614,3 +614,9 @@ y la cancela al cambiar o vaciarse. Las métricas no contienen IDs, URLs ni toke
 Referencias de implementación: https://pub.dev/packages/audio_service y su ejemplo
 Android. Notificación, bloqueo de pantalla, cola, controles y logout se verificaron
 en el dispositivo físico `23117RA68G` durante el cierre del Sprint 6.
+
+## Incremento Sprint 10 en validación
+
+Historial privado mediante HistoryService, repositorio Prisma y ListeningTracker.
+La cola Android acotada usa preferencias privadas por cuenta mediante MethodChannel.
+Contrato, decisiones y límites en [Sprint 10](16-plan-sprint-10.md).

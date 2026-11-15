@@ -383,3 +383,10 @@ exclusivamente mediante Express.
 La restricción `(playlist_id, position)` evita órdenes ambiguos. Añadir, retirar y
 reordenar ocurrencias usa transacciones serializables, y el borrado de una playlist
 elimina sus ocurrencias en cascada sin borrar el catálogo normalizado.
+
+## Implementación de historial — Sprint 10
+
+ListeningHistory implementa el modelo previsto con UUID de sesión único,
+CHECK de listened_ms entre 0 y 86400000, RLS y permisos públicos revocados.
+Las actualizaciones atómicas conservan máximo tiempo acumulado y completitud.
+La migración versionada requiere validación PostgreSQL antes del despliegue.
