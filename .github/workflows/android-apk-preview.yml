@@ -7,7 +7,7 @@ on:
       - feat/waveform-signal-analysis
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   android-preview:
@@ -27,7 +27,16 @@ jobs:
           flutter-version: 3.47.8
           channel: stable
       - run: flutter pub get --enforce-lockfile
-      - run: dart format lib test
+      - name: Format Dart and synchronize feature branch
+        run: |
+          dart format lib test
+          if ! git diff --quiet -- lib test; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add lib test
+            git commit -m "style(flutter): apply Dart formatter"
+            git push origin HEAD:feat/waveform-signal-analysis
+          fi
       - run: flutter analyze
       - run: flutter test --no-enable-impeller
       # Debug preview only. A production APK needs secure signing, Firebase
