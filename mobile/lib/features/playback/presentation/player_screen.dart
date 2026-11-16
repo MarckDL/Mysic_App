@@ -12,6 +12,7 @@ import '../application/playback_providers.dart';
 import '../application/track_playback_controller.dart';
 import '../domain/track_audio_engine.dart';
 import 'player_widgets.dart';
+import 'waveform_timeline.dart';
 
 const _playerBackground = Color(0xFF15131B);
 const _playerSurface = Color(0xFF282431);
@@ -146,7 +147,6 @@ class _NowPlaying extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final duration = controller.duration;
-    final length = duration?.inMilliseconds ?? 0;
     final playing = controller.phase == TrackAudioPhase.playing;
     final loading = controller.phase == TrackAudioPhase.loading;
     final interactions = ref
@@ -215,16 +215,11 @@ class _NowPlaying extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 12),
-        Slider(
-          value: controller.position.inMilliseconds.clamp(0, length).toDouble(),
-          max: length > 0 ? length.toDouble() : 1,
-          onChanged: length <= 0
-              ? null
-              : (value) => unawaited(
-                  controller.seek(Duration(milliseconds: value.round())),
-                ),
-          semanticFormatterCallback: (value) =>
-              audioTime(Duration(milliseconds: value.round())),
+        WaveformTimeline(
+          key: ValueKey(track.id),
+          position: controller.position,
+          duration: duration,
+          onSeek: (value) => unawaited(controller.seek(value)),
         ),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
