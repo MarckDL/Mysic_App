@@ -63,14 +63,38 @@ class _WaveformTimelineState extends State<WaveformTimeline> {
           value: '${(progress * 100).round()} %',
           enabled: enabled,
           slider: true,
-          onIncrease: enabled ? () => widget.onSeek(Duration(milliseconds: math.min(widget.position.inMilliseconds + 5000, widget.duration!.inMilliseconds))) : null,
-          onDecrease: enabled ? () => widget.onSeek(Duration(milliseconds: math.max(widget.position.inMilliseconds - 5000, 0))) : null,
+          onIncrease: enabled
+              ? () => widget.onSeek(
+                  Duration(
+                    milliseconds: math.min(
+                      widget.position.inMilliseconds + 5000,
+                      widget.duration!.inMilliseconds,
+                    ),
+                  ),
+                )
+              : null,
+          onDecrease: enabled
+              ? () => widget.onSeek(
+                  Duration(
+                    milliseconds: math.max(
+                      widget.position.inMilliseconds - 5000,
+                      0,
+                    ),
+                  ),
+                )
+              : null,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTapDown: enabled ? (details) => _update(details.localPosition, width) : null,
+            onTapDown: enabled
+                ? (details) => _update(details.localPosition, width)
+                : null,
             onTapUp: enabled ? (_) => _commit() : null,
-            onHorizontalDragStart: enabled ? (details) => _update(details.localPosition, width) : null,
-            onHorizontalDragUpdate: enabled ? (details) => _update(details.localPosition, width) : null,
+            onHorizontalDragStart: enabled
+                ? (details) => _update(details.localPosition, width)
+                : null,
+            onHorizontalDragUpdate: enabled
+                ? (details) => _update(details.localPosition, width)
+                : null,
             onHorizontalDragEnd: enabled ? (_) => _commit() : null,
             onHorizontalDragCancel: () => setState(() => _dragProgress = null),
             child: SizedBox(
@@ -93,7 +117,12 @@ class _WaveformTimelineState extends State<WaveformTimeline> {
 }
 
 class _WaveformPainter extends CustomPainter {
-  const _WaveformPainter({required this.peaks, required this.progress, required this.activeColor, required this.inactiveColor});
+  const _WaveformPainter({
+    required this.peaks,
+    required this.progress,
+    required this.activeColor,
+    required this.inactiveColor,
+  });
 
   final List<double> peaks;
   final double progress;
@@ -107,17 +136,34 @@ class _WaveformPainter extends CustomPainter {
     final step = size.width / count;
     // Unknown peak values are flat, not fabricated amplitudes.
     for (var index = 0; index < count; index++) {
-      final peak = peaks.isEmpty ? 0.0 : peaks[math.min(peaks.length - 1, (index * peaks.length / count).floor())].clamp(0.0, 1.0);
+      final peak = peaks.isEmpty
+          ? 0.0
+          : peaks[math.min(
+                  peaks.length - 1,
+                  (index * peaks.length / count).floor(),
+                )]
+                .clamp(0.0, 1.0);
       final height = 2.0 + peak * 16.0;
       final x = index * step + (step - barWidth) / 2;
       final y = (size.height - height) / 2;
-      final paint = Paint()..color = (index + 0.5) / count <= progress ? activeColor : inactiveColor;
-      canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x, y, barWidth, height), const Radius.circular(1)), paint);
+      final paint = Paint()
+        ..color = (index + 0.5) / count <= progress
+            ? activeColor
+            : inactiveColor;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x, y, barWidth, height),
+          const Radius.circular(1),
+        ),
+        paint,
+      );
     }
   }
 
   @override
   bool shouldRepaint(covariant _WaveformPainter oldDelegate) =>
-      oldDelegate.progress != progress || oldDelegate.peaks != peaks ||
-      oldDelegate.activeColor != activeColor || oldDelegate.inactiveColor != inactiveColor;
+      oldDelegate.progress != progress ||
+      oldDelegate.peaks != peaks ||
+      oldDelegate.activeColor != activeColor ||
+      oldDelegate.inactiveColor != inactiveColor;
 }
