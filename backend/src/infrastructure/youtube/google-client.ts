@@ -1,3 +1,4 @@
+import { YoutubeDataLibraryProvider } from './youtube-data-library-provider.js';
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 import { z } from 'zod';
 import { digest } from './secrets.js';
@@ -21,15 +22,6 @@ const tokenSchema = z.object({
   scope: z.string().optional(),
   refresh_token: z.string().min(1).optional(),
   id_token: z.string().optional(),
-});
-const channels = z.object({
-  nextPageToken: z.string().optional(),
-  items: z.array(
-    z.object({
-      id: z.string().min(1),
-      snippet: z.object({ title: z.string() }),
-    }),
-  ),
 });
 type TokenResponse = z.infer<typeof tokenSchema>;
 function tokens(data: TokenResponse): Tokens {
@@ -134,27 +126,24 @@ export class OfficialGoogleOAuth implements GoogleOAuthClient {
     }
   }
   async channel(access: string) {
-    const res = await this.request(
-      'https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true&maxResults=2&fields=nextPageToken,items(id,snippet(title))',
-      { headers: { Authorization: 'Bearer ' + access } },
-    );
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      const reason = body?.error?.errors?.[0]?.reason;
-      if (reason === 'quotaExceeded' || res.status === 429)
-        throw new LinkError(429, 'YOUTUBE_QUOTA');
-      if (reason === 'insufficientPermissions')
+    const library = new YoutubeDataLibraryProvider(this.transport);
+    try {
+      const result = await library.listChannels({
+        access,
+        signal: AbortSignal.timeout(7000),
+      });
+      const first = result.items[0];
+      if (!first) throw new LinkError(409, 'NO_CHANNEL');
+      if (result.items.length !== 1 || result.nextPageToken)
+        throw new LinkError(409, 'SELECT_CHANNEL_IN_GOOGLE');
+      return first;
+    } catch (err) {
+      if (err instanceof LinkError && err.code === 'YOUTUBE_ACCESS_REJECTED')
+        throw new LinkError(409, 'INVALID_GRANT');
+      if (err instanceof LinkError && err.code === 'MISSING_SCOPE')
         throw new LinkError(409, 'MISSING_SCOPE');
-      if (res.status === 401) throw new LinkError(409, 'INVALID_GRANT');
-      throw new LinkError(503, 'GOOGLE_UNAVAILABLE');
+      throw err;
     }
-    const result = channels.safeParse(await res.json().catch(() => null));
-    if (!result.success) throw new LinkError(503, 'GOOGLE_INVALID_RESPONSE');
-    const first = result.data.items[0];
-    if (!first) throw new LinkError(409, 'NO_CHANNEL');
-    if (result.data.items.length !== 1 || result.data.nextPageToken)
-      throw new LinkError(409, 'SELECT_CHANNEL_IN_GOOGLE');
-    return { id: first.id, title: first.snippet.title };
   }
   async refresh(token: string) {
     return tokens(

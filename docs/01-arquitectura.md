@@ -686,3 +686,5 @@ Los contratos, límites y aceptación figuran en
 ### Vinculación privada de YouTube
 
 Firebase identifica al propietario de Mysic. El módulo de integración autoriza por separado al canal de YouTube mediante OAuth web. Sus credenciales pertenecen al backend. Catálogo y reproducción conservan MusicProvider.
+
+El puerto `ConnectedLibraryProvider` lee YouTube Data API v3 con el permiso del vínculo. El backend comprueba la propiedad de cada lista solicitada por ID y entrega páginas bajo demanda. Los contratos de consulta y recuperación de cursores figuran en [la guía de la biblioteca](youtube-library.md).
