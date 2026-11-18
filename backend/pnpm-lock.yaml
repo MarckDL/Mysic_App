@@ -26,6 +26,9 @@ importers:
       googlevideo:
         specifier: 5.0.1
         version: 5.0.1
+      jose:
+        specifier: 6.2.13
+        version: 6.2.13
       jsdom:
         specifier: 26.1.0
         version: 26.1.0

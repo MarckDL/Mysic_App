@@ -682,3 +682,7 @@ por fila. El archivo y las cookies de Google permanecen fuera de la API.
 La importación se integra con el modelo de playlists y el reproductor existentes.
 Los contratos, límites y aceptación figuran en
 [el seguimiento del Sprint 14](18-sprint-14-importacion-youtube-music.md).
+
+### Vinculación privada de YouTube
+
+Firebase identifica al propietario de Mysic. El módulo de integración autoriza por separado al canal de YouTube mediante OAuth web. Sus credenciales pertenecen al backend. Catálogo y reproducción conservan MusicProvider.

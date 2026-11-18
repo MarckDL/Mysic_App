@@ -184,7 +184,7 @@ ni registrar URLs firmadas y debe limitar concurrencia, caché y destinos de red
 
 ### R-006 — Proveedores externos
 
-Toda integración musical debe implementar la interfaz `MusicProvider`.
+El catálogo y la reproducción implementan `MusicProvider`. La biblioteca privada usa autorización independiente con `GoogleOAuthClient` y un adaptador de lectura separado para YouTube Data API.
 
 No acoplar los módulos de dominio a las respuestas internas de youtubei.js.
 

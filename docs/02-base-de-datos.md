@@ -415,3 +415,9 @@ existen. Express comprueba la propiedad mediante Firebase y el UUID interno.
 La migración se validó en PostgreSQL temporal y se aplicó en Supabase el
 18 de noviembre de 2026 durante el despliegue de importaciones. Prisma confirmó
 las ocho migraciones al día después del despliegue.
+
+## Vinculación oficial de YouTube
+
+La migración `20261118010000_youtube_oauth` añade tres tablas privadas con RLS. El intento y el vínculo se asocian a `users.id`. La tarea de revocación conserva su propio identificador de propietario y sobre cifrado, sin FK que pueda borrarla durante un reintento. El alcance de estas tablas es exclusivamente YouTube. La biblioteca sigue consultándose al proveedor.
+
+El contrato, ciclo de vida de las credenciales y requisitos de mantenimiento se describen en [Vinculación OAuth de YouTube](youtube-oauth.md).

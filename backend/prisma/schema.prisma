@@ -11,23 +11,25 @@ datasource db {
 }
 
 model User {
-  id                     String             @id @default(uuid()) @db.Uuid
-  firebaseUid            String             @unique @map("firebase_uid") @db.VarChar(128)
-  googleId               String?            @unique @map("google_id") @db.VarChar(255)
-  email                  String?            @db.VarChar(320)
-  displayName            String             @map("display_name") @db.VarChar(150)
-  nickname               String?            @db.VarChar(24)
-  photoUrl               String?            @map("photo_url") @db.Text
-  createdAt              DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt              DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                     String                     @id @default(uuid()) @db.Uuid
+  firebaseUid            String                     @unique @map("firebase_uid") @db.VarChar(128)
+  googleId               String?                    @unique @map("google_id") @db.VarChar(255)
+  email                  String?                    @db.VarChar(320)
+  displayName            String                     @map("display_name") @db.VarChar(150)
+  nickname               String?                    @db.VarChar(24)
+  photoUrl               String?                    @map("photo_url") @db.Text
+  createdAt              DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  youtubeConnection      ExternalMusicConnection?
+  youtubeAttempts        ExternalMusicLinkAttempt[]
   imports                MusicImport[]
   history                ListeningHistory[]
   playlists              Playlist[]
   favorites              Favorite[]
   ratings                Rating[]
   comments               Comment[]
-  commentReports         CommentReport[]    @relation("Reporter")
-  resolvedCommentReports CommentReport[]    @relation("Moderator")
+  commentReports         CommentReport[]            @relation("Reporter")
+  resolvedCommentReports CommentReport[]            @relation("Moderator")
 
   @@map("users")
   @@schema("mysic")
@@ -224,5 +226,69 @@ model ListeningHistory {
   @@index([userId, startedAt, id])
   @@index([userId, trackId])
   @@map("listening_history")
+  @@schema("mysic")
+}
+
+model ExternalMusicLinkAttempt {
+  id           String   @id @db.Uuid
+  userId       String   @db.Uuid
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requestKey   String   @db.Uuid
+  status       String
+  reason       String?
+  expiresAt    DateTime @db.Timestamptz(3)
+  launchHash   String?  @unique
+  launchBox    String?
+  stateHash    String?  @unique
+  cookieHash   String?
+  nonceHash    String?
+  verifierBox  String?
+  returnHash   String?
+  forceConsent Boolean  @default(false)
+  subject      String?
+  channelId    String?
+  channelTitle String?
+  refreshBox   String?
+  scopes       String?
+
+  @@unique([userId, requestKey])
+  @@index([expiresAt])
+  @@index([subject])
+  @@map("external_music_link_attempts")
+  @@schema("mysic")
+}
+
+model ExternalMusicConnection {
+  userId       String    @id @db.Uuid
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject      String    @unique
+  channelId    String
+  channelTitle String
+  status       String
+  generation   String    @unique @db.Uuid
+  refreshBox   String?
+  scopes       String
+  connectedAt  DateTime  @default(now()) @db.Timestamptz(3)
+  checkedAt    DateTime  @default(now()) @db.Timestamptz(3)
+  lease        String?   @db.Uuid
+  leaseUntil   DateTime? @db.Timestamptz(3)
+
+  @@index([status, checkedAt])
+  @@map("external_music_connections")
+  @@schema("mysic")
+}
+
+model ExternalMusicRevocationJob {
+  id         String   @id @db.Uuid
+  subject    String   @unique
+  ownerId    String   @db.Uuid
+  refreshBox String
+  tries      Int      @default(0)
+  nextAt     DateTime @default(now()) @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([nextAt])
+  @@index([ownerId])
+  @@map("external_music_revocations")
   @@schema("mysic")
 }

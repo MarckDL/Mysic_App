@@ -1,3 +1,7 @@
+import { createYoutubeService } from './infrastructure/youtube/service.js';
+import { root as youtubeRoot } from './modules/integrations/youtube/domain.js';
+import { youtubeRouter } from './modules/integrations/youtube/routes.js';
+import type { YoutubeLinkService } from './modules/integrations/youtube/link-service.js';
 import { createImportRouter } from './modules/imports/presentation/import.routes.js';
 import { ImportService } from './modules/imports/application/import-service.js';
 import { PrismaImportRepository } from './infrastructure/database/prisma-import-repository.js';
@@ -54,6 +58,7 @@ import { createCommentRouter } from './modules/comments/presentation/comment.rou
 export function createApp(
   options: {
     tokenVerifier?: TokenVerifier;
+    youtubeLinkService?: YoutubeLinkService;
     importRepository?: ImportRepository;
     userRepository?: UserRepository;
     musicProvider?: MusicProvider;
@@ -80,6 +85,13 @@ export function createApp(
   });
 
   const verifier = options.tokenVerifier ?? createFirebaseTokenVerifier();
+  app.use(
+    youtubeRoot,
+    youtubeRouter(
+      verifier,
+      options.youtubeLinkService ?? createYoutubeService(),
+    ),
+  );
   const users = new UserService(
     options.userRepository ?? new PrismaUserRepository(),
   );
