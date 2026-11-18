@@ -130,6 +130,13 @@ export function youtubeRouter(
       ),
     );
   });
+  router.delete('/link-attempts/:id', async (req, res) => {
+    await configured().cancel(
+      res.locals.youtubeOwner,
+      z.uuid().parse(req.params.id),
+    );
+    res.status(204).end();
+  });
   router.post('/link-attempts/:id/confirm', async (req, res) => {
     res.json(
       await configured().confirm(

@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import '../../features/authentication/domain/mysic_profile.dart';
 import '../../features/authentication/presentation/account_screen.dart';
 import '../../features/comments/presentation/moderation_screen.dart';
+import '../../features/connected_library/application/connected_host.dart';
+import '../../features/connected_library/presentation/connected_screen.dart';
 import '../../features/favorites/presentation/favorites_screen.dart';
 import '../../features/history/data/history_client.dart';
 import '../../features/history/presentation/history_screen.dart';
@@ -33,7 +35,9 @@ class CatalogNavigator extends ConsumerStatefulWidget {
 }
 
 class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
+  final _rootKey = GlobalKey<NavigatorState>();
   late final GoRouter _router = GoRouter(
+    navigatorKey: _rootKey,
     initialLocation: '/',
     routes: [
       StatefulShellRoute.indexedStack(
@@ -68,6 +72,23 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
                 path: '/library',
                 builder: (context, state) =>
                     const LibraryScreen(accountAction: AccountAction()),
+                routes: [
+                  GoRoute(
+                    path: 'youtube',
+                    parentNavigatorKey: _rootKey,
+                    builder: (context, state) => const ConnectedScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'playlist/:id',
+                        parentNavigatorKey: _rootKey,
+                        builder: (context, state) => ConnectedScreen(
+                          playlistId: state.pathParameters['id'],
+                          title: state.extra as String?,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),
@@ -142,7 +163,23 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
   }
 
   @override
-  Widget build(BuildContext context) => Router.withConfig(config: _router);
+  Widget build(BuildContext context) {
+    final router = Router.withConfig(config: _router);
+    if (!ref.watch(youtubePilotProvider)) return router;
+    return ConnectedHost(
+      controller: ref.watch(
+        connectedControllerProvider(widget.profile.firebaseUid),
+      ),
+      onReturn: () {
+        const path = '/library/youtube';
+        if (_router.routerDelegate.currentConfiguration.isEmpty ||
+            _router.state.matchedLocation != path) {
+          _router.go(path);
+        }
+      },
+      child: router,
+    );
+  }
 }
 
 class _CatalogShell extends ConsumerWidget {

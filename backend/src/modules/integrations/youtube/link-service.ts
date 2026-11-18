@@ -60,7 +60,7 @@ export class YoutubeLinkService {
       data: { ...clean, status, reason, channelId: null, channelTitle: null },
     });
     if (a.refreshBox && a.subject)
-      await this.grants.retire(
+      return this.grants.retire(
         db,
         a.userId,
         a.subject,
@@ -289,6 +289,17 @@ export class YoutubeLinkService {
       }
       return projection(a);
     });
+  }
+  async cancel(userId: string, id: string) {
+    const job = await youtubeWrite(async (db) => {
+      const attempt = await db.externalMusicLinkAttempt.findUnique({
+        where: { id, userId },
+      });
+      if (!attempt) throw missing();
+      if (live.includes(attempt.status))
+        return this.discard(db, attempt, 'canceled');
+    });
+    if (job) await this.grants.drain(job);
   }
   async confirm(
     userId: string,

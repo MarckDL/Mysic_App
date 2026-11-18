@@ -1,3 +1,4 @@
+import { installYoutubeAppLinks } from './modules/integrations/youtube/android-links.js';
 import type { ConnectedLibraryProvider } from './modules/integrations/youtube/library-domain.js';
 import { createYoutubeService } from './infrastructure/youtube/service.js';
 import { root as youtubeRoot } from './modules/integrations/youtube/domain.js';
@@ -79,6 +80,7 @@ export function createApp(
 ) {
   const app = express();
   app.disable('x-powered-by');
+  installYoutubeAppLinks(app);
   app.use(express.json({ limit: '16kb' }));
 
   // Liveness pública: no comprueba todavía Firebase ni PostgreSQL.

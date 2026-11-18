@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../connected_library/presentation/connected_screen.dart';
 import '../application/auth_providers.dart';
 import '../domain/mysic_profile.dart';
 
@@ -67,6 +68,7 @@ class AccountScreen extends ConsumerWidget {
                 builder: (context) => _NicknameDialog(profile: currentProfile),
               ),
             ),
+            const ConnectedTile(account: true),
             ListTile(
               leading: const Icon(Icons.playlist_add_rounded),
               title: const Text('Importar de YouTube Music'),
