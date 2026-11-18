@@ -142,6 +142,31 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       });
       await disconnectDatabase();
     });
+    it('solo el titular cancela su intento y conserva su canal conectado', async () => {
+      await link(a);
+      const original = await svc.connection(a);
+      const attempt = await candidate(a);
+      const path = root + '/link-attempts/' + attempt.id;
+      await request(app).delete(path).expect(401);
+      await request(app)
+        .delete(path)
+        .set('Authorization', 'Bearer ' + uidB)
+        .expect(404);
+      for (let i = 0; i < 2; i++)
+        await request(app)
+          .delete(path)
+          .set('Authorization', 'Bearer ' + uidA)
+          .expect(204);
+      expect((await svc.attempt(a, attempt.id)).status).toBe('canceled');
+      expect(await svc.connection(a)).toEqual(original);
+      expect(provider.revoke).not.toHaveBeenCalled();
+    });
+    it('retira el permiso provisional cuando se cancela antes de vincular', async () => {
+      const attempt = await candidate(a);
+      await svc.cancel(a, attempt.id);
+      expect(provider.revoke).toHaveBeenCalledTimes(1);
+      expect((await svc.connection(a)).status).toBe('unlinked');
+    });
     it('rutas reales: Firebase, cookie del navegador, PKCE, retorno opaco, confirmación y revocación', async () => {
       await request(app)
         .post(root + '/link-attempts')

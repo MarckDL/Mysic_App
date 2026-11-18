@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../connected_library/presentation/connected_screen.dart';
 import '../../favorites/application/favorite_providers.dart';
 import '../../playlists/application/playlist_providers.dart';
 
@@ -49,6 +50,7 @@ class LibraryScreen extends ConsumerWidget {
               onTap: () => context.push('/playlists'),
             ),
             const Divider(height: 1),
+            const ConnectedTile(),
             ListTile(
               leading: Icon(Icons.playlist_add_rounded, color: colors.primary),
               title: const Text('Importar de YouTube Music'),
