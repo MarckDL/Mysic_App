@@ -7,8 +7,8 @@ Se mantiene el orden del roadmap con Estadísticas y Optimización antes de este
 sprint. Calidad pasa al Sprint 15 y Entrega al Sprint 16.
 
 Pendientes de aceptación final una exportación real de Google Takeout, la prueba
-Android con dos cuentas Google y el despliegue de migración y backend. La etiqueta
-de cierre prevista es `sprint-14-v0.14.0` después de esas comprobaciones.
+Android con dos cuentas Google. El backend y la migración están desplegados y
+0.11.1 está instalada en el teléfono de pruebas. La etiqueta de cierre prevista es `sprint-14-v0.14.0` después de esas comprobaciones.
 
 ## Uso
 
@@ -126,7 +126,31 @@ de medición. Para aceptar en campo:
 5. Reproducir una pista compatible y comprobar que la escucha se registra mediante
    el mecanismo normal del reproductor.
 
-Aplicar la migración versionada en Supabase y desplegar el backend actualizado
-antes de probar contra el servidor público. Registrar los resultados de campo,
+El backend público ya incluye la migración versionada en Supabase. Registrar los resultados de campo,
 revisar cambios y secretos y realizar el cierre con commit, push y etiqueta
 después de verificar todos los criterios.
+
+## Publicación de prueba — 18 de noviembre de 2026
+
+El commit `3d285eb` se publicó en main. GitHub Actions completó correctamente los
+jobs backend y mobile. La copia aislada de los cambios publicados pasó 203
+pruebas backend con PostgreSQL y 92 Flutter. La versión de trabajo completa
+también pasó las 114 pruebas Flutter registradas anteriormente.
+
+Render desplegó automáticamente el commit en mysic-api-k03u, con estado live
+en `dep-dbukkeijnfac73bmdf2g`. Los logs confirman la aplicación de la migración
+de importaciones y Prisma confirmó las ocho migraciones al día. El endpoint de
+salud respondió 200 y las rutas de importación respondieron 401 tanto sin token
+como con un token inválido.
+
+Se compiló el APK ARM64 release con la configuración Firebase existente y
+`https://mysic-api-k03u.onrender.com`. Android confirmó una actualización sobre
+la instalación existente, versión 0.11.1 y versionCode 4015. La sesión Google
+existente abrió Inicio. El APK de pruebas incluye las mejoras locales del
+reproductor y letras que están en curso en el directorio de trabajo.
+La comprobación visual terminó cuando el teléfono pasó a estar en uso.
+
+El número base de compilación es 2015. El APK dividido ARM64 añade 2000 y genera
+versionCode 4015, superior al 4014 que estaba instalado.
+
+[CI del código publicado](https://github.com/MarckDL/Mysic_App/actions/runs/44253332218)

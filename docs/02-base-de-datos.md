@@ -412,5 +412,6 @@ comprobantes se eliminan en cascada.
 
 RLS está habilitado y se revocan permisos a PUBLIC, anon y authenticated cuando
 existen. Express comprueba la propiedad mediante Firebase y el UUID interno.
-La migración se valida primero en PostgreSQL temporal. La aplicación a Supabase
-forma parte del despliegue pendiente del Sprint 14.
+La migración se validó en PostgreSQL temporal y se aplicó en Supabase el
+18 de noviembre de 2026 durante el despliegue de importaciones. Prisma confirmó
+las ocho migraciones al día después del despliegue.

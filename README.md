@@ -15,9 +15,9 @@ La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 >
 > La importación desde YouTube Music está implementada como adelanto del
 > Sprint 14. Biblioteca → Importar de YouTube Music permite revisar un ZIP o CSV
-> de Google Takeout y guardar playlists privadas. Requiere aplicar la migración
-> de importaciones y desplegar el backend actualizado. La aceptación con una
-> exportación real y dos cuentas en Android sigue pendiente.
+> de Google Takeout y guardar playlists privadas. El backend está desplegado y
+> la migración aplicada en Supabase. La versión 0.11.1 está instalada en Android.
+> La aceptación con una exportación real y dos cuentas sigue pendiente.
 > Ver [implementación y aceptación](docs/18-sprint-14-importacion-youtube-music.md).
 >
 > La matriz específica con red móvil del operador y las optimizaciones de latencia

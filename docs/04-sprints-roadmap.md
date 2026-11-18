@@ -622,7 +622,8 @@ Tareas y aceptación:
 
 Estado al 18 de noviembre de 2026: implementación adelantada por solicitud del
 propietario. Los Sprints 12 y 13 conservan su lugar y criterios pendientes.
-La aceptación de campo, el despliegue y el cierre formal del Sprint 14 quedan
+El backend está desplegado, la migración aplicada en Supabase y la versión
+0.11.1 instalada en Android. La aceptación de campo y el cierre formal quedan
 pendientes según [seguimiento](18-sprint-14-importacion-youtube-music.md).
 
 Etiqueta de cierre prevista: `sprint-14-v0.14.0`.
