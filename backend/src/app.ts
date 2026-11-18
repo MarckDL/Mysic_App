@@ -1,3 +1,4 @@
+import type { ConnectedLibraryProvider } from './modules/integrations/youtube/library-domain.js';
 import { createYoutubeService } from './infrastructure/youtube/service.js';
 import { root as youtubeRoot } from './modules/integrations/youtube/domain.js';
 import { youtubeRouter } from './modules/integrations/youtube/routes.js';
@@ -59,6 +60,7 @@ export function createApp(
   options: {
     tokenVerifier?: TokenVerifier;
     youtubeLinkService?: YoutubeLinkService;
+    youtubeLibraryProvider?: ConnectedLibraryProvider;
     importRepository?: ImportRepository;
     userRepository?: UserRepository;
     musicProvider?: MusicProvider;
@@ -90,6 +92,7 @@ export function createApp(
     youtubeRouter(
       verifier,
       options.youtubeLinkService ?? createYoutubeService(),
+      options.youtubeLibraryProvider,
     ),
   );
   const users = new UserService(

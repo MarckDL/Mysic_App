@@ -1,5 +1,8 @@
+import { YoutubeDataLibraryProvider } from '../../../infrastructure/youtube/youtube-data-library-provider.js';
+import type { ConnectedLibraryProvider } from './library-domain.js';
+import { YoutubeLibraryService } from './library-service.js';
 import { randomUUID } from 'node:crypto';
-import { Router, type ErrorRequestHandler } from 'express';
+import { Router, type RequestHandler, type ErrorRequestHandler } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../../../middleware/auth.middleware.js';
 import type { TokenVerifier } from '../../auth/domain/token-verifier.js';
@@ -39,6 +42,7 @@ const callbackQuery = z
 export function youtubeRouter(
   verifier: TokenVerifier,
   service: YoutubeLinkService | null,
+  provider: ConnectedLibraryProvider = new YoutubeDataLibraryProvider(),
 ) {
   const router = Router();
   const publicLimit = new CatalogLimiter(Date.now, 120);
@@ -135,6 +139,39 @@ export function youtubeRouter(
       ),
     );
   });
+  const library =
+    service && new YoutubeLibraryService(service.grants, provider);
+  const libraryLimit = new CatalogLimiter(Date.now, 30);
+  const libraryQuery = z
+    .object({
+      limit: z.coerce.number().int().min(1).max(50).optional(),
+      cursor: z.string().min(1).max(4096).optional(),
+    })
+    .strict();
+  const list: RequestHandler = async (req, res) => {
+    if (!service?.enabled || !library)
+      throw new LinkError(503, 'LINK_DISABLED');
+    const owner = res.locals.youtubeOwner;
+    const retry = libraryLimit.consume(owner);
+    if (retry) throw new LinkError(429, 'TOO_MANY_REQUESTS', retry);
+    const id = z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{1,150}$/)
+      .optional()
+      .parse(req.params.id);
+    const query = libraryQuery.parse(req.query);
+    const abort = new AbortController();
+    const cancel = () => abort.abort();
+    res.once('close', cancel);
+    try {
+      const result = await library.list(owner, id, query, abort.signal);
+      if (!res.destroyed) res.json(result);
+    } finally {
+      res.off('close', cancel);
+    }
+  };
+  router.get('/playlists', list);
+  router.get('/playlists/:id/items', list);
   router.get('/connection', async (_req, res) =>
     res.json(
       service
@@ -156,6 +193,7 @@ export function youtubeRouter(
       return;
     }
     if (error instanceof LinkError) {
+      if (error.retryAfter) res.set('Retry-After', String(error.retryAfter));
       res.status(error.status).json({
         error: {
           code: error.code,

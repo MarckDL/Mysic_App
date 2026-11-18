@@ -14,7 +14,7 @@ function text(value: unknown, maxLength: number): string | null {
   return normalized ? normalized.slice(0, maxLength) : null;
 }
 
-function thumbnail(value: unknown): string | null {
+export function youtubeThumbnail(value: unknown): string | null {
   if (!Array.isArray(value)) return null;
   for (const item of value) {
     const candidate = text(record(item).url, 2048);
@@ -68,7 +68,7 @@ function track(
     title,
     artistName: text(artistValue, 255) ?? 'Artista no disponible',
     durationSeconds: duration(seconds),
-    thumbnailUrl: thumbnail(thumbnails),
+    thumbnailUrl: youtubeThumbnail(thumbnails),
   };
 }
 
