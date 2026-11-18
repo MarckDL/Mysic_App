@@ -392,3 +392,25 @@ ListeningHistory implementa el modelo previsto con UUID de sesión único,
 CHECK de listened_ms entre 0 y 86400000, RLS y permisos públicos revocados.
 Las actualizaciones atómicas conservan máximo tiempo acumulado y completitud.
 La migración versionada requiere validación PostgreSQL antes del despliegue.
+
+## Importación de YouTube Music — Sprint 14
+
+La migración `20261118000000_youtube_music_imports` crea `mysic.music_imports`.
+Cada borrador tiene UUID de solicitud, FK a `users.id`, hash del contenido,
+nombre, lista JSON de identificadores y resoluciones, y caducidad de 24 horas.
+Las consultas y preparaciones purgan globalmente los borradores caducados.
+Las operaciones rechazan un borrador vencido incluso antes de su purga física.
+
+La confirmación bloquea la fila, crea una playlist PRIVATE y sus posiciones
+en una única transacción. Se reutiliza el catálogo canónico por
+`(source, source_id)`. Las repeticiones de canciones conservan sus posiciones.
+Se elimina el JSON temporal y se conserva un comprobante con fecha, conteos y
+FK opcional a la playlist. Este comprobante mantiene la idempotencia tras un
+reinicio. Al eliminar la playlist, la FK queda NULL y el mismo UUID de
+importación continúa confirmado. Al eliminar el usuario, sus borradores y
+comprobantes se eliminan en cascada.
+
+RLS está habilitado y se revocan permisos a PUBLIC, anon y authenticated cuando
+existen. Express comprueba la propiedad mediante Firebase y el UUID interno.
+La migración se valida primero en PostgreSQL temporal. La aplicación a Supabase
+forma parte del despliegue pendiente del Sprint 14.

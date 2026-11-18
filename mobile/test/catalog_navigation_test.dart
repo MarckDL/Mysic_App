@@ -123,6 +123,7 @@ void main() {
       }
       expect(find.text('Playlists').hitTestable(), findsOneWidget);
       expect(find.text('Favoritos').hitTestable(), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Descargas'), 100);
       expect(find.text('Descargas').hitTestable(), findsOneWidget);
       expect(find.text('Próximamente'), findsOneWidget);
       await tester.tap(find.byTooltip('Abrir cuenta'));

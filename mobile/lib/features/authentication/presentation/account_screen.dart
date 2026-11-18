@@ -67,6 +67,11 @@ class AccountScreen extends ConsumerWidget {
                 builder: (context) => _NicknameDialog(profile: currentProfile),
               ),
             ),
+            ListTile(
+              leading: const Icon(Icons.playlist_add_rounded),
+              title: const Text('Importar de YouTube Music'),
+              onTap: () => context.push('/imports/youtube-music'),
+            ),
             if (profile.canModerateComments)
               ListTile(
                 leading: const Icon(Icons.flag_outlined),

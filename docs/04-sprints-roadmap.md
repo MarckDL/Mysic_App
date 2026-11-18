@@ -2,8 +2,8 @@
 
 - **Metodología:** Scrum adaptado
 - **Duración de Sprint:** 2 semanas
-- **Total planificado:** 15 sprints
-- **Horizonte:** 30 semanas
+- **Total planificado:** 16 sprints
+- **Horizonte:** 32 semanas
 - **Estado:** Planificación actualizada
 
 ## 1. Objetivo
@@ -598,7 +598,36 @@ Aceptación:
 
 Etiqueta: `sprint-13-v0.13.0`
 
-## 18. Sprint 14 — Calidad y pruebas
+## 18. Sprint 14 — Importación desde YouTube Music
+
+### Objetivo
+
+Facilitar la transición con copias privadas de playlists y canciones guardadas
+a partir de Google Takeout.
+
+### Historia US-016
+
+Como usuario de YouTube Music, quiero elegir las listas de mi exportación,
+revisar las canciones disponibles y guardar una copia en mi biblioteca Mysic.
+
+Tareas y aceptación:
+
+- Leer ZIP y CSV en Flutter, dividir listas en partes de hasta 500 pistas y
+  mostrar filas inválidas, pistas reconocidas, ausencias y fallos reintentables.
+- Crear borradores privados de 24 horas, resolver metadatos mediante MusicProvider
+  y confirmar cada lista de forma transaccional e idempotente.
+- Verificar autenticación, aislamiento, orden, red interrumpida y confirmación concurrente.
+- Aceptar una exportación real en Android con dos cuentas Google y verificar
+  reproducción de una pista compatible.
+
+Estado al 18 de noviembre de 2026: implementación adelantada por solicitud del
+propietario. Los Sprints 12 y 13 conservan su lugar y criterios pendientes.
+La aceptación de campo, el despliegue y el cierre formal del Sprint 14 quedan
+pendientes según [seguimiento](18-sprint-14-importacion-youtube-music.md).
+
+Etiqueta de cierre prevista: `sprint-14-v0.14.0`.
+
+## 19. Sprint 15 — Calidad y pruebas
 
 ### Objetivo
 
@@ -625,9 +654,9 @@ Aceptación:
 - No hay defectos bloqueantes conocidos.
 - Resultados de pruebas documentados.
 
-Etiqueta: `sprint-14-v0.14.0`
+Etiqueta: `sprint-15-v0.15.0`
 
-## 19. Sprint 15 — Entrega académica
+## 20. Sprint 16 — Entrega académica
 
 ### Objetivo
 
@@ -659,9 +688,9 @@ Aceptación:
 - Demo reproducible sin corte al primer minuto.
 - Documentación completa.
 
-Etiqueta: `sprint-15-v1.0.0`
+Etiqueta: `sprint-16-v1.0.0`
 
-## 20. Riesgos
+## 21. Riesgos
 
 | Riesgo                         | Impacto | Mitigación                                        |
 | ------------------------------ | ------- | ------------------------------------------------- |
@@ -673,7 +702,7 @@ Etiqueta: `sprint-15-v1.0.0`
 | Tiempo insuficiente            | Alto    | Priorización del backlog                          |
 | Problemas Android              | Medio   | Pruebas en dispositivo físico                     |
 
-## 21. Seguimiento
+## 22. Seguimiento
 
 Cada Sprint debe registrar:
 

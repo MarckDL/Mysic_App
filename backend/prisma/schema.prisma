@@ -20,6 +20,7 @@ model User {
   photoUrl               String?            @map("photo_url") @db.Text
   createdAt              DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  imports                MusicImport[]
   history                ListeningHistory[]
   playlists              Playlist[]
   favorites              Favorite[]
@@ -90,6 +91,27 @@ model Rating {
   @@schema("mysic")
 }
 
+model MusicImport {
+  id           String    @id @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  fingerprint  String    @db.VarChar(64)
+  name         String    @db.VarChar(150)
+  items        Json
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(3)
+  confirmedAt  DateTime? @map("confirmed_at") @db.Timestamptz(3)
+  playlistId   String?   @map("playlist_id") @db.Uuid
+  savedCount   Int       @default(0) @map("saved_count")
+  skippedCount Int       @default(0) @map("skipped_count")
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  playlist     Playlist? @relation(fields: [playlistId], references: [id], onDelete: SetNull)
+
+  @@index([userId, expiresAt])
+  @@index([confirmedAt, expiresAt])
+  @@index([playlistId])
+  @@map("music_imports")
+  @@schema("mysic")
+}
+
 model Playlist {
   id          String             @id @default(uuid()) @db.Uuid
   userId      String             @map("user_id") @db.Uuid
@@ -99,6 +121,7 @@ model Playlist {
   createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
   user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  imports     MusicImport[]
   tracks      PlaylistTrack[]
 
   @@index([userId, updatedAt])

@@ -1,3 +1,7 @@
+import { createImportRouter } from './modules/imports/presentation/import.routes.js';
+import { ImportService } from './modules/imports/application/import-service.js';
+import { PrismaImportRepository } from './infrastructure/database/prisma-import-repository.js';
+import type { ImportRepository } from './modules/imports/domain/music-import.js';
 import { createHistoryRouter } from './modules/history/presentation/history.routes.js';
 import { HistoryService } from './modules/history/application/history-service.js';
 import { PrismaHistoryRepository } from './infrastructure/database/prisma-history-repository.js';
@@ -50,6 +54,7 @@ import { createCommentRouter } from './modules/comments/presentation/comment.rou
 export function createApp(
   options: {
     tokenVerifier?: TokenVerifier;
+    importRepository?: ImportRepository;
     userRepository?: UserRepository;
     musicProvider?: MusicProvider;
     catalogService?: CatalogService;
@@ -89,6 +94,16 @@ export function createApp(
   app.use('/api/v1/users', createUsersRouter(verifier, users));
   const music = options.musicProvider ?? new YoutubeProvider();
   const catalog = options.catalogService ?? new CatalogService(music);
+  app.use(
+    '/api/v1/imports/youtube-music',
+    createImportRouter(
+      verifier,
+      new ImportService(
+        options.importRepository ?? new PrismaImportRepository(),
+        catalog,
+      ),
+    ),
+  );
   app.use(
     '/api/v1/playback',
     createPlaybackRouter(

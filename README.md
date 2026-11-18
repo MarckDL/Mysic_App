@@ -8,20 +8,18 @@ Permite explorar un catálogo musical, gestionar playlists, guardar favoritos, c
 
 La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 
-> Sprint 10: historial verificado con 183 pruebas backend, 75 Flutter y aceptación
-> asistida en teléfono y emulador propio, incluyendo privacidad, persistencia,
-> segundo plano y recuperación de una escucha pendiente sin red.
-> Backend desplegado en Render y datos en Supabase. Versión de cierre:
-> `sprint-10-v0.10.1`. Ver [evidencia y cierre](docs/16-plan-sprint-10.md).
+> Sprint 11 cerrado y verificado como `sprint-11-v0.11.0`. Incorpora navegación
+> Inicio, Buscar y Biblioteca, Cuenta y apodos privados. El cierre registra
+> 79 pruebas Flutter, 186 backend y aceptación con dos cuentas Google en Android.
+> Ver [evidencia](docs/17-plan-sprint-11.md).
 >
-> Estado: Sprints 1 a 9 cerrados y verificados. Sprint 9 incorporó comentarios,
-> reportes y [moderación en Android](docs/15-plan-sprint-09.md), con aceptación
-> física en dos cuentas y permiso temporal de moderador retirado al finalizar.
-> Sprint 8 incorporó favoritos,
-> calificaciones, promedios y aislamiento multiusuario, con aceptación física
-> en dos cuentas contra el backend HTTPS. Sprint 7 incorporó playlists
-> multiusuario, privacidad, orden transaccional, persistencia en Supabase y uso
-> desde un Android físico contra el backend HTTPS, sin `adb reverse`.
+> La importación desde YouTube Music está implementada como adelanto del
+> Sprint 14. Biblioteca → Importar de YouTube Music permite revisar un ZIP o CSV
+> de Google Takeout y guardar playlists privadas. Requiere aplicar la migración
+> de importaciones y desplegar el backend actualizado. La aceptación con una
+> exportación real y dos cuentas en Android sigue pendiente.
+> Ver [implementación y aceptación](docs/18-sprint-14-importacion-youtube-music.md).
+>
 > La matriz específica con red móvil del operador y las optimizaciones de latencia
 > no anticipada continúan como trabajo del Sprint 13.
 >
@@ -375,10 +373,11 @@ La configuración de Firebase, la firma Android y la URL del backend deben verif
 | 11     | Interfaz y navegación     |
 | 12     | Estadísticas               |
 | 13     | Optimización               |
-| 14     | Pruebas                    |
-| 15     | Entrega académica          |
+| 14     | Importación de YouTube Music |
+| 15     | Pruebas                    |
+| 16     | Entrega académica          |
 
-El roadmap contempla 15 sprints de dos semanas. El Sprint 11 reúne Inicio,
+El roadmap contempla 16 sprints de dos semanas. El Sprint 11 reúne Inicio,
 Buscar y Biblioteca en una barra inferior, con acceso a Cuenta desde cada pestaña.
 
 Consultar `docs/04-sprints-roadmap.md`.

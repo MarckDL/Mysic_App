@@ -166,6 +166,21 @@ basan en las sesiones confirmadas de historial.
 | RF-057 | Sincronizar líneas disponibles con la posición del reproductor | Deseable |
 | RF-058 | Mostrar fuente, atribución y estado no disponible | Obligatoria al habilitar letras |
 
+### Módulo de importación — Sprint 14
+
+| ID | Requisito | Prioridad |
+|---|---|---|
+| RF-059 | Seleccionar playlists y biblioteca de un ZIP o CSV de Takeout | Obligatoria para Sprint 14 |
+| RF-060 | Revisar disponibilidad, orden y errores antes de guardar | Obligatoria para Sprint 14 |
+| RF-061 | Crear copias privadas de hasta 500 pistas por parte | Obligatoria para Sprint 14 |
+| RF-062 | Reanudar borradores durante 24 horas y confirmar sin duplicados por reintento | Obligatoria para Sprint 14 |
+| RF-063 | Aislar borradores y resultados por usuario Firebase verificado | Obligatoria para Sprint 14 |
+
+Las canciones guardadas se copian en una playlist privada. La importación puntual
+cubre metadatos e identificadores. Historial, estadísticas y favoritos reflejan
+las acciones propias de Mysic. Cada nueva selección de archivo crea copias
+independientes, con revisión y confirmación explícitas.
+
 ## 5. Requisitos no funcionales
 
 Los valores siguientes son objetivos iniciales de ingeniería, no mediciones ya verificadas.
