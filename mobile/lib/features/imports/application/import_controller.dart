@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/network/authenticated_api_client.dart';
+import '../../../core/network/request_id.dart';
 import '../data/import_client.dart';
 import '../data/takeout_file_picker.dart';
 import '../domain/music_import.dart';
@@ -99,7 +100,7 @@ class ImportController extends ChangeNotifier {
     if (lists == null || _disposed) return;
     entries = [
       ...entries.where((entry) => entry.draft != null),
-      ...lists.map((list) => ImportEntry(id: newImportId(), source: list)),
+      ...lists.map((list) => ImportEntry(id: newRequestId(), source: list)),
     ];
   });
 

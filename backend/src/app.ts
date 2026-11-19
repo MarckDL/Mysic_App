@@ -1,3 +1,9 @@
+import { installYoutubeAppLinks } from './modules/integrations/youtube/android-links.js';
+import type { ConnectedLibraryProvider } from './modules/integrations/youtube/library-domain.js';
+import { createYoutubeService } from './infrastructure/youtube/service.js';
+import { root as youtubeRoot } from './modules/integrations/youtube/domain.js';
+import { youtubeRouter } from './modules/integrations/youtube/routes.js';
+import type { YoutubeLinkService } from './modules/integrations/youtube/link-service.js';
 import { createImportRouter } from './modules/imports/presentation/import.routes.js';
 import { ImportService } from './modules/imports/application/import-service.js';
 import { PrismaImportRepository } from './infrastructure/database/prisma-import-repository.js';
@@ -54,6 +60,8 @@ import { createCommentRouter } from './modules/comments/presentation/comment.rou
 export function createApp(
   options: {
     tokenVerifier?: TokenVerifier;
+    youtubeLinkService?: YoutubeLinkService;
+    youtubeLibraryProvider?: ConnectedLibraryProvider;
     importRepository?: ImportRepository;
     userRepository?: UserRepository;
     musicProvider?: MusicProvider;
@@ -72,6 +80,7 @@ export function createApp(
 ) {
   const app = express();
   app.disable('x-powered-by');
+  installYoutubeAppLinks(app);
   app.use(express.json({ limit: '16kb' }));
 
   // Liveness pública: no comprueba todavía Firebase ni PostgreSQL.
@@ -80,6 +89,14 @@ export function createApp(
   });
 
   const verifier = options.tokenVerifier ?? createFirebaseTokenVerifier();
+  app.use(
+    youtubeRoot,
+    youtubeRouter(
+      verifier,
+      options.youtubeLinkService ?? createYoutubeService(),
+      options.youtubeLibraryProvider,
+    ),
+  );
   const users = new UserService(
     options.userRepository ?? new PrismaUserRepository(),
   );

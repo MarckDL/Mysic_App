@@ -5,9 +5,11 @@ import '../../features/authentication/domain/auth_repository.dart';
 import 'api_dio.dart';
 
 class ApiFailure implements Exception {
-  const ApiFailure(this.message, {this.statusCode});
+  const ApiFailure(this.message, {this.statusCode, this.code, this.retryAfter});
   final String message;
   final int? statusCode;
+  final String? code;
+  final Duration? retryAfter;
 }
 
 class AuthenticatedApiClient {
@@ -16,10 +18,12 @@ class AuthenticatedApiClient {
     required String baseUrl,
     Dio? dio,
     this.keepSessionOnForbidden = false,
+    this.ownerUid,
   }) : _dio = configureApiDio(baseUrl, dio);
   final AuthRepository _auth;
   final Dio _dio;
   final bool keepSessionOnForbidden;
+  final String? ownerUid;
 
   Future<Map<String, dynamic>> get(
     String path, {
@@ -31,7 +35,14 @@ class AuthenticatedApiClient {
     String path, {
     required Map<String, dynamic> body,
     CancelToken? cancelToken,
-  }) => _request('POST', path, body: body, cancelToken: cancelToken);
+    String? idempotencyKey,
+  }) => _request(
+    'POST',
+    path,
+    body: body,
+    cancelToken: cancelToken,
+    idempotencyKey: idempotencyKey,
+  );
 
   Future<Map<String, dynamic>> patch(
     String path, {
@@ -55,9 +66,13 @@ class AuthenticatedApiClient {
     String path, {
     Map<String, dynamic>? query,
     Map<String, dynamic>? body,
+    String? idempotencyKey,
     CancelToken? cancelToken,
   }) async {
     final uid = _auth.currentUser?.uid;
+    if (ownerUid != null && ownerUid != uid) {
+      throw const AuthFailure("La cuenta cambió.");
+    }
     if (uid == null) throw const AuthFailure('Inicia sesión con Google.');
     for (var attempt = 0; attempt < (method == 'GET' ? 2 : 1); attempt++) {
       try {
@@ -69,24 +84,30 @@ class AuthenticatedApiClient {
           await _auth.signOut();
           throw const AuthFailure('Tu sesión terminó.');
         }
-        final response = await _dio.request<Map<String, dynamic>>(
+        final response = await _dio.request<dynamic>(
           path,
           queryParameters: query,
           data: body,
           cancelToken: cancelToken,
           options: Options(
             method: method,
-            headers: {'Authorization': 'Bearer $token'},
+            headers: {
+              'Authorization': 'Bearer $token',
+              if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey,
+            },
           ),
         );
         if (_auth.currentUser?.uid != uid) {
           throw const AuthFailure('La cuenta cambió.');
         }
-        if (response.statusCode == 204) return const {};
-        if (response.data == null) {
+        if (response.statusCode == 204 ||
+            (method == 'DELETE' && response.statusCode == 202)) {
+          return const {};
+        }
+        if (response.data is! Map<String, dynamic>) {
           throw const ApiFailure('Respuesta de catálogo inválida.');
         }
-        return response.data!;
+        return response.data as Map<String, dynamic>;
       } on DioException catch (error) {
         if (CancelToken.isCancel(error)) rethrow;
         if (_auth.currentUser?.uid != uid) {
@@ -114,7 +135,19 @@ class AuthenticatedApiClient {
           504 => 'El catálogo tardó demasiado en responder.',
           _ => 'No se pudo consultar el catálogo. Inténtalo de nuevo.',
         };
-        throw ApiFailure(message, statusCode: status);
+        final seconds = int.tryParse(
+          error.response?.headers.value('retry-after') ?? '',
+        );
+        throw ApiFailure(
+          message,
+          statusCode: status,
+          code: errorDetails is Map && errorDetails['code'] is String
+              ? errorDetails['code'] as String
+              : null,
+          retryAfter: seconds != null && seconds > 0
+              ? Duration(seconds: seconds.clamp(1, 86400))
+              : null,
+        );
       }
     }
     throw const AuthFailure('No se pudo verificar la sesión.');

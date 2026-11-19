@@ -63,4 +63,5 @@ jobs:
       - run: flutter analyze
       - run: flutter test --no-enable-impeller
       - run: python3 -m unittest discover -s tool -p 'test_*.py'
-      - run: flutter build apk --debug
+      - name: Compile Android pilot with a test domain
+        run: flutter build apk --debug --dart-define=YOUTUBE_LIBRARY_ENABLED=true --dart-define=YOUTUBE_APP_LINK_HOST=pilot.example.test

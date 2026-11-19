@@ -1,14 +1,30 @@
 package com.mysic.mysic
 
+import android.content.Intent
+import android.os.Bundle
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : AudioServiceActivity() {
+    private val youtubeLink by lazy { YouTubeLinkBridge(this) }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        youtubeLink.receive(intent)
+        super.onCreate(savedInstanceState)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        youtubeLink.receive(intent)
+    }
+
     private val playbackResolver = DevicePlaybackResolver()
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        youtubeLink.attach(flutterEngine.dartExecutor.binaryMessenger)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.mysic/history").setMethodCallHandler { call, result ->
             val uid = call.argument<String>("uid")
             if (uid == null || uid.length > 128) {
@@ -37,6 +53,7 @@ class MainActivity : AudioServiceActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             DevicePlaybackResolver.CHANNEL,
         ).setMethodCallHandler(null)
+        youtubeLink.detach()
         playbackResolver.close()
         super.cleanUpFlutterEngine(flutterEngine)
     }

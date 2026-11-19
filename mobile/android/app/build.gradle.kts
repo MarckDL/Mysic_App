@@ -1,13 +1,32 @@
+import java.util.Base64
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val dartDefines = providers.gradleProperty("dart-defines").orNull.orEmpty()
+    .split(',').filter { it.isNotBlank() }
+    .map { String(Base64.getDecoder().decode(it), Charsets.UTF_8) }
+    .associate { it.substringBefore('=') to it.substringAfter('=', "") }
+val youtubeHost = if (dartDefines["YOUTUBE_LIBRARY_ENABLED"] == "true")
+    dartDefines["YOUTUBE_APP_LINK_HOST"].orEmpty() else "mysic-pilot.invalid"
+require(youtubeHost.length <= 253 && youtubeHost.split('.').size >= 2 && youtubeHost.split('.').all {
+    it.matches(Regex("[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"))
+}) { "YOUTUBE_APP_LINK_HOST must be a lowercase DNS hostname" }
+require(dartDefines["YOUTUBE_LIBRARY_ENABLED"] != "true" || !youtubeHost.endsWith(".invalid")) {
+    "The YouTube pilot requires its HTTPS return host"
+}
+
 android {
     namespace = "com.mysic.mysic"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
+
+    buildFeatures {
+        resValues = true
+    }
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
@@ -18,6 +37,8 @@ android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.mysic.mysic"
+        manifestPlaceholders["youtubeAppLinkHost"] = youtubeHost
+        resValue("string", "youtube_app_link_host", youtubeHost)
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
