@@ -51,6 +51,7 @@ class _SessionFixture extends MusicModeClient {
     this.direct = false,
   }) : super(api);
   final bool direct;
+  bool channelOnly = false;
   final List<MusicAccount> accounts;
   MusicAccount? account;
   int links = 0;
@@ -77,12 +78,17 @@ class _SessionFixture extends MusicModeClient {
           ? MusicLinkStatus.expired
           : MusicLinkStatus.linked,
       provider: direct ? 'youtubeOAuth' : 'preview',
+      personalization: direct
+          ? (channelOnly ? 'channelOnly' : 'verified')
+          : null,
       accounts: direct ? [] : accounts,
       account: account,
       generation: account == null ? null : '${account!.id}-$links',
       libraryId: direct && account != null ? 'library-${account!.id}' : null,
       activityEpoch: epoch,
-      capabilities: direct
+      capabilities: channelOnly
+          ? {'playlists', 'playlist', 'search', 'playback', 'artists', 'artist'}
+          : direct
           ? {
               'home',
               'albums',
@@ -283,6 +289,36 @@ class _ConsentClient extends oauth.Client {
 }
 
 void main() {
+  test(
+    'un canal con acceso limitado sigue buscando y actualiza las capacidades al verificar la biblioteca',
+    () async {
+      final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
+      final api = AuthenticatedApiClient(auth, baseUrl: 'https://example.test');
+      addTearDown(api.close);
+      final fixture = _SessionFixture([a], api, direct: true)
+        ..account = a
+        ..channelOnly = true;
+      final model = MusicModeController(fixture, () => true, () async {});
+      addTearDown(model.dispose);
+      await model.refresh();
+      final limited = model.connection!;
+      final revision = model.revision;
+      expect(limited.channelOnly, isTrue);
+      expect(limited.capabilities, isNot(contains('home')));
+      expect(limited.capabilities, isNot(contains('liked')));
+      expect(limited.capabilities, contains('search'));
+      await model.page(
+        limited.generation!,
+        MusicSurface.search,
+        query: 'again',
+      );
+      fixture.channelOnly = false;
+      await model.refresh();
+      expect(model.connection!.generation, limited.generation);
+      expect(model.connection!.capabilities, contains('liked'));
+      expect(model.revision, greaterThan(revision));
+    },
+  );
   test('la biblioteca conserva las portadas de playlists y canales', () {
     const cover = 'https://i.ytimg.com/vi/ABCDEFGHIJK/default.jpg';
     final page = MusicPage.fromJson({

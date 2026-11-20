@@ -10,6 +10,7 @@ class FakeTrackAudioEngine implements TrackAudioEngine {
   String? sourceId;
   String? token;
   Uri? lastLicensedAudio;
+  TrackAudioReader? lastReader;
   Uri? lastDeviceAudio;
   int plays = 0;
   int stops = 0;
@@ -43,10 +44,12 @@ class FakeTrackAudioEngine implements TrackAudioEngine {
     String token, {
     Uri? licensedAudio,
     Uri? deviceAudio,
+    TrackAudioReader? readAudio,
     bool refresh = false,
   }) async {
     this.sourceId = sourceId;
     lastLicensedAudio = licensedAudio;
+    lastReader = readAudio;
     lastDeviceAudio = deviceAudio;
     this.token = token;
     if (fail) throw StateError('Unavailable');

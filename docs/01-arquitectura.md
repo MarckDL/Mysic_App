@@ -694,3 +694,7 @@ El puerto `ConnectedLibraryProvider` lee YouTube Data API v3 con el permiso del 
 El catálogo conectado y el motor de audio comparten la cola, el minirreproductor y los controles de Android. Una grabación del canal puede tener un archivo seleccionado en ese dispositivo o un recurso HTTPS autorizado por el backend. Las copias locales se guardan en el directorio privado de la app, separadas por usuario y vínculo, y quedan excluidas de la copia de seguridad de Android. El backend recibe el ID del tema y los milisegundos escuchados cuando el usuario activa el registro. Los detalles de la biblioteca y las pruebas se describen en la [guía del modo YouTube Music](youtube-music-mode.md).
 
 El APK 4026 lee las colecciones de la cuenta y el Inicio de YouTube Music mediante `MusicAccountCatalog` y el consentimiento OAuth existente. El backend limita cada consulta y su cursor al usuario, canal y generación del vínculo. La app conserva el reproductor nativo para las canciones recibidas. [Contrato del modo musical](youtube-music-mode.md)
+
+### Fuente musical de la cuenta de escritorio
+
+Android admite una fuente musical opcional para cuentas vinculadas en Mysic de escritorio. Tras la autenticación habitual de la aplicación, el cliente establece una sesión con esa API de Mysic de escritorio para leer el catálogo del usuario y reproducir el audio autorizado con el reproductor nativo. El cliente gestiona esta sesión por usuario en Android. La secuencia y los contratos utilizados se describen en [YouTube Music en Mysic_App](youtube-music-mode.md).

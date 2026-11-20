@@ -10,6 +10,7 @@ import 'package:just_audio/just_audio.dart';
 
 import '../domain/playback_source_resolver.dart';
 import '../domain/track_audio_engine.dart';
+import 'account_audio_source.dart';
 
 class JustAudioTrackEngine implements TrackAudioEngine {
   JustAudioTrackEngine(
@@ -150,6 +151,7 @@ class JustAudioTrackEngine implements TrackAudioEngine {
     String token, {
     Uri? licensedAudio,
     Uri? deviceAudio,
+    TrackAudioReader? readAudio,
     bool refresh = false,
   }) async {
     final demo = sourceId == PlaybackResolution.demoId;
@@ -160,7 +162,10 @@ class JustAudioTrackEngine implements TrackAudioEngine {
     cancelLoad();
     final generation = _loadGeneration;
     try {
-      if (demo || licensedAudio != null || deviceAudio != null) {
+      if (demo ||
+          licensedAudio != null ||
+          deviceAudio != null ||
+          readAudio != null) {
         await (_configuration ??= _configure());
       } else {
         await warmUp();
@@ -177,6 +182,8 @@ class JustAudioTrackEngine implements TrackAudioEngine {
           throw StateError('Archivo de audio inválido');
         }
         audio = AudioSource.file(deviceAudio.toFilePath());
+      } else if (readAudio != null) {
+        audio = AccountAudioSource(readAudio);
       } else if (licensedAudio != null) {
         if (licensedAudio.scheme != 'https' ||
             licensedAudio.host.isEmpty ||

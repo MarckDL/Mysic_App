@@ -1,5 +1,13 @@
 # YouTube Music en Mysic_App
 
+## Acceso a la biblioteca de escritorio en Android 4027
+
+En **Cuenta → Conectar Mysic de escritorio**, el usuario entra con la cuenta de correo y contraseña que ya tiene vinculada a YouTube Music en Mysic original. Android crea su propia sesión directamente con la API de escritorio `https://myslc.duckdns.org/api`. Comprueba el estado musical y exige un Inicio personalizado con elementos antes de activar esa fuente. La cuenta Firebase sigue identificando al usuario de la app móvil. El nombre que aparece con «escritorio» corresponde a la cuenta que devolvió ese servicio.
+
+Inicio, Me gusta, suscripciones, álbumes, playlists y búsquedas consultan la API de escritorio en directo. Los detalles conservan los identificadores musicales. La cola y el reproductor nativo de Android leen el audio del mismo servicio, incluido el encabezado Range al adelantar una pista. La sesión solo viaja al origen HTTPS de escritorio, con redirecciones desactivadas. Con **Recordar la sesión** Android guarda la sesión de Mysic cifrada mediante Android Keystore, por usuario Firebase y fuera de las copias de seguridad. La contraseña se utiliza únicamente para el inicio de sesión. **Desconectar escritorio de este teléfono** retira la sesión de Android y devuelve el control al vínculo móvil o a la biblioteca local.
+
+La prueba en un dispositivo con cuenta real consiste en comparar un Me gusta y una playlist privada conocidos, abrir el Inicio, buscar una grabación y reproducirla, adelantarla y pasar a la siguiente dentro de Mysic. El acceso de escritorio requiere que el servidor del cliente de escritorio sea el indicado arriba y que su cuenta ya tenga un Inicio musical personal.
+
 ## Verificación de la cuenta musical
 
 El vínculo OAuth por sí solo confirma el canal a través de YouTube Data API. El servidor comprueba por separado la biblioteca privada y el Inicio de Music con el permiso del usuario. Solo anuncia la personalización si ambas respuestas son válidas y contienen evidencia de una sesión identificada. Un rechazo de Music conserva el vínculo que sí funciona para el canal. Una cuota agotada o una respuesta temporal mantiene el acceso pendiente de comprobación.

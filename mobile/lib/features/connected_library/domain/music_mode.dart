@@ -1,4 +1,5 @@
 import '../../search/domain/catalog_track.dart';
+import '../../playback/domain/track_audio_engine.dart';
 
 enum MusicSurface {
   home,
@@ -37,6 +38,7 @@ class MusicConnection {
     required this.status,
     this.provider,
     this.libraryId,
+    this.personalization,
     this.activityEpoch = 0,
     this.accounts = const [],
     this.account,
@@ -49,6 +51,7 @@ class MusicConnection {
         status: MusicLinkStatus.values.byName(data['status'] as String),
         provider: data['provider'] as String?,
         libraryId: data['libraryId'] as String?,
+        personalization: data['personalization'] as String?,
         activityEpoch: data['activityEpoch'] as int? ?? 0,
         accounts: (data['accounts'] as List<dynamic>)
             .cast<Map<String, dynamic>>()
@@ -65,6 +68,17 @@ class MusicConnection {
 
   final MusicLinkStatus status;
   final String? provider;
+  final String? personalization;
+  bool get channelOnly =>
+      personalization == 'channelOnly' || personalization == 'unverified';
+  String get accessDescription => switch (personalization) {
+    'channelOnly' =>
+      'Canal vinculado. Google permite consultar sus playlists musicales. El Inicio personal, los Me gusta y los álbumes de Music requieren acceso adicional.',
+    'unverified' =>
+      'Canal vinculado. Aún no se pudo verificar la biblioteca personal de YouTube Music.',
+    'verified' => 'Canal y biblioteca musical verificados.',
+    _ => 'Canal vinculado',
+  };
   final String? libraryId;
   final int activityEpoch;
   final List<MusicAccount> accounts;
@@ -74,6 +88,8 @@ class MusicConnection {
   bool get serverPending => provider == 'serverPending';
   bool get isPreview => provider == 'preview';
   bool get isDirect => provider == 'youtubeOAuth';
+  bool get isDesktop => provider == 'mysicDesktop';
+  bool get nativeCatalog => isDirect || isDesktop;
 }
 
 sealed class MusicItem {
@@ -164,7 +180,10 @@ class MusicTrack extends MusicItem {
 
   final String? thumbnailUrl;
 
-  CatalogTrack toPlaybackTrack({Uri? deviceAudio}) => CatalogTrack(
+  CatalogTrack toPlaybackTrack({
+    Uri? deviceAudio,
+    TrackAudioReader? readAudio,
+  }) => CatalogTrack(
     id: canPreview ? '${CatalogTrack.musicPreviewPrefix}$id' : 'youtube:$id',
     title: title,
     artistName: artist,
@@ -173,6 +192,7 @@ class MusicTrack extends MusicItem {
     licensedAudio: audioUri,
     musicAccountTrack: nativePlayback,
     deviceAudio: deviceAudio,
+    readAudio: readAudio,
   );
 }
 

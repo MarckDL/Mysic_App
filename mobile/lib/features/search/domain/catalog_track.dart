@@ -1,4 +1,5 @@
 import '../../../core/network/authenticated_api_client.dart';
+import '../../playback/domain/track_audio_engine.dart';
 
 class CatalogTrack {
   const CatalogTrack({
@@ -9,6 +10,7 @@ class CatalogTrack {
     this.thumbnailUrl,
     this.licensedAudio,
     this.deviceAudio,
+    this.readAudio,
     this.musicAccountTrack = false,
   });
   static const musicPreviewPrefix = 'music-preview:';
@@ -21,6 +23,7 @@ class CatalogTrack {
   final String? thumbnailUrl;
   final Uri? licensedAudio;
   final Uri? deviceAudio;
+  final TrackAudioReader? readAudio;
   final bool musicAccountTrack;
   bool get isConnectedAudio =>
       musicAccountTrack || deviceAudio != null || licensedAudio != null;

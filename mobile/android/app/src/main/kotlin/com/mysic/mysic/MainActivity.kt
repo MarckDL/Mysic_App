@@ -26,6 +26,7 @@ class MainActivity : AudioServiceActivity() {
         super.configureFlutterEngine(flutterEngine)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
         youtubeLink.attach(messenger)
+        MethodChannel(messenger, DesktopSessionStore.CHANNEL).setMethodCallHandler(DesktopSessionStore(this))
         MethodChannel(messenger, "com.mysic/audio_output").setMethodCallHandler { call, result ->
             if (call.method != "open") {
                 result.notImplemented()
@@ -69,6 +70,7 @@ class MainActivity : AudioServiceActivity() {
         ).setMethodCallHandler(null)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
         MethodChannel(messenger, "com.mysic/audio_output").setMethodCallHandler(null)
+        MethodChannel(messenger, DesktopSessionStore.CHANNEL).setMethodCallHandler(null)
         youtubeLink.detach()
         playbackResolver.close()
         super.cleanUpFlutterEngine(flutterEngine)
