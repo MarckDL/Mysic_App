@@ -194,6 +194,9 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
         playback: 'native' as const,
       };
       const catalog = {
+        verify: vi
+          .fn<MusicAccountCatalog['verify']>()
+          .mockResolvedValue(undefined),
         read: vi.fn<MusicAccountCatalog['read']>(async (ctx, r, token) => {
           expect(ctx.access).toBeTruthy();
           if (r.surface === 'home')
@@ -262,6 +265,81 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       expect(second.nextCursor).toBeNull();
       expect(provider.listLikedVideos).not.toHaveBeenCalled();
       expect(provider.listPlaylists).not.toHaveBeenCalled();
+    });
+    it('4027 mantiene el canal, filtra sus playlists y busca música cuando Music deniega el acceso personal', async () => {
+      const catalog = {
+        verify: vi
+          .fn<MusicAccountCatalog['verify']>()
+          .mockRejectedValue(new LinkError(403, 'MUSIC_ACCESS_DENIED')),
+        read: vi.fn<MusicAccountCatalog['read']>(),
+      };
+      const v2 = createApp({
+        youtubeLinkService: link,
+        channelMusicProvider: provider,
+        tokenVerifier: verifier,
+        musicAccountCatalog: catalog,
+      });
+      const view = (path: string, uid = uidA) =>
+        request(v2)
+          .get('/api/v2/integrations/youtube-music/' + path)
+          .set('Authorization', 'Bearer ' + uid);
+      const { body: state } = await view('connection').expect(200);
+      expect(state).toMatchObject({
+        status: 'linked',
+        personalization: 'channelOnly',
+      });
+      expect(state.capabilities).toEqual(
+        expect.arrayContaining(['playlists', 'search', 'playback']),
+      );
+      for (const cap of ['home', 'liked', 'songs', 'albums'])
+        expect(state.capabilities).not.toContain(cap);
+      const path = 'connections/' + state.generation + '/pages/';
+      for (const surface of ['home', 'liked', 'albums'])
+        await view(path + surface).expect(403);
+      expect(provider.listLikedVideos).not.toHaveBeenCalled();
+      provider.searchMusic.mockResolvedValue({
+        items: [
+          { ...recording, isRecording: false, isMusicCategory: true },
+          {
+            ...recording,
+            id: 'ccccccccccc',
+            title: 'Clase',
+            isRecording: false,
+            isMusicCategory: false,
+          },
+        ],
+      });
+      const music = (await view(path + 'search?q=again').expect(200)).body
+        .items;
+      expect(music).toMatchObject([{ id: video, playback: 'native' }]);
+      provider.listPlaylists.mockResolvedValue({
+        items: [
+          {
+            id: 'PLmusica',
+            channelId: 'channelA',
+            title: 'Mi lista musical',
+            visibility: 'private',
+            itemCount: 1,
+            thumbnailUrl: null,
+          },
+        ],
+      });
+      provider.listPlaylistItems.mockResolvedValue({
+        items: [
+          {
+            playlistItemId: 'entry',
+            position: 0,
+            title: 'Pista',
+            videoId: video,
+          },
+        ],
+      });
+      const playlists = (await view(path + 'playlists').expect(200)).body.items;
+      expect(playlists).toMatchObject([{ id: 'PLmusica' }]);
+      await view(path + 'search?q=again', uidB).expect(409);
+      await view('connection').expect(200);
+      expect(catalog.verify).toHaveBeenCalledTimes(1);
+      expect(catalog.read).not.toHaveBeenCalled();
     });
     it('usa el vínculo OAuth de cada UID sin una sesión web y anuncia solo las funciones disponibles', async () => {
       await request(app).get(connection).expect(401);

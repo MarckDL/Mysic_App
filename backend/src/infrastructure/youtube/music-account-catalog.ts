@@ -52,6 +52,7 @@ export interface AccountMusicPage {
   excluded: number;
 }
 export interface MusicAccountCatalog {
+  verify(ctx: ReadContext): Promise<void>;
   read(
     ctx: ReadContext,
     request: AccountSurface,
@@ -211,7 +212,7 @@ export function parseMusicAccountPage(
       ),
     )
   )
-    throw new LinkError(409, 'YOUTUBE_ACCESS_REJECTED');
+    throw new LinkError(403, 'MUSIC_ACCESS_DENIED');
   const page: AccountMusicPage = { items: [], excluded: 0 };
   const detail = surface === 'playlist' || surface === 'album';
   let primary = false;
@@ -348,7 +349,31 @@ export class OAuthMusicCatalog implements MusicAccountCatalog {
       'getVideos'
     > = new YoutubeDataLibraryProvider(transport),
   ) {}
-  async read(ctx: ReadContext, request: AccountSurface, continuation?: string) {
+  // A public Home feed is also valid JSON. Require positive sign-in evidence in addition
+  // to a private collection before reporting personalized access to the mobile client.
+  async verify(ctx: ReadContext) {
+    const library = await this.request(ctx, { surface: 'playlists' });
+    parseMusicAccountPage(library, 'playlists');
+    const home = await this.request(ctx, { surface: 'home' });
+    parseMusicAccountPage(home, 'home');
+    const signedIn = [library, home].some((data) => {
+      const context = obj(obj(data).responseContext);
+      return (
+        at(context, 'mainAppWebResponseContext').loggedOut === false ||
+        list(context.serviceTrackingParams).some((g) =>
+          list(obj(g).params).some(
+            (p) => obj(p).key === 'logged_in' && obj(p).value === '1',
+          ),
+        )
+      );
+    });
+    if (!signedIn) throw new LinkError(503, 'MUSIC_CATALOG_RESPONSE');
+  }
+  private async request(
+    ctx: ReadContext,
+    request: AccountSurface,
+    continuation?: string,
+  ): Promise<unknown> {
     const search = request.surface === 'search';
     const id =
       request.surface === 'playlist' && request.playlistId
@@ -397,16 +422,38 @@ export class OAuthMusicCatalog implements MusicAccountCatalog {
       throw new LinkError(503, 'GOOGLE_UNAVAILABLE');
     }
     if (response.status === 401)
-      throw new LinkError(409, 'YOUTUBE_ACCESS_REJECTED');
-    if (response.status === 403)
       throw new LinkError(403, 'MUSIC_ACCESS_DENIED');
+    if (response.status === 403) {
+      const error = obj(obj(await response.json().catch(() => null)).error);
+      const reasons = [...list(error.errors), ...list(error.details)].map(
+        (detail) => str(obj(detail).reason),
+      );
+      if (
+        error.status === 'RESOURCE_EXHAUSTED' ||
+        reasons.some((reason) =>
+          [
+            'quotaExceeded',
+            'dailyLimitExceeded',
+            'rateLimitExceeded',
+            'userRateLimitExceeded',
+            'RATE_LIMIT_EXCEEDED',
+            'QUOTA_EXCEEDED',
+          ].includes(reason),
+        )
+      )
+        throw new LinkError(429, 'YOUTUBE_QUOTA');
+      throw new LinkError(403, 'MUSIC_ACCESS_DENIED');
+    }
     if (response.status === 404)
       throw new LinkError(404, 'MUSIC_PLAYLIST_NOT_FOUND');
     if (response.status === 429) throw new LinkError(429, 'TOO_MANY_REQUESTS');
     if (!response.ok) throw new LinkError(503, 'GOOGLE_UNAVAILABLE');
-    const json: unknown = await response.json().catch(() => {
+    return response.json().catch(() => {
       throw new LinkError(503, 'MUSIC_CATALOG_RESPONSE');
     });
+  }
+  async read(ctx: ReadContext, request: AccountSurface, continuation?: string) {
+    const json = await this.request(ctx, request, continuation);
     const candidates = new Set<string>();
     const confirmed = new Set<string>();
     const first = parseMusicAccountPage(

@@ -1,5 +1,11 @@
 # YouTube Music en Mysic_App
 
+## Verificación de la cuenta musical
+
+El vínculo OAuth por sí solo confirma el canal a través de YouTube Data API. El servidor comprueba por separado la biblioteca privada y el Inicio de Music con el permiso del usuario. Solo anuncia la personalización si ambas respuestas son válidas y contienen evidencia de una sesión identificada. Un rechazo de Music conserva el vínculo que sí funciona para el canal. Una cuota agotada o una respuesta temporal mantiene el acceso pendiente de comprobación.
+
+En ese estado, la búsqueda de música, las playlists propias con pistas musicales y las suscripciones musicales siguen utilizando YouTube Data API. Las listas sin música se omiten. Las pistas musicales disponibles llegan al reproductor de Mysic. La API no reemplaza las recomendaciones, los Me gusta ni los álbumes privados de Music por datos del canal. El contrato v2 permite que el APK 4026 reciba inmediatamente las funciones verificadas.
+
 ## Revisión 4026
 
 La app mantiene su sesión Firebase y el reproductor Android de Mysic. Para la cuenta musical utiliza el vínculo OAuth de lectura del canal elegido en Google. La referencia de escritorio consulta el Inicio de Music, la lista musical de «Me gusta» y la biblioteca de discos en operaciones distintas. La revisión 4026 incorpora ese recorrido a la API móvil. [Mysic original, rama de escritorio](https://github.com/jesustheprograme/Mysic/tree/dc408a744c0a083f85f5e7ce0ecd49d6be500832)

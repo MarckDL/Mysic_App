@@ -174,7 +174,7 @@ export class ChannelMusicService {
     await updateAppActivity(await this.link.owner(uid), generation, action);
   }
 
-  protected activityTrack(video: VideoDetails | undefined, entryId?: string) {
+  protected mapTrack(video: VideoDetails | undefined, entryId?: string) {
     return recording(video, this.sources, entryId);
   }
 
@@ -205,7 +205,7 @@ export class ChannelMusicService {
           this.provider.getVideos(ctx, [listen.trackId]),
         );
         const video = videos.find((v) => v.id === listen.trackId);
-        if (!this.activityTrack(video).length)
+        if (!this.mapTrack(video).length)
           throw new LinkError(404, 'MUSIC_TRACK_NOT_FOUND');
         const threshold = video?.durationSeconds
           ? Math.min(30000, video.durationSeconds * 500)
@@ -234,11 +234,7 @@ export class ChannelMusicService {
       : [];
     const byId = new Map(videos.map((v) => [v.id, v]));
     const items = entries.items.flatMap((entry) =>
-      recording(
-        byId.get(entry.videoId ?? ''),
-        this.sources,
-        entry.playlistItemId,
-      ),
+      this.mapTrack(byId.get(entry.videoId ?? ''), entry.playlistItemId),
     );
     return {
       items,
@@ -369,7 +365,7 @@ export class ChannelMusicService {
               : [];
             const byId = new Map(videos.map((video) => [video.id, video]));
             const items = activity.rows.flatMap(({ event, count }) =>
-              this.activityTrack(
+              this.mapTrack(
                 byId.get(event.videoId),
                 repeats ? event.videoId : event.listenId,
               ).map((track) => ({
@@ -431,7 +427,7 @@ export class ChannelMusicService {
           const items = result.items.flatMap((v) =>
             request.surface === 'artist' && v.artistId !== request.artistId
               ? []
-              : recording(v, this.sources),
+              : this.mapTrack(v),
           );
           return {
             items,

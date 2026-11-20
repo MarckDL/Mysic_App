@@ -34,10 +34,33 @@ const surfaces = [
   'artist',
   'search',
 ] as const;
+const channelSurfaces = [
+  'playlists',
+  'playlist',
+  'search',
+  'artists',
+  'artist',
+];
+const activityCapabilities = [
+  'mysicRecents',
+  'onRepeat',
+  'recordInMysic',
+  'playback',
+];
+type Personalization = 'verified' | 'channelOnly' | 'unverified';
 // Google continuations are opaque and can represent more rows than a mobile page.
 // Retain unread rows on the server, scoped to this user, link and view by LibraryCursors.
 export class AccountMusicService extends ChannelMusicService {
   private readonly pendingPages = new LruCache<PendingPage>(1024, 15 * 60_000);
+  private readonly verifiedAccess = new LruCache<Personalization>(
+    1024,
+    5 * 60_000,
+  );
+  private readonly transientAccess = new LruCache<Personalization>(
+    1024,
+    15_000,
+  );
+  private readonly checkingAccess = new Map<string, Promise<Personalization>>();
   constructor(
     link: YoutubeLinkService,
     data: ChannelMusicProvider,
@@ -46,27 +69,79 @@ export class AccountMusicService extends ChannelMusicService {
   ) {
     super(link, data, sources);
   }
+  private accessKey(uid: string, generation: string) {
+    return JSON.stringify([uid, generation]);
+  }
+  private async access(
+    uid: string,
+    generation: string,
+  ): Promise<Personalization> {
+    const key = this.accessKey(uid, generation);
+    const cached =
+      this.verifiedAccess.get(key) ?? this.transientAccess.get(key);
+    if (cached) return cached;
+    const pending = this.checkingAccess.get(key);
+    if (pending) return pending;
+    const check = this.checkAccess(uid, generation, key);
+    this.checkingAccess.set(key, check);
+    try {
+      return await check;
+    } finally {
+      this.checkingAccess.delete(key);
+    }
+  }
+  private async checkAccess(
+    uid: string,
+    generation: string,
+    key: string,
+  ): Promise<Personalization> {
+    const userId = await this.link.owner(uid);
+    const state = await this.library.authorized(
+      userId,
+      generation,
+      AbortSignal.timeout(6500),
+      async (_channel, _binding, read): Promise<Personalization> => {
+        try {
+          await read((ctx) => this.catalog.verify(ctx));
+          return 'verified';
+        } catch (err) {
+          if (!(err instanceof LinkError)) throw err;
+          if (err.code === 'MUSIC_ACCESS_DENIED') return 'channelOnly';
+          if (
+            err.status === 429 ||
+            err.status === 503 ||
+            err.code === 'MUSIC_PLAYLIST_NOT_FOUND'
+          )
+            return 'unverified';
+          throw err;
+        }
+      },
+    );
+    (state === 'unverified' ? this.transientAccess : this.verifiedAccess).set(
+      key,
+      state,
+    );
+    return state;
+  }
   override async connection(uid: string) {
     const state = await super.connection(uid);
+    if (state.status !== 'linked' || !state.generation)
+      return { ...state, personalization: 'notLinked', capabilities: [] };
+    const personalization = await this.access(uid, state.generation);
     return {
       ...state,
-      capabilities: state.capabilities.length
-        ? [
-            ...surfaces,
-            'mysicRecents',
-            'onRepeat',
-            'recordInMysic',
-            'playback',
-            'accountMusicCatalog',
-          ]
-        : [],
+      personalization,
+      capabilities:
+        personalization === 'verified'
+          ? [...surfaces, ...activityCapabilities, 'accountMusicCatalog']
+          : [...channelSurfaces, ...activityCapabilities],
     };
   }
-  protected override activityTrack(
+  protected override mapTrack(
     video: VideoDetails | undefined,
     entryId?: string,
   ): MusicTrack[] {
-    const rows = super.activityTrack(
+    const rows = super.mapTrack(
       video && (video.isMusicCategory || video.isRecording)
         ? { ...video, isRecording: true }
         : undefined,
@@ -89,6 +164,51 @@ export class AccountMusicService extends ChannelMusicService {
       return super.read(uid, generation, request, limit, cursor, signal);
     if (!this.link.enabled || !surfaces.some((s) => s === request.surface))
       throw new LinkError(503, 'MUSIC_CAPABILITY_UNAVAILABLE');
+    // Public music search in the Data API is independent of access to the private Music feed.
+    if (request.surface === 'search')
+      return super.read(uid, generation, request, limit, cursor, signal);
+    const personalization = await this.access(uid, generation);
+    if (personalization !== 'verified') {
+      if (channelSurfaces.includes(request.surface))
+        return super.read(uid, generation, request, limit, cursor, signal);
+      throw new LinkError(
+        personalization === 'channelOnly' ? 403 : 503,
+        personalization === 'channelOnly'
+          ? 'MUSIC_ACCESS_DENIED'
+          : 'MUSIC_ACCESS_UNVERIFIED',
+      );
+    }
+    try {
+      return await this.readAccount(
+        uid,
+        generation,
+        request,
+        limit,
+        cursor,
+        signal,
+      );
+    } catch (err) {
+      // A single inaccessible playlist does not invalidate the whole account.
+      if (
+        !(err instanceof LinkError) ||
+        err.code !== 'MUSIC_ACCESS_DENIED' ||
+        ['album', 'playlist', 'artist'].includes(request.surface)
+      )
+        throw err;
+      this.verifiedAccess.set(this.accessKey(uid, generation), 'channelOnly');
+      if (!channelSurfaces.includes(request.surface)) throw err;
+      if (cursor) throw new LinkError(409, 'CURSOR_EXPIRED');
+      return super.read(uid, generation, request, limit, undefined, signal);
+    }
+  }
+  private async readAccount(
+    uid: string,
+    generation: string,
+    request: AccountSurface,
+    limit: number | undefined,
+    cursor: string | undefined,
+    signal: AbortSignal,
+  ): Promise<AccountPageResult> {
     if (
       request.surface === 'album' &&
       !/^MPRE[\w-]+$/.test(request.playlistId ?? '')
@@ -167,7 +287,11 @@ export class AccountMusicService extends ChannelMusicService {
                 ),
               );
             } catch (err) {
-              if (!(err instanceof LinkError) || err.status !== 404) throw err;
+              if (
+                !(err instanceof LinkError) ||
+                (err.status !== 404 && err.code !== 'MUSIC_ACCESS_DENIED')
+              )
+                throw err;
             }
             calls++;
             if (!contents?.items.some((row) => row.kind === 'track')) {
