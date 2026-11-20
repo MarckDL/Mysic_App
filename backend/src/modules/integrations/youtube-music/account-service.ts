@@ -1,3 +1,4 @@
+import type { AuthorizedRead } from '../youtube/library-service.js';
 import type { CatalogService } from '../../catalog/application/catalog-service.js';
 import { randomUUID } from 'node:crypto';
 import { LruCache } from '../../../infrastructure/cache/lru-cache.js';
@@ -99,39 +100,18 @@ export class AccountMusicService extends ChannelMusicService {
       AbortSignal.timeout(12_000),
       async (_channel, _binding, read): Promise<Access> => {
         try {
-          await read((ctx) => this.catalog.verify(ctx));
+          const proof = await read((ctx) => this.catalog.verify(ctx));
+          if (proof === 'privatePlaylists')
+            return this.availableCollections(read, [
+              'playlists',
+              'playlist',
+              'musicPlaylists',
+            ]);
           return { status: 'verified', collections: [] };
         } catch (err) {
           if (!(err instanceof LinkError)) throw err;
-          if (err.code === 'MUSIC_ACCESS_DENIED') {
-            const verify = this.catalog.verifyCollection?.bind(this.catalog);
-            if (!verify) return { status: 'channelOnly', collections: [] };
-            // Liked songs and saved albums are separate resources. Each must confirm
-            // the signed-in user before it can become a source in the mobile library.
-            const collections = ['liked', 'albums'] as const;
-            const checks = await Promise.allSettled(
-              collections.map((surface) => read((ctx) => verify(ctx, surface))),
-            );
-            const granted = collections.filter(
-              (_, i) => checks[i]?.status === 'fulfilled',
-            );
-            const transient = checks.some(
-              (result) =>
-                result.status === 'rejected' &&
-                (!(result.reason instanceof LinkError) ||
-                  result.reason.status >= 429),
-            );
-            return {
-              status: granted.length
-                ? 'partialMusic'
-                : transient
-                  ? 'unverified'
-                  : 'channelOnly',
-              collections: granted.includes('albums')
-                ? [...granted, 'album']
-                : granted,
-            };
-          }
+          if (err.code === 'MUSIC_ACCESS_DENIED')
+            return this.availableCollections(read, []);
           if (
             err.status === 429 ||
             err.status === 503 ||
@@ -148,6 +128,37 @@ export class AccountMusicService extends ChannelMusicService {
     ).set(key, state);
     return state;
   }
+  private async availableCollections(
+    read: AuthorizedRead,
+    confirmed: string[],
+  ): Promise<Access> {
+    const verify = this.catalog.verifyCollection?.bind(this.catalog);
+    const collections = ['liked', 'albums', 'artists'] as const;
+    const checks = verify
+      ? await Promise.allSettled(
+          collections.map((surface) => read((ctx) => verify(ctx, surface))),
+        )
+      : [];
+    const granted = collections.filter(
+      (_, i) => checks[i]?.status === 'fulfilled',
+    );
+    const transient = checks.some(
+      (result) =>
+        result.status === 'rejected' &&
+        (!(result.reason instanceof LinkError) || result.reason.status >= 429),
+    );
+    const available = [...confirmed, ...granted];
+    if (granted.includes('albums')) available.push('album');
+    if (granted.includes('artists')) available.push('artist');
+    return {
+      status: available.length
+        ? 'partialMusic'
+        : transient
+          ? 'unverified'
+          : 'channelOnly',
+      collections: available,
+    };
+  }
   override async connection(uid: string) {
     const state = await super.connection(uid);
     if (state.status !== 'linked' || !state.generation)
@@ -160,13 +171,15 @@ export class AccountMusicService extends ChannelMusicService {
         access.status === 'verified'
           ? [...surfaces, ...activityCapabilities, 'accountMusicCatalog']
           : [
-              ...channelSurfaces.filter(
-                (cap) =>
-                  cap !== 'channelLiked' ||
-                  !access.collections.includes('liked'),
-              ),
-              ...access.collections,
-              ...activityCapabilities,
+              ...new Set([
+                ...channelSurfaces.filter(
+                  (cap) =>
+                    cap !== 'channelLiked' ||
+                    !access.collections.includes('liked'),
+                ),
+                ...access.collections,
+                ...activityCapabilities,
+              ]),
             ],
     };
   }

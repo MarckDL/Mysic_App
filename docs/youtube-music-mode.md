@@ -2,7 +2,7 @@
 
 ## Android 4028
 
-Cuenta permite seleccionar el canal de Google o la biblioteca personal de Mysic de escritorio. El servidor de Android comprueba el Inicio y una colección privada con la autorización de Google. Si el servicio deniega el Inicio, comprueba por separado Me gusta y Álbumes. Cada sección privada necesita una respuesta musical identificada con la sesión. El canal tiene una sección propia para sus Me gusta musicales. En todas las fuentes el buscador pide canciones y la cola usa el reproductor de Mysic.
+Cuenta permite seleccionar el canal de Google o la biblioteca personal de Mysic de escritorio. El servidor de Android comprueba el Inicio y una colección privada con la autorización de Google. Si el servicio deniega el Inicio, conserva las playlists musicales ya verificadas y comprueba por separado Me gusta, Álbumes y Artistas. Cada sección privada necesita una respuesta musical identificada con la sesión. El canal tiene una sección propia para sus Me gusta musicales. En todas las fuentes el buscador pide canciones y la cola usa el reproductor de Mysic.
 
 El acceso de escritorio mantiene el inicio de sesión con correo y contraseña. Si falta vincular YouTube Music en el original, el teléfono permite comprobar de nuevo el Inicio con la sesión ya abierta. La fuente anterior permanece disponible hasta confirmar el cambio. Las dos vinculaciones se gestionan por separado. Las versiones anteriores que guardaron una cuenta de escritorio siguen usándola como fuente inicial.
 

@@ -15,10 +15,12 @@ class PlayerQueueSheet extends ConsumerStatefulWidget {
     super.key,
     required this.controller,
     this.openMusicLikes,
+    this.musicLikesLabel,
   });
 
   final TrackPlaybackController controller;
   final VoidCallback? openMusicLikes;
+  final String? musicLikesLabel;
 
   @override
   ConsumerState<PlayerQueueSheet> createState() => _PlayerQueueSheetState();
@@ -126,8 +128,9 @@ class _PlayerQueueSheetState extends ConsumerState<PlayerQueueSheet> {
                       : _message(
                           TextButton(
                             onPressed: widget.openMusicLikes,
-                            child: const Text(
-                              'Ver mis Me gusta de YouTube Music',
+                            child: Text(
+                              widget.musicLikesLabel ??
+                                  'Ver mis Me gusta de YouTube Music',
                             ),
                           ),
                         ),

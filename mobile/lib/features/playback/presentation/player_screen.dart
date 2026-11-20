@@ -158,6 +158,9 @@ class PlayerScreen extends ConsumerWidget {
                                           data: theme,
                                           child: PlayerQueueSheet(
                                             controller: controller,
+                                            musicLikesLabel: MusicModeScope.of(
+                                              context,
+                                            )?.connection?.likesActionLabel,
                                             openMusicLikes: musicMode
                                                 ? () {
                                                     Navigator.of(
@@ -325,7 +328,9 @@ class _NowPlaying extends ConsumerWidget {
             ),
             if (musicMode)
               IconButton(
-                tooltip: 'Ver mis Me gusta de YouTube Music',
+                tooltip: MusicModeScope.of(
+                  context,
+                )?.connection?.likesActionLabel,
                 icon: const Icon(Icons.library_music_outlined),
                 onPressed: () => context.push('/music/liked'),
               )

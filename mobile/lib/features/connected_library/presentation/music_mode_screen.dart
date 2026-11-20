@@ -85,12 +85,16 @@ class MusicModeSurface extends StatelessWidget {
         ),
       );
     }
+    final resolved =
+        surface == MusicSurface.liked && connection!.usesChannelLikes
+        ? MusicSurface.channelLiked
+        : surface;
     if (connection!.channelOnly &&
         {
           MusicSurface.liked,
           MusicSurface.album,
           MusicSurface.albums,
-        }.contains(surface)) {
+        }.contains(resolved)) {
       return Scaffold(
         appBar: AppBar(title: const Text('Biblioteca de YouTube Music')),
         body: Padding(
@@ -109,12 +113,12 @@ class MusicModeSurface extends StatelessWidget {
       key: ValueKey((
         connection.generation,
         controller.revision,
-        surface,
+        resolved,
         playlistId,
       )),
       controller: controller,
       connection: connection,
-      surface: surface,
+      surface: resolved,
       playlistId: playlistId,
     );
   }
@@ -399,6 +403,7 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
           caps.contains('liked')) {
         return MusicSurface.liked;
       }
+      if (caps.contains('musicPlaylists')) return MusicSurface.playlists;
       if (caps.contains('channelLiked')) return MusicSurface.channelLiked;
       return MusicSurface.playlists;
     }

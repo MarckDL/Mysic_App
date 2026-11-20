@@ -298,6 +298,38 @@ class _ConsentClient extends oauth.Client {
 }
 
 void main() {
+  testWidgets(
+    'el acceso a Me gusta del reproductor abre la colección de la fuente activa',
+    (tester) async {
+      final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
+      final api = AuthenticatedApiClient(auth, baseUrl: 'https://example.test');
+      addTearDown(api.close);
+      final fixture = _SessionFixture([a], api, direct: true)
+        ..account = a
+        ..channelOnly = true;
+      final model = MusicModeController(fixture, () => true, () async {});
+      addTearDown(model.dispose);
+      await model.refresh();
+      expect(
+        model.connection!.likesActionLabel,
+        'Ver los Me gusta de mi canal',
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: MusicModeScope(
+              controller: model,
+              child: const MusicModeSurface(surface: MusicSurface.liked),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Me gusta de mi canal'), findsOneWidget);
+      expect(find.text('Canción de Cuenta A'), findsOneWidget);
+      expect(find.text('Opciones de conexión'), findsNothing);
+    },
+  );
   test(
     'un canal con acceso limitado sigue buscando y actualiza las capacidades al verificar la biblioteca',
     () async {

@@ -52,10 +52,10 @@ export interface AccountMusicPage {
   excluded: number;
 }
 export interface MusicAccountCatalog {
-  verify(ctx: ReadContext): Promise<void>;
+  verify(ctx: ReadContext): Promise<'privatePlaylists' | void>;
   verifyCollection?(
     ctx: ReadContext,
-    surface: 'liked' | 'albums',
+    surface: 'liked' | 'albums' | 'artists',
   ): Promise<void>;
   read(
     ctx: ReadContext,
@@ -358,10 +358,22 @@ export class OAuthMusicCatalog implements MusicAccountCatalog {
   async verify(ctx: ReadContext) {
     const library = await this.request(ctx, { surface: 'playlists' });
     parseMusicAccountPage(library, 'playlists');
-    const home = await this.request(ctx, { surface: 'home' });
-    parseMusicAccountPage(home, 'home');
-    if (!this.signedIn(home))
-      throw new LinkError(503, 'MUSIC_CATALOG_RESPONSE');
+    try {
+      const home = await this.request(ctx, { surface: 'home' });
+      parseMusicAccountPage(home, 'home');
+      if (!this.signedIn(home))
+        throw new LinkError(503, 'MUSIC_CATALOG_RESPONSE');
+    } catch (error) {
+      // A rejected or anonymous Home does not revoke successfully verified Music playlists.
+      if (
+        this.signedIn(library) &&
+        error instanceof LinkError &&
+        ['MUSIC_ACCESS_DENIED', 'MUSIC_CATALOG_RESPONSE'].includes(error.code)
+      ) {
+        return 'privatePlaylists' as const;
+      }
+      throw error;
+    }
   }
   private signedIn(data: unknown) {
     const context = obj(obj(data).responseContext);
@@ -374,7 +386,10 @@ export class OAuthMusicCatalog implements MusicAccountCatalog {
       )
     );
   }
-  async verifyCollection(ctx: ReadContext, surface: 'liked' | 'albums') {
+  async verifyCollection(
+    ctx: ReadContext,
+    surface: 'liked' | 'albums' | 'artists',
+  ) {
     const data = await this.request(ctx, { surface });
     parseMusicAccountPage(data, surface);
     if (!this.signedIn(data))
