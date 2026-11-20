@@ -42,7 +42,17 @@ internal class DesktopSessionStore(private val context: Context) : MethodChannel
         val name = MessageDigest.getInstance("SHA-256").digest(owner).joinToString("") { "%02x".format(it) }
         val file = AtomicFile(File(context.noBackupFilesDir, "desktop-$name"))
         try {
+            val localChoice = File(context.noBackupFilesDir, "local-library-$name")
             when (call.method) {
+                "localPreferred" -> result.success(localChoice.isFile)
+                "preferLocal" -> {
+                    if (requireNotNull(call.argument<Boolean>("local"))) {
+                        localChoice.createNewFile()
+                    } else if (localChoice.exists() && !localChoice.delete()) {
+                        throw java.io.IOException("Cannot clear library choice")
+                    }
+                    result.success(null)
+                }
                 "read" -> {
                     val bytes = try { file.readFully() } catch (_: java.io.FileNotFoundException) { null }
                     val value = bytes?.let {

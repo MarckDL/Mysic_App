@@ -33,13 +33,15 @@ final musicModeControllerProvider = Provider.autoDispose
       );
       final playback = ref.watch(trackPlaybackControllerProvider);
       bool owns() => auth.currentUser?.uid == uid;
-      final desktop = !kIsWeb && defaultTargetPlatform == TargetPlatform.android
-          ? DesktopMusicClient(DesktopSessionStore(uid), owns)
+      final store = !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+          ? DesktopSessionStore(uid)
           : null;
+      final desktop = store == null ? null : DesktopMusicClient(store, owns);
       final controller = MusicModeController(
         MusicModeClient(api, desktop: desktop),
         owns,
         playback.clear,
+        choiceStore: store,
         device: DeviceRecordings(uid),
         onDeviceAudioRemoved: playback.removeDeviceAudio,
       );
@@ -57,9 +59,11 @@ class MusicModeController extends ChangeNotifier {
     this._isOwner,
     this._clearPlayback, {
     this.device,
+    this.choiceStore,
     this.onDeviceAudioRemoved,
   });
   final DeviceRecordings? device;
+  final DesktopSessionStore? choiceStore;
   final Future<void> Function(Uri)? onDeviceAudioRemoved;
   Map<String, Uri> _files = {};
   String? _fileGeneration;
@@ -76,6 +80,7 @@ class MusicModeController extends ChangeNotifier {
   bool busy = false;
   bool transitioning = false;
   bool _localOverride = false;
+  bool _choiceRestored = false;
   Timer? _retry;
   bool failed = false;
   String? failureCode;
@@ -101,6 +106,31 @@ class MusicModeController extends ChangeNotifier {
       );
   bool get hasDesktopSession => _client.desktop?.hasSession == true;
   bool get supportsDesktop => _client.desktop != null;
+
+  Future<void> _restoreChoice() async {
+    if (_choiceRestored || choiceStore == null) return;
+    bool local;
+    try {
+      local = await choiceStore!.localPreferred();
+    } on Object {
+      // An unavailable device preference does not prevent checking the actual account.
+      return;
+    }
+    if (_active && !_choiceRestored) {
+      _localOverride = local;
+      _choiceRestored = true;
+    }
+  }
+
+  void _chooseLocal(bool value) {
+    _localOverride = value;
+    _choiceRestored = true;
+    final store = choiceStore;
+    if (store != null) {
+      // A storage failure must not interrupt the session already active in memory.
+      unawaited(store.preferLocal(value).catchError((Object _) {}));
+    }
+  }
 
   String? get desktopName => _client.desktop?.accountName;
   bool get pendingDesktopLink => _client.desktop?.hasPendingLink == true;
@@ -154,7 +184,7 @@ class MusicModeController extends ChangeNotifier {
       if (!_active || epoch != _bindingEpoch) return;
       connection = next;
       wantsMusic = true;
-      _localOverride = false;
+      _chooseLocal(false);
       failed = false;
       failureCode = null;
     } finally {
@@ -258,6 +288,10 @@ class MusicModeController extends ChangeNotifier {
     failureCode = null;
     notifyListeners();
     try {
+      if (!_choiceRestored && choiceStore != null) {
+        await _restoreChoice();
+        if (!_active || epoch != _bindingEpoch) return;
+      }
       final next = await _client.connection(recheckMusic: recheckMusic);
       if (!_active || epoch != _bindingEpoch) return;
       final previous = connection;
@@ -335,15 +369,39 @@ class MusicModeController extends ChangeNotifier {
   Future<void> select(MusicAccount account) =>
       _change(() => _client.link(account.id, connection?.generation), true);
 
+  /// Google has confirmed a channel. Check its Music access before changing sources.
+  Future<bool> reviewConfirmedChannel() async {
+    if (!_active || connection?.isDesktop == true) return false;
+    if (wantsMusic) {
+      useLocal(disconnecting: true);
+    } else {
+      _chooseLocal(true);
+    }
+    await refresh();
+    final current = connection;
+    if (!_active ||
+        busy ||
+        failed ||
+        current?.isDirect != true ||
+        current?.status != MusicLinkStatus.linked ||
+        !current!.capabilities.contains('home')) {
+      return false;
+    }
+    await useLinkedAccount();
+    return _active &&
+        wantsMusic &&
+        connection?.capabilities.contains('home') == true;
+  }
+
   Future<void> useLinkedAccount() async {
-    _localOverride = false;
+    _chooseLocal(false);
     await refresh(invalidate: true);
   }
 
   void useLocal({bool disconnecting = false}) {
     if (!_active || (busy && !disconnecting)) return;
     if (disconnecting) _bindingEpoch++;
-    _localOverride = true;
+    _chooseLocal(true);
     wantsMusic = false;
     _forgetData();
     unawaited(_clearPlayback());
@@ -373,7 +431,7 @@ class MusicModeController extends ChangeNotifier {
       final next = await operation();
       if (!_active) return;
       connection = next;
-      _localOverride = false;
+      _chooseLocal(false);
       wantsMusic = useMusic && next.status == MusicLinkStatus.linked;
     } catch (error) {
       if (error is ApiFailure) failureCode = error.code;

@@ -14,12 +14,21 @@ import {
 // Los logs internos pueden contener respuestas completas del proveedor.
 Log.setLevel(Log.Level.NONE);
 
-async function createClient(signal?: AbortSignal) {
+type YoutubeCache = NonNullable<
+  Parameters<typeof Innertube.create>[0]
+>['cache'];
+
+export async function createYoutubeClient(
+  signal?: AbortSignal,
+  lang = 'en',
+  cache?: YoutubeCache,
+) {
   return Innertube.create({
-    lang: 'en',
+    lang,
     location: 'PE',
     retrieve_player: false,
-    enable_session_cache: false,
+    enable_session_cache: !!cache,
+    cache,
     fail_fast: true,
     fetch: (input, init) =>
       fetch(input, {
@@ -33,10 +42,12 @@ async function createClient(signal?: AbortSignal) {
   });
 }
 
-type ClientFactory = typeof createClient;
+type ClientFactory = typeof createYoutubeClient;
 
 export class YoutubeProvider implements MusicProvider {
-  constructor(private readonly clientFactory: ClientFactory = createClient) {}
+  constructor(
+    private readonly clientFactory: ClientFactory = createYoutubeClient,
+  ) {}
 
   private async execute<T>(
     signal: AbortSignal | undefined,

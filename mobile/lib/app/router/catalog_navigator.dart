@@ -13,6 +13,7 @@ import '../../features/connected_library/presentation/connected_screen.dart';
 import '../../features/connected_library/application/music_mode_controller.dart';
 import '../../features/connected_library/domain/music_mode.dart';
 import '../../features/connected_library/presentation/music_mode_host.dart';
+import '../../features/connected_library/presentation/music_discovery_screen.dart';
 import '../../features/connected_library/presentation/music_mode_screen.dart';
 import '../../features/favorites/presentation/favorites_screen.dart';
 import '../../features/history/data/history_client.dart';
@@ -123,6 +124,14 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
         builder: (context, state) => MusicModeSurface(
           surface: MusicSurface.album,
           playlistId: state.pathParameters['id'],
+        ),
+      ),
+      GoRoute(
+        path: '/music/catalog/:kind/:id',
+        builder: (context, state) => PublicMusicDetail(
+          kind: state.pathParameters['kind']!,
+          id: state.pathParameters['id']!,
+          title: state.extra is String ? state.extra as String : null,
         ),
       ),
       GoRoute(
@@ -240,8 +249,16 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
           return;
         }
         if (confirmed) {
-          unawaited(music.useLinkedAccount());
-          _router.go('/library');
+          _router.go('/library/youtube');
+          unawaited(
+            music.reviewConfirmedChannel().then((personal) {
+              if (personal &&
+                  mounted &&
+                  _router.state.matchedLocation == '/library/youtube') {
+                _router.go('/library');
+              }
+            }),
+          );
         } else {
           unawaited(music.refresh(invalidate: true));
         }

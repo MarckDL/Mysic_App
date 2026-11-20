@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { isLibraryTrack } from '../src/modules/integrations/youtube/library-domain.js';
 import { YoutubeDataLibraryProvider } from '../src/infrastructure/youtube/youtube-data-library-provider.js';
 
 const context = {
@@ -103,14 +104,150 @@ describe('grabaciones en la biblioteca del canal', () => {
     expect(fetcher).toHaveBeenCalledTimes(3);
   });
 
-  it('conserva los Art Tracks y reintenta los candidatos si Music falló en una consulta anterior', async () => {
+  it('recupera una traducción o remix de una lista incluso con categoría general o restricción regional', async () => {
+    const musicUpload = 'Dl9fMXwvLIA';
+    const musicVideo = video(musicUpload, 'Riptide//Señas//Sub. Español');
+    const filmShort = video(film, 'El Mentalista');
+    const response = {
+      items: [
+        {
+          ...musicVideo,
+          snippet: { ...musicVideo.snippet, categoryId: '22' },
+          contentDetails: {
+            ...musicVideo.contentDetails,
+            regionRestriction: { blocked: ['ZZ'] },
+          },
+        },
+        filmShort,
+      ],
+    };
+    const uploadPanel = panel(musicUpload, 'UGC');
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json(response))
+      .mockResolvedValueOnce(
+        Response.json({
+          queueDatas: [
+            {
+              content: {
+                playlistPanelVideoRenderer: {
+                  ...uploadPanel.playlistPanelVideoRenderer,
+                  title: { runs: [{ text: 'Riptide//Señas//Sub. Español' }] },
+                },
+              },
+            },
+            { content: panel(film, 'UGC', film, false) },
+          ],
+        }),
+      );
+    const provider = new YoutubeDataLibraryProvider(fetcher, {
+      verifyMusic: true,
+    });
+    const result = await provider.getVideos(context, [musicUpload, film]);
+    expect(result[0]).toMatchObject({
+      availability: 'unknown',
+      isMusicCategory: false,
+      catalogKind: 'musicUpload',
+    });
+    expect(
+      result.filter((row) => isLibraryTrack(row, true)).map((row) => row.id),
+    ).toEqual([musicUpload]);
+    expect(result.filter((row) => isLibraryTrack(row, false))).toHaveLength(0);
+    expect(
+      JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body)).videoIds,
+    ).toEqual([musicUpload, film]);
+  });
+  it.each([
+    {
+      label: 'cuota',
+      failure: () =>
+        Promise.resolve(
+          new Response(null, { status: 429, headers: { 'Retry-After': '15' } }),
+        ),
+      code: 'YOUTUBE_QUOTA',
+      retryAfter: 15,
+    },
+    {
+      label: 'error del servidor',
+      failure: () => Promise.resolve(new Response(null, { status: 503 })),
+      code: 'GOOGLE_UNAVAILABLE',
+    },
+    {
+      label: 'timeout',
+      failure: () =>
+        Promise.reject(new DOMException('timeout', 'TimeoutError')),
+      code: 'GOOGLE_UNAVAILABLE',
+    },
+    {
+      label: 'JSON inválido',
+      failure: () => Promise.resolve(new Response('gateway response')),
+      code: 'MUSIC_CATALOG_RESPONSE',
+    },
+    {
+      label: 'estructura desconocida',
+      failure: () => Promise.resolve(Response.json({ data: [] })),
+      code: 'MUSIC_CATALOG_RESPONSE',
+    },
+    {
+      label: 'fila desconocida dentro de una respuesta parcial',
+      failure: () =>
+        Promise.resolve(
+          Response.json({
+            queueDatas: [
+              { content: panel(course, 'OMV') },
+              { content: { unexpectedRenderer: {} } },
+            ],
+          }),
+        ),
+      code: 'MUSIC_CATALOG_RESPONSE',
+    },
+  ])(
+    'devuelve un error reintentable al refrescar con $label y recupera todas las pistas',
+    async ({ failure, code, retryAfter }) => {
+      const existing = [video(track, 'Grabación'), video(clip, 'Videoclip')];
+      const refreshed = [...existing, video(course, 'Nuevo videoclip')];
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(Response.json({ items: existing }))
+        .mockResolvedValueOnce(
+          Response.json({ queueDatas: [{ content: panel(clip, 'OMV') }] }),
+        )
+        .mockResolvedValueOnce(Response.json({ items: refreshed }))
+        .mockImplementationOnce(failure)
+        .mockResolvedValueOnce(Response.json({ items: refreshed }))
+        .mockResolvedValueOnce(
+          Response.json({ queueDatas: [{ content: panel(course, 'OMV') }] }),
+        );
+      const provider = new YoutubeDataLibraryProvider(fetcher, {
+        verifyMusic: true,
+      });
+      const load = async (ids: string[]) =>
+        (await provider.getVideos(context, ids))
+          .filter((row) => isLibraryTrack(row, true))
+          .map((row) => row.id);
+      await expect(load([track, clip])).resolves.toEqual([track, clip]);
+      await expect(load([track, clip, course])).rejects.toMatchObject({
+        code,
+        retryAfter,
+      });
+      await expect(load([track, clip, course])).resolves.toEqual([
+        track,
+        clip,
+        course,
+      ]);
+      expect(
+        JSON.parse(String(fetcher.mock.calls[5]?.[1]?.body)).videoIds,
+      ).toEqual([course]);
+    },
+  );
+  it('excluye una identidad ausente en una cola válida y permite que aparezca después', async () => {
     const raw = {
-      items: [video(track, 'Grabación'), video(clip, 'Videoclip')],
+      items: [video(track, 'Art Track'), video(clip, 'Videoclip')],
     };
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(Response.json(raw))
-      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(Response.json({ queueDatas: [] }))
       .mockResolvedValueOnce(Response.json(raw))
       .mockResolvedValueOnce(
         Response.json({ queueDatas: [{ content: panel(clip, 'OMV') }] }),
@@ -118,15 +255,11 @@ describe('grabaciones en la biblioteca del canal', () => {
     const provider = new YoutubeDataLibraryProvider(fetcher, {
       verifyMusic: true,
     });
-    expect(
-      (await provider.getVideos(context, [track, clip])).map(
-        (v) => v.isRecording,
-      ),
-    ).toEqual([true, false]);
-    expect(
-      (await provider.getVideos(context, [track, clip])).map(
-        (v) => v.isRecording,
-      ),
-    ).toEqual([true, true]);
+    expect((await provider.getVideos(context, [track, clip]))[1]).toMatchObject(
+      { catalogKind: 'other', isRecording: false },
+    );
+    expect((await provider.getVideos(context, [track, clip]))[1]).toMatchObject(
+      { catalogKind: 'recording', isRecording: true },
+    );
   });
 });

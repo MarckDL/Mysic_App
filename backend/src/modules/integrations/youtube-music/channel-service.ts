@@ -6,6 +6,7 @@ import {
   updateAppActivity,
 } from './app-activity.js';
 import { LinkError } from '../youtube/domain.js';
+import { isLibraryTrack } from '../youtube/library-domain.js';
 import { LibraryCursors } from '../youtube/library-cursor.js';
 import type {
   ConnectedLibraryProvider,
@@ -89,10 +90,10 @@ function recording(
   video: VideoDetails | undefined,
   sources: ReadonlyMap<string, string>,
   entryId?: string,
+  includeUploads = false,
 ): MusicTrack[] {
   if (
-    !video?.isRecording ||
-    video.availability !== 'available' ||
+    !isLibraryTrack(video, includeUploads) ||
     !video.title ||
     !/^[\w-]{11}$/.test(video.id)
   )
@@ -175,8 +176,12 @@ export class ChannelMusicService {
     await updateAppActivity(await this.link.owner(uid), generation, action);
   }
 
-  protected mapTrack(video: VideoDetails | undefined, entryId?: string) {
-    return recording(video, this.sources, entryId);
+  protected mapTrack(
+    video: VideoDetails | undefined,
+    entryId?: string,
+    includeUploads = false,
+  ) {
+    return recording(video, this.sources, entryId, includeUploads);
   }
 
   async listen(
@@ -206,7 +211,7 @@ export class ChannelMusicService {
           this.provider.getVideos(ctx, [listen.trackId]),
         );
         const video = videos.find((v) => v.id === listen.trackId);
-        if (!this.mapTrack(video).length)
+        if (!this.mapTrack(video, undefined, true).length)
           throw new LinkError(404, 'MUSIC_TRACK_NOT_FOUND');
         const threshold = video?.durationSeconds
           ? Math.min(30000, video.durationSeconds * 500)
@@ -235,7 +240,7 @@ export class ChannelMusicService {
       : [];
     const byId = new Map(videos.map((v) => [v.id, v]));
     const items = entries.items.flatMap((entry) =>
-      this.mapTrack(byId.get(entry.videoId ?? ''), entry.playlistItemId),
+      this.mapTrack(byId.get(entry.videoId ?? ''), entry.playlistItemId, true),
     );
     return {
       items,
@@ -383,6 +388,7 @@ export class ChannelMusicService {
               this.mapTrack(
                 byId.get(event.videoId),
                 repeats ? event.videoId : event.listenId,
+                true,
               ).map((track) => ({
                 ...track,
                 listenedAt: event.playedAt.toISOString(),

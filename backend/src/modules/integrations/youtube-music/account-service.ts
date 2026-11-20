@@ -1,3 +1,4 @@
+import type { DiscoveryService } from '../../catalog/application/discovery-service.js';
 import type { AuthorizedRead } from '../youtube/library-service.js';
 import type { CatalogService } from '../../catalog/application/catalog-service.js';
 import { randomUUID } from 'node:crypto';
@@ -19,8 +20,6 @@ interface PendingPage {
   rows: MusicItem[];
   next?: string;
   started: boolean;
-  playlistCursor?: string;
-  playlistTokens?: string[];
   checkedTokens: string[];
   title?: string;
 }
@@ -67,6 +66,7 @@ export class AccountMusicService extends ChannelMusicService {
     sources: ReadonlyMap<string, string>,
     private readonly catalog: MusicAccountCatalog,
     private readonly songs: Pick<CatalogService, 'search'>,
+    private readonly discovery: Pick<DiscoveryService, 'related'>,
   ) {
     super(link, data, sources);
   }
@@ -190,6 +190,9 @@ export class AccountMusicService extends ChannelMusicService {
                     !access.collections.includes('liked'),
                 ),
                 ...access.collections,
+                ...(!access.collections.includes('home')
+                  ? ['channelRecommendations']
+                  : []),
                 ...activityCapabilities,
               ]),
             ],
@@ -198,8 +201,9 @@ export class AccountMusicService extends ChannelMusicService {
   protected override mapTrack(
     video: VideoDetails | undefined,
     entryId?: string,
+    includeUploads = false,
   ): MusicTrack[] {
-    const rows = super.mapTrack(video, entryId);
+    const rows = super.mapTrack(video, entryId, includeUploads);
     return rows.map((row) => ({
       ...row,
       playback: row.audioUrl ? 'licensed' : 'native',
@@ -217,6 +221,15 @@ export class AccountMusicService extends ChannelMusicService {
       return super.read(uid, generation, request, limit, cursor, signal);
     if (!this.link.enabled)
       throw new LinkError(503, 'MUSIC_CAPABILITY_UNAVAILABLE');
+    if (request.surface === 'channelRecommendations') {
+      return this.channelRecommendations(
+        uid,
+        generation,
+        limit,
+        cursor,
+        signal,
+      );
+    }
     if (request.surface === 'channelLiked') {
       return super.read(
         uid,
@@ -290,6 +303,81 @@ export class AccountMusicService extends ChannelMusicService {
       return super.read(uid, generation, request, limit, undefined, signal);
     }
   }
+  private async channelRecommendations(
+    uid: string,
+    generation: string,
+    limit: number | undefined,
+    cursor: string | undefined,
+    signal: AbortSignal,
+  ): Promise<AccountPageResult> {
+    const owner = await this.link.owner(uid);
+    const checkBinding = async () => {
+      const state = await this.link.connection(owner);
+      if (state.status !== 'linked' || state.generation !== generation)
+        throw new LinkError(409, 'YOUTUBE_LINK_CHANGED');
+    };
+    await checkBinding();
+    const scope = JSON.stringify([
+      'channel-recommendations',
+      owner,
+      generation,
+    ]);
+    const page = this.cursors.resume(
+      scope,
+      cursor,
+      limit ?? (cursor ? undefined : 20),
+    );
+    let rows: MusicItem[];
+    if (page.token) {
+      const pending = this.pendingPages.get(page.token);
+      if (!pending) throw new LinkError(409, 'CURSOR_EXPIRED');
+      rows = pending.rows;
+    } else {
+      // Only public recording IDs from the current binding reach discovery.
+      const likes = await super.read(
+        uid,
+        generation,
+        { surface: 'liked' },
+        50,
+        undefined,
+        signal,
+      );
+      let seed = likes.items.find((item) => item.kind === 'track');
+      if (!seed) {
+        const tracks = await super.read(
+          uid,
+          generation,
+          { surface: 'songs' },
+          8,
+          undefined,
+          signal,
+        );
+        seed = tracks.items.find((item) => item.kind === 'track');
+      }
+      if (!seed) return { items: [], excludedCount: 0, nextCursor: null };
+      const result = await this.discovery.related(seed.id, signal).catch(() => {
+        throw new LinkError(503, 'MUSIC_RECOMMENDATIONS_UNAVAILABLE');
+      });
+      await checkBinding();
+      rows = result.items.filter(
+        (item) => item.kind !== 'track' || item.id !== seed.id,
+      );
+    }
+    const items = rows.slice(0, page.size);
+    const rest = rows.slice(page.size);
+    const next = rest.length ? randomUUID() : undefined;
+    if (next)
+      this.pendingPages.set(next, {
+        rows: rest,
+        started: true,
+        checkedTokens: [],
+      });
+    return {
+      items,
+      excludedCount: 0,
+      nextCursor: this.cursors.next(scope, page, [], next),
+    };
+  }
   private async searchSongs(query: string) {
     try {
       const tracks = await this.songs.search(query);
@@ -356,7 +444,6 @@ export class AccountMusicService extends ChannelMusicService {
               ...prior,
               rows: [...prior.rows],
               checkedTokens: [...prior.checkedTokens],
-              playlistTokens: prior.playlistTokens?.slice(),
             }
           : { rows: [], started: false, checkedTokens: [] };
         const items: MusicItem[] = [];
@@ -385,53 +472,10 @@ export class AccountMusicService extends ChannelMusicService {
             excludedCount += batch.excluded;
             continue;
           }
-          const item = state.rows[0]!;
-          // The library shelf can include mixed lists. Home recommendations come directly from Music.
-          if (item.kind === 'playlist' && request.surface === 'playlists') {
-            if (calls >= 6) break;
-            let contents;
-            try {
-              contents = await read((ctx) =>
-                this.catalog.read(
-                  ctx,
-                  { surface: 'playlist', playlistId: item.id },
-                  state.playlistCursor,
-                ),
-              );
-            } catch (err) {
-              if (
-                !(err instanceof LinkError) ||
-                (err.status !== 404 && err.code !== 'MUSIC_ACCESS_DENIED')
-              )
-                throw err;
-            }
-            calls++;
-            const emptyMusicPlaylist =
-              contents?.items.length === 0 &&
-              contents.excluded === 0 &&
-              !contents.next &&
-              !state.playlistCursor;
-            if (
-              !emptyMusicPlaylist &&
-              !contents?.items.some((row) => row.kind === 'track')
-            ) {
-              if (contents?.next) {
-                if (state.playlistTokens?.includes(contents.next))
-                  throw new LinkError(503, 'MUSIC_CATALOG_RESPONSE');
-                (state.playlistTokens ??= []).push(contents.next);
-                state.playlistCursor = contents.next;
-                continue;
-              }
-              state.rows.shift();
-              state.playlistCursor = undefined;
-              state.playlistTokens = undefined;
-              excludedCount++;
-              continue;
-            }
-            state.playlistCursor = undefined;
-            state.playlistTokens = undefined;
-          }
-          state.rows.shift();
+          // This shelf is the user's own Music library. The provider has already
+          // selected its playlists. Their visibility must not depend on opening every
+          // detail or on classifying a particular sample of their recordings.
+          const item = state.rows.shift()!;
           const key =
             request.surface === 'home' && item.shelfTitle
               ? JSON.stringify([item.shelfTitle, item.kind, item.id])

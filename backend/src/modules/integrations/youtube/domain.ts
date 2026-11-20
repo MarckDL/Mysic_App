@@ -10,6 +10,13 @@ export class LinkError extends Error {
     super(code);
   }
 }
+export function retryAfterSeconds(value: string | null) {
+  if (!value) return undefined;
+  const seconds = /^\d+$/.test(value)
+    ? Number(value)
+    : (Date.parse(value) - Date.now()) / 1000;
+  return Number.isFinite(seconds) ? Math.max(1, Math.ceil(seconds)) : undefined;
+}
 export interface Tokens {
   access: string;
   expiresIn: number;
