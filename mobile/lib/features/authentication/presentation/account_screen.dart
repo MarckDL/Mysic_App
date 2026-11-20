@@ -1,9 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../playback/application/playback_providers.dart';
+import '../../playback/application/track_playback_controller.dart';
 import '../../connected_library/presentation/connected_screen.dart';
+import '../../connected_library/presentation/music_mode_host.dart';
+import '../../connected_library/presentation/music_mode_screen.dart';
 import '../application/auth_providers.dart';
 import '../domain/mysic_profile.dart';
 
@@ -29,6 +35,8 @@ class AccountScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final action = ref.watch(authActionsProvider);
+    final music = MusicModeScope.of(context);
+    final localMode = music?.showMusic != true;
     final editedProfile = ref.watch(editedProfileProvider);
     final currentProfile = editedProfile?.firebaseUid == profile.firebaseUid
         ? editedProfile!
@@ -68,19 +76,45 @@ class AccountScreen extends ConsumerWidget {
                 builder: (context) => _NicknameDialog(profile: currentProfile),
               ),
             ),
-            const ConnectedTile(account: true),
-            ListTile(
-              leading: const Icon(Icons.playlist_add_rounded),
-              title: const Text('Importar de YouTube Music'),
-              onTap: () => context.push('/imports/youtube-music'),
-            ),
+            const MusicModeSettings(),
+            if (localMode && music == null) const ConnectedTile(account: true),
+            if (localMode)
+              ListTile(
+                leading: const Icon(Icons.playlist_add_rounded),
+                title: const Text('Importar de YouTube Music'),
+                onTap: () => context.push('/imports/youtube-music'),
+              ),
             if (profile.canModerateComments)
               ListTile(
                 leading: const Icon(Icons.flag_outlined),
                 title: const Text('Moderar comentarios'),
                 onTap: () => context.push('/moderation/comments'),
               ),
-            if (kDebugMode) ...[
+            if (localMode &&
+                !kIsWeb &&
+                defaultTargetPlatform == TargetPlatform.android)
+              ListTile(
+                leading: const Icon(Icons.play_circle_outline),
+                title: const Text('Probar el reproductor'),
+                onTap: () {
+                  final controller = ref.read(trackPlaybackControllerProvider);
+                  if (controller.queue.length == 100 &&
+                      !controller.queue.any(
+                        (track) =>
+                            track.id == TrackPlaybackController.demoTrack.id,
+                      )) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('La cola está llena.')),
+                    );
+                    return;
+                  }
+                  unawaited(
+                    controller.playTrack(TrackPlaybackController.demoTrack),
+                  );
+                  context.push('/player');
+                },
+              ),
+            if (localMode && kDebugMode) ...[
               ListTile(
                 leading: const Icon(Icons.volume_up_outlined),
                 title: const Text('Prueba de audio'),

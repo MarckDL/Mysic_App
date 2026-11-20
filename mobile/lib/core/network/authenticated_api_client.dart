@@ -58,8 +58,9 @@ class AuthenticatedApiClient {
 
   Future<Map<String, dynamic>> delete(
     String path, {
+    Map<String, dynamic>? query,
     CancelToken? cancelToken,
-  }) => _request('DELETE', path, cancelToken: cancelToken);
+  }) => _request('DELETE', path, query: query, cancelToken: cancelToken);
 
   Future<Map<String, dynamic>> _request(
     String method,

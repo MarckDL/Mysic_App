@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,7 +9,6 @@ import 'package:mysic/features/authentication/domain/auth_repository.dart';
 import 'package:mysic/features/authentication/domain/mysic_profile.dart';
 import 'package:mysic/features/history/data/history_client.dart';
 import 'package:mysic/features/playback/application/playback_providers.dart';
-import 'package:mysic/core/network/authenticated_api_client.dart';
 import 'package:mysic/features/connected_library/application/connected_controller.dart';
 import 'package:mysic/features/connected_library/application/connected_host.dart';
 import 'package:mysic/features/connected_library/data/connected_client.dart';
@@ -20,135 +18,7 @@ import 'package:mysic/features/connected_library/presentation/connected_screen.d
 import 'support/fake_auth_repository.dart';
 import 'support/fake_track_audio_engine.dart';
 
-const host = 'pilot.example.test';
-const id = '01234567-0123-4123-8123-0123456789ab';
-final ref = 'r' * 43;
-const linked = Connection(
-  'linked',
-  channel: Channel('ch', 'Canal de prueba'),
-  generation: 'g1',
-);
-final future = DateTime.now().add(const Duration(minutes: 9));
-
-class MemoryPlatform extends LinkPlatform {
-  final storage = <String, String>{};
-  LinkReturn? incoming;
-  VoidCallback? notifyReturn;
-  @override
-  void onReturn(void Function()? callback) {
-    notifyReturn = callback;
-  }
-
-  bool opened = false;
-  final uris = <Uri>[];
-  @override
-  Future<PendingLink?> load(String uid) async =>
-      PendingLink.decode(storage[uid]);
-  @override
-  Future<void> save(String uid, PendingLink? pending) async {
-    if (pending == null) {
-      storage.remove(uid);
-    } else {
-      storage[uid] = pending.encode();
-    }
-  }
-
-  @override
-  Future<LinkReturn?> takeReturn() async {
-    final value = incoming;
-    incoming = null;
-    return value;
-  }
-
-  @override
-  Future<bool> open(Uri uri) async {
-    uris.add(uri);
-    opened = true;
-    return true;
-  }
-}
-
-class Client extends ConnectedClient {
-  Client()
-    : super(
-        AuthenticatedApiClient(FakeAuthRepository(), baseUrl: 'https://$host'),
-        Uri.https(host),
-      );
-  Connection current = const Connection('unlinked');
-  final keys = <String>[], cancels = <String>[], confirms = <Json>[];
-  final cursors = <String?>[];
-  String status = 'awaiting_confirmation';
-  String? reason;
-  bool failStart = false, replace = false, throttle = false;
-  Completer<void>? wait;
-  Attempt snapshot({bool launch = false}) => Attempt({
-    'attemptId': id,
-    'status': status,
-    'expiresAt': future.toIso8601String(),
-    'reason': reason,
-    if (status == 'awaiting_confirmation')
-      'channel': {'id': 'ch', 'title': 'Canal de prueba'},
-    if (launch) 'launchUrl': 'https://$host$youtubeRoot/browser/start?ref=$ref',
-  });
-  @override
-  Future<Connection> connection(CancelToken cancel) async => current;
-  @override
-  Future<Attempt> start(String key, bool force, CancelToken cancel) async {
-    keys.add(key);
-    await wait?.future;
-    if (failStart) throw const ApiFailure('offline');
-    return snapshot(launch: true);
-  }
-
-  @override
-  Future<Attempt> attempt(String id, CancelToken cancel) async => snapshot();
-  @override
-  Future<void> confirm(String id, Json data, CancelToken cancel) async {
-    confirms.add(data);
-    if (replace && data['replace'] != true) {
-      throw const ApiFailure(
-        'replacement',
-        statusCode: 409,
-        code: 'CONFIRM_REPLACEMENT',
-      );
-    }
-    current = linked;
-  }
-
-  @override
-  Future<void> cancelAttempt(String id, CancelToken cancel) async {
-    cancels.add(id);
-  }
-
-  @override
-  Future<void> unlink(CancelToken cancel) async {
-    current = const Connection('unlinked');
-  }
-
-  @override
-  Future<LibraryPage> page(
-    String? playlist,
-    String? cursor,
-    CancelToken cancel,
-  ) async {
-    cursors.add(cursor);
-    const a = LibraryRow(
-      'a',
-      'Lista privada',
-      subtitle: 'Privada · 11 elementos',
-    );
-    if (cursor == null) return (items: [a], next: 'page2');
-    if (throttle) {
-      throw const ApiFailure(
-        'quota',
-        statusCode: 429,
-        code: 'TOO_MANY_REQUESTS',
-        retryAfter: Duration(seconds: 2),
-      );
-    }
-    return (items: [a, const LibraryRow('b', 'Lista pública')], next: null);
-  }
-}
+import 'support/fake_connected_library.dart';
 
 void main() {
   late Client api;
@@ -177,6 +47,8 @@ void main() {
         for (var i = 0; i < 2; i++)
           model.sync(browser: true, onReturn: () => returns++),
       ]);
+      platform.incoming = (id: id, ref: ref);
+      await model.sync(browser: true, onReturn: () => returns++);
       expect(returns, 1);
       expect(api.confirms, [
         {'returnRef': ref},
@@ -248,6 +120,8 @@ void main() {
       await model.sync();
       expect(model.message, contains('canceló'));
       expect(platform.storage, isEmpty);
+      await model.sync(browser: true);
+      expect(model.message, contains('canceló'));
       model.dispose();
       await platform.save('a', PendingLink(id, DateTime(2000), id: id));
       model = ConnectedController('a', api, platform);
@@ -257,6 +131,26 @@ void main() {
       await model.cancel();
       expect(api.cancels, [id]);
       expect(platform.storage, isEmpty);
+    },
+  );
+  test(
+    'oculta el canal anterior si se corta la red al consultar el vínculo confirmado',
+    () async {
+      api.current = previous;
+      await model.sync();
+      await model.start(restart: true);
+      await model.sync();
+      expect(model.replaceRequired, true);
+      api.failConnection = true;
+      await model.confirmCandidate();
+      expect(api.confirms.single, {'channelId': 'ch', 'replace': true});
+      expect(model.connection, isNull);
+      expect(model.pending, isNull);
+      expect(model.message, contains('Sin conexión'));
+      api.failConnection = false;
+      await model.sync();
+      expect(model.connection, linked);
+      expect(api.confirms.length, 1);
     },
   );
   test(
@@ -314,9 +208,23 @@ void main() {
       isNull,
     );
     expect(entry('unavailable', url).open, isNull);
+    expect(
+      entry('available', url).musicUri(samplePlaylist)?.toString(),
+      'https://music.youtube.com/watch?v=$video&list=$samplePlaylist',
+    );
+    expect(entry('available', url).musicUri('fake&v=malicious'), isNull);
+    expect(
+      entry(
+        'available',
+        'https://other.test/watch?v=$video',
+      ).musicUri(samplePlaylist),
+      isNull,
+    );
+    expect(entry('unavailable', url).musicUri(samplePlaylist), isNull);
+    expect(youtubeMusicPlaylistUri('https://fake.test'), isNull);
   });
   testWidgets(
-    'desde Biblioteca abre el navegador, vuelve al canal y carga la primera página',
+    'desde Biblioteca autoriza el canal, vuelve a su gestión y no consulta videos',
     (tester) async {
       final auth = FakeAuthRepository(user: const AuthUser(uid: 'a'));
       await tester.pumpWidget(
@@ -350,18 +258,17 @@ void main() {
       platform.incoming = (id: id, ref: ref);
       platform.notifyReturn!();
       await tester.pumpAndSettle();
-      expect(find.text('Lista privada'), findsOneWidget);
-      expect(api.cursors, [null]);
+      expect(find.text('Canal vinculado'), findsOneWidget);
+      expect(api.cursors, isEmpty);
       await tester.pageBack();
       await tester.pumpAndSettle();
       expect(find.text('Favoritos'), findsOneWidget);
     },
   );
   testWidgets(
-    'conserva la página durante el límite de cuota, reintenta y elimina duplicados',
+    'el canal vinculado no lista videos ni abre un reproductor externo',
     (tester) async {
       api.current = linked;
-      api.throttle = true;
       await model.sync();
       await tester.pumpWidget(
         MaterialApp(
@@ -372,28 +279,89 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Privada · 11 elementos'), findsOneWidget);
-      await tester.tap(find.text('Cargar más'));
-      await tester.pumpAndSettle();
-      expect(find.text('Lista privada'), findsOneWidget);
-      expect(
-        tester
-            .widget<TextButton>(find.widgetWithText(TextButton, 'Reintentar'))
-            .onPressed,
-        isNull,
-      );
-      api.throttle = false;
-      await tester.pump(const Duration(seconds: 2));
-      await tester.tap(find.text('Reintentar'));
-      await tester.pumpAndSettle();
-      expect(api.cursors, [null, 'page2', 'page2']);
-      expect(find.text('Lista pública'), findsOneWidget);
-      expect(find.text('Lista privada'), findsOneWidget);
-      expect(find.text('Cargar más'), findsNothing);
+      expect(find.text('Canal vinculado'), findsOneWidget);
+      expect(find.text('Lista privada'), findsNothing);
+      expect(find.byTooltip('Abrir YouTube Music'), findsNothing);
+      expect(find.text('Abrir playlist en YouTube Music'), findsNothing);
+      expect(platform.uris, isEmpty);
+      expect(api.cursors, isEmpty);
       await model.unlink();
       await tester.pumpAndSettle();
-      expect(find.text('Vincular YouTube'), findsOneWidget);
-      expect(find.text('Lista privada'), findsNothing);
+      expect(find.text('Canal vinculado'), findsNothing);
     },
   );
+  testWidgets('muestra la identidad del nuevo vínculo y descarta la anterior', (
+    tester,
+  ) async {
+    api.current = previous;
+    await model.sync();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ConnectedScope(controller: model, child: const ConnectedScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(previous.channel!.title), findsOneWidget);
+    await model.start(restart: true);
+    await model.sync();
+    await model.confirmCandidate();
+    await tester.pumpAndSettle();
+    expect(find.text(previous.channel!.title), findsNothing);
+    expect(find.text(linked.channel!.title), findsOneWidget);
+    expect(api.playlists, isEmpty);
+  });
+  testWidgets('reintenta la desvinculación sin cerrar la sesión de Mysic', (
+    tester,
+  ) async {
+    api.current = linked;
+    final auth = FakeAuthRepository(user: const AuthUser(uid: 'a'));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(auth),
+          verifiedSessionProvider.overrideWith(
+            (ref) async => const MysicProfile(
+              id: 'id-a',
+              firebaseUid: 'a',
+              displayName: 'Ana',
+            ),
+          ),
+          recentListeningProvider.overrideWith((ref, uid) async => []),
+          trackAudioEngineFactoryProvider.overrideWithValue(
+            FakeTrackAudioEngine.new,
+          ),
+          youtubePilotProvider.overrideWithValue(true),
+          connectedControllerProvider('a').overrideWithValue(model),
+        ],
+        child: const MysicApp(firebaseReady: true),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Biblioteca'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Biblioteca de YouTube'));
+    await tester.pumpAndSettle();
+    expect(find.text('Canal vinculado'), findsOneWidget);
+    await tester.tap(find.byTooltip('Opciones del vínculo'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Desvincular YouTube'));
+    await tester.pumpAndSettle();
+    api.loseUnlinkResponse = true;
+    await tester.tap(find.widgetWithText(FilledButton, 'Desvincular'));
+    await tester.pumpAndSettle();
+    expect(find.text('Lista privada'), findsNothing);
+    expect(find.textContaining('Sin conexión'), findsOneWidget);
+    await model.sync(browser: true);
+    await tester.pumpAndSettle();
+    expect(find.text('Lista privada'), findsNothing);
+    api.loseUnlinkResponse = false;
+    await tester.tap(find.text('Reintentar desvinculación'));
+    await tester.pumpAndSettle();
+    expect(api.unlinks, 2);
+    expect(find.text('Vincular YouTube'), findsOneWidget);
+    expect(auth.currentUser?.uid, 'a');
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Favoritos'), findsOneWidget);
+  });
 }

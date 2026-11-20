@@ -9,9 +9,9 @@ En el piloto, Biblioteca abre la autorización en el navegador. Al volver, Mysic
 3. Preparar un archivo local para el build a partir de `mobile/config/firebase.android.example.json`, con los valores del Firebase de ensayo y el `API_BASE_URL` HTTPS de ese backend. Incluir `"YOUTUBE_LIBRARY_ENABLED": "true"` y `"YOUTUBE_APP_LINK_HOST": "HOST"`. Usar exclusivamente el nombre de dominio en ese último campo. El piloto está desactivado por defecto.
 4. Desde `mobile/`, compilar el APK de prueba para un emulador o un teléfono aparte con `flutter build apk --debug --dart-define-from-file=RUTA_AL_JSON`. La firma de ese APK también debe estar autorizada para el login Firebase y para el dominio de prueba. Los secretos de OAuth web y las claves de cifrado pertenecen al backend.
 
-## Comprobar el Mysic 0.11.1 instalado
+## Comprobar la actualización de 4019 a 4020
 
-En Windows, conectar el teléfono por USB, autorizar la depuración para ese equipo y ejecutar en PowerShell con Platform Tools y las Android Build Tools disponibles. El bloque solo consulta el paquete y copia su APK base al equipo.
+En Windows, conectar el teléfono por USB, autorizar la depuración para ese equipo y ejecutar en PowerShell con Platform Tools y las Android Build Tools disponibles. Primero comprobar la versión y comparar los certificados.
 
 ```powershell
 $pkg = 'com.mysic.mysic'
@@ -19,15 +19,47 @@ adb devices
 adb shell dumpsys package $pkg | Select-String 'versionName=|versionCode='
 $base = adb shell pm path $pkg | Where-Object { $_.Trim().EndsWith('/base.apk') } | Select-Object -First 1
 if (-not $base) { throw 'El teléfono no devolvió la ruta del APK base.' }
-adb pull ($base.Trim() -replace '^package:', '') .\mysic-0.11.1-base.apk
-apksigner verify --print-certs .\mysic-0.11.1-base.apk
+adb pull ($base.Trim() -replace '^package:', '') .\Mysic-4019-base.apk
+apksigner verify --print-certs .\Mysic-4019-base.apk
+apksigner verify --print-certs .\Mysic-0.11.2-rc3.apk
 ```
 
-Si `apksigner` está fuera del PATH, ejecutar `apksigner.bat` desde la carpeta de versión instalada en `Android\Sdk\build-tools`. Para validar una actualización sobre esa instalación, cotejar paquete, certificado SHA-256 y un `versionCode` efectivo mayor en el APK candidato. El certificado histórico del repositorio y el de un APK de CI son únicamente referencias. La clave de firma se conserva en el equipo que produce el APK. [apksigner](https://developer.android.com/tools/apksigner)
+Si el paquete es `com.mysic.mysic`, las huellas SHA-256 coinciden y el candidato tiene `versionCode 4020`, instalar como actualización.
+
+```powershell
+adb install -r .\Mysic-0.11.2-rc3.apk
+adb shell dumpsys package $pkg | Select-String 'versionName=|versionCode='
+```
+
+Al terminar se espera `versionName 0.11.2-rc.3` y la sesión de Mysic abierta. Si `apksigner` está fuera del PATH, ejecutar `apksigner.bat` desde la carpeta de versión instalada en `Android\Sdk\build-tools`. [apksigner](https://developer.android.com/tools/apksigner)
+
+## Validación del candidato 4020
+
+- Flutter completó 106 pruebas, incluidas 13 de biblioteca conectada. Pasaron el análisis estático, el formato y las 5 pruebas de configuración.
+- El backend completó 246 pruebas con las 9 migraciones aplicadas en PostgreSQL local. La cobertura incluye denegación de Google, retoma manual, intentos duplicados, reemplazo autorizado y descarte de lecturas privadas en vuelo al desvincular.
+- El APK se compiló en modo release para ARM64, ARMv7 y x86-64. `apksigner` confirmó que comparte el certificado del APK 4019. El manifiesto declaró el App Link con verificación automática y el dominio publicó la asociación para ese certificado.
+- El emulador por software de Android 11 respondió por ADB, pero su gestor de paquetes quedó indisponible durante el arranque. La instalación de 4020 sobre 4019 y el recorrido con cuentas reales quedan para el teléfono.
+- SHA-256 del archivo `Mysic-0.11.2-rc3.apk` · `7893bcc94b3c9cf7d9ccc0dd6d3dbaa23bc99af902bfe5e0bc2998e4ce1abf0c`.
 
 ## Aceptación en el dispositivo
 
 - En Android 12 o posterior usar `adb shell pm verify-app-links --re-verify com.mysic.mysic` y luego `adb shell pm get-app-links com.mysic.mysic`. Esperar el estado `verified` en el dominio del piloto. [Verificar enlaces de la app](https://developer.android.com/training/app-links/verify-applinks)
-- Medir desde **Vincular YouTube** hasta la primera página visible, primero con Mysic en memoria y luego recreando el proceso mientras el navegador sigue abierto. Probar también el regreso manual y un retorno duplicado.
-- Abrir una playlist privada de cada canal autorizado, avanzar hasta la última página de la lista de 68 elementos y comprobar el cambio de canal, la cancelación, el reintento al recuperar conexión y la desvinculación conservando la sesión Firebase.
-- Registrar canal de ensayo, conteos y tiempos. Las capturas y los registros de aceptación deben excluir cabeceras de autorización, códigos y referencias del retorno.
+
+La versión 4019 mostró las cinco playlists de **rawr**, incluidas las privadas, en el teléfono del propietario. Desde **Biblioteca → Biblioteca de YouTube → Opciones del vínculo** se puede iniciar otro intento con **Cambiar cuenta de YouTube** o retirar el acceso con **Desvincular YouTube**.
+
+| Caso | Acción | Resultado esperado |
+| --- | --- | --- |
+| Actualización | Instalar 4020 sobre 4019 y abrir Mysic. | La sesión sigue abierta y la biblioteca vuelve a mostrar las cinco playlists de rawr. |
+| Cancelación | Iniciar el cambio de cuenta y cancelar en Google. Si se sale con Atrás y el intento sigue activo, tocar **Cancelar vinculación** en Mysic. | Se cierra el intento y rawr conserva su vínculo y sus playlists. |
+| Cierre del proceso | Iniciar otro intento. Con Google abierto, retirar Mysic de Recientes o, por USB, ejecutar `adb shell am kill com.mysic.mysic` cuando esté en segundo plano. Completar Google y tocar **Volver a Mysic** si aparece. | Mysic recupera el intento de la sesión que lo inició y muestra el canal para confirmar cuando corresponde. |
+| Regreso manual y duplicado | Terminar en Google, volver desde Recientes sin tocar el enlace y usar **Comprobar vinculación**. Tras confirmar, abrir de nuevo **Volver a Mysic** si la página sigue abierta. | Se confirma una sola vez. El segundo retorno conserva el canal y la pantalla sin abrir una autorización nueva. |
+| Red interrumpida | Apagar Wi-Fi y datos antes de iniciar el intento o confirmar el canal. Restaurarlos y usar **Volver a abrir Google**, **Comprobar vinculación** o **Confirmar este canal**, según la pantalla. | Aparece un aviso de conexión y el flujo se puede retomar. Al confirmar un reemplazo, las listas del canal anterior quedan ocultas hasta verificar el canal vigente. |
+| Cambio de canal | Autorizar otro canal de prueba y tocar **Reemplazar por este canal**. Abrir una de sus playlists privadas. | Biblioteca muestra solo las playlists del nuevo canal. Desaparecen las privadas de rawr. |
+| Desvinculación | Desvincular el canal y volver a **Cuenta** y a **Biblioteca**. Si se interrumpe el envío, restaurar la red y tocar **Reintentar desvinculación**. | Desaparecen las playlists de YouTube. Cuenta conserva el perfil y Biblioteca conserva las listas guardadas en Mysic. |
+| Regresión de reproducción | Poner una canción en cola, abrir letras y volver a Inicio, Buscar y Biblioteca. | Funcionan el reproductor, el minirreproductor, las letras, la cola y la barra inferior. |
+
+Registrar canal, conteo y tiempo hasta la primera página. Si está disponible la playlist de 68 elementos, cargar la segunda página y comprobar que se muestran las 50 primeras filas y las 18 restantes. Las capturas y los registros deben excluir cabeceras de autorización, códigos y referencias del retorno.
+
+## Modo YouTube Music
+
+Consulta [el diseño, la configuración de ensayo y los criterios de validación del modo YouTube Music](youtube-music-mode.md). La ficha anterior cubre la biblioteca del canal autorizada en 4020.

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="connected_audio/"/>
+        <exclude domain="root" path="app_webview/"/>
+        <exclude domain="sharedpref" path="youtube_music_session.xml"/>
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="connected_audio/"/>
+        <exclude domain="root" path="app_webview/"/>
+        <exclude domain="sharedpref" path="youtube_music_session.xml"/>
+    </device-transfer>
+</data-extraction-rules>

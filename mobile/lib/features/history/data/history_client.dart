@@ -14,6 +14,20 @@ class HistoryClient {
 
   final AuthenticatedApiClient _api;
 
+  Future<List<ListeningEntry>> recentDistinct() async {
+    final recent = <String, ListeningEntry>{};
+    String? cursor;
+    do {
+      final page = await list(limit: 50, cursor: cursor);
+      for (final entry in page.items) {
+        recent.putIfAbsent(entry.track.id, () => entry);
+        if (recent.length == 5) return recent.values.toList(growable: false);
+      }
+      cursor = page.nextCursor;
+    } while (cursor != null);
+    return recent.values.toList(growable: false);
+  }
+
   Future<HistoryPage> list({required int limit, String? cursor}) async {
     final data = await _api.get(
       '/api/v1/history',
@@ -46,6 +60,5 @@ final historyClientProvider = Provider.autoDispose<HistoryClient>((ref) {
 
 final recentListeningProvider = FutureProvider.autoDispose
     .family<List<ListeningEntry>, String>((ref, uid) async {
-      final page = await ref.watch(historyClientProvider).list(limit: 5);
-      return page.items;
+      return ref.watch(historyClientProvider).recentDistinct();
     }, retry: (count, error) => null);

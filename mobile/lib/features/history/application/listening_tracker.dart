@@ -6,6 +6,9 @@ import '../../../core/network/authenticated_api_client.dart';
 import '../../playback/domain/track_audio_engine.dart';
 import '../../search/domain/catalog_track.dart';
 
+typedef MusicListenCallback =
+    void Function(String id, String trackId, int listenedMs);
+
 /// One tracker per authenticated account. Network work never blocks playback.
 class ListeningTracker {
   ListeningTracker(this.api, this.isActive, this.uid, {Stopwatch? clock})
@@ -51,10 +54,14 @@ class ListeningTracker {
   DateTime? _started;
   int? _durationMs;
   bool _sending = false;
+  bool _flushAgain = false;
   bool _disposed = false;
-  void begin(CatalogTrack track) {
+  MusicListenCallback? _musicListen;
+
+  void begin(CatalogTrack track, {MusicListenCallback? onMusicListen}) {
     finish();
     _track = track;
+    _musicListen = onMusicListen;
     final r = Random.secure();
     final b = List<int>.generate(16, (_) => r.nextInt(256));
     b[6] = (b[6] & 15) | 64;
@@ -91,18 +98,33 @@ class ListeningTracker {
     final threshold = _durationMs == null
         ? 30000
         : min(30000, _durationMs! ~/ 2);
-    if (_id != null &&
-        _started != null &&
+    final id = _id;
+    final started = _started;
+    final track = _track;
+    if (id != null &&
+        started != null &&
+        track != null &&
         ms >= threshold &&
-        ms <= 86400000 &&
-        (_pending.length < 100 || _pending.containsKey(_id))) {
-      _pending[_id!] = {
-        'catalogTrackId': _track!.id,
-        'startedAt': _started!.toIso8601String(),
-        'listenedMs': ms,
-        'completed':
-            completed && _durationMs != null && ms >= _durationMs! * .9,
-      };
+        ms <= 86400000) {
+      if (track.isMusicPreview || track.isConnectedAudio) {
+        final callback = _musicListen;
+        _musicListen = null;
+        callback?.call(
+          id,
+          track.isMusicPreview
+              ? track.id.substring(CatalogTrack.musicPreviewPrefix.length)
+              : track.id.substring('youtube:'.length),
+          ms,
+        );
+      } else if (_pending.length < 100 || _pending.containsKey(id)) {
+        _pending[id] = {
+          'catalogTrackId': track.id,
+          'startedAt': started.toIso8601String(),
+          'listenedMs': ms,
+          'completed':
+              completed && _durationMs != null && ms >= _durationMs! * .9,
+        };
+      }
     }
     if (isActive()) {
       unawaited(_flush());
@@ -114,13 +136,20 @@ class ListeningTracker {
   }
 
   Future<void> _flush() async {
-    if (_sending || _disposed || !isActive()) return;
+    if (_disposed || !isActive()) return;
+    if (_sending) {
+      if (_pending.isNotEmpty) _flushAgain = true;
+      return;
+    }
     _sending = true;
+    _flushAgain = false;
+    var retryWhenFinished = true;
     try {
       await _restore;
       try {
         await _persist();
       } catch (_) {
+        retryWhenFinished = false;
         return;
       }
       for (final id in _pending.keys.toList()) {
@@ -133,19 +162,24 @@ class ListeningTracker {
           if (e.statusCode == 400 || e.statusCode == 409) {
             _pending.remove(id);
           } else {
+            retryWhenFinished = false;
             break;
           }
         } catch (_) {
+          retryWhenFinished = false;
           break;
         }
       }
     } catch (_) {
-      // Keep pending events when local storage fails.
+      retryWhenFinished = false;
     } finally {
       try {
         await _persist();
       } catch (_) {}
       _sending = false;
+      if (retryWhenFinished && _flushAgain && _pending.isNotEmpty) {
+        unawaited(_flush());
+      }
     }
   }
 
@@ -156,6 +190,7 @@ class ListeningTracker {
     _track = null;
     _id = null;
     _started = null;
+    _musicListen = null;
   }
 
   void dispose() {

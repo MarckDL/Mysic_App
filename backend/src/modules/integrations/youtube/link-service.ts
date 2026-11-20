@@ -349,6 +349,9 @@ export class YoutubeLinkService {
         channelTitle: a.channelTitle ?? '',
         status: 'linked',
         generation,
+        mysicLibraryId:
+          old && !changed ? (old.mysicLibraryId ?? old.generation) : generation,
+        mysicHistoryPaused: !changed && old?.mysicHistoryPaused === true,
         scopes: a.scopes!,
         refreshBox: this.grants.box.seal(
           this.grants.box.open(
@@ -377,6 +380,15 @@ export class YoutubeLinkService {
             this.grants.box.open(old.refreshBox, connectionContext(old)),
             old.leaseUntil,
           );
+        const previous = { userId, generation: old.generation };
+        if (changed) {
+          await db.channelMusicListen.deleteMany({ where: previous });
+        } else {
+          await db.channelMusicListen.updateMany({
+            where: previous,
+            data: { generation },
+          });
+        }
       }
       await db.externalMusicLinkAttempt.updateMany({
         where: { userId, status: 'confirmed', id: { not: id } },
@@ -397,6 +409,9 @@ export class YoutubeLinkService {
         status: true,
         channelId: true,
         channelTitle: true,
+        mysicHistoryPaused: true,
+        mysicActivityEpoch: true,
+        mysicLibraryId: true,
         connectedAt: true,
         checkedAt: true,
         generation: true,
@@ -407,6 +422,9 @@ export class YoutubeLinkService {
         status: c.status,
         channel: { id: c.channelId, title: c.channelTitle },
         generation: c.generation,
+        mysicHistoryPaused: c.mysicHistoryPaused,
+        mysicActivityEpoch: c.mysicActivityEpoch,
+        mysicLibraryId: c.mysicLibraryId ?? c.generation,
         connectedAt: c.connectedAt,
         lastCheckedAt: c.checkedAt,
       };
@@ -419,8 +437,18 @@ export class YoutubeLinkService {
       channel: null,
     };
   }
-  async unlink(userId: string) {
+  async unlink(userId: string, expectedGeneration?: string) {
     await youtubeWrite(async (db) => {
+      const c = await db.externalMusicConnection.findUnique({
+        where: { userId },
+      });
+      // A repeated delete after a lost response must not cancel a new consent attempt.
+      if (expectedGeneration !== undefined && !c) return;
+      if (
+        expectedGeneration !== undefined &&
+        c?.generation !== expectedGeneration
+      )
+        throw new LinkError(409, 'MUSIC_LINK_CHANGED');
       for (const a of await db.externalMusicLinkAttempt.findMany({
         where: { userId, status: { in: live } },
       }))
@@ -428,9 +456,6 @@ export class YoutubeLinkService {
       await db.externalMusicLinkAttempt.updateMany({
         where: { userId, status: 'confirmed' },
         data: { status: 'canceled', channelId: null, channelTitle: null },
-      });
-      const c = await db.externalMusicConnection.findUnique({
-        where: { userId },
       });
       if (c) {
         await db.externalMusicConnection.delete({ where: { userId } });

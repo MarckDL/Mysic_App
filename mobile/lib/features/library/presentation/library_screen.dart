@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../connected_library/presentation/connected_screen.dart';
+import '../../connected_library/presentation/music_mode_host.dart';
 import '../../favorites/application/favorite_providers.dart';
 import '../../playlists/application/playlist_providers.dart';
 
@@ -50,7 +51,14 @@ class LibraryScreen extends ConsumerWidget {
               onTap: () => context.push('/playlists'),
             ),
             const Divider(height: 1),
-            const ConnectedTile(),
+            if (MusicModeScope.of(context) == null)
+              const ConnectedTile()
+            else
+              ListTile(
+                leading: const Icon(Icons.headphones),
+                title: const Text('YouTube Music'),
+                onTap: () => context.push('/account'),
+              ),
             ListTile(
               leading: Icon(Icons.playlist_add_rounded, color: colors.primary),
               title: const Text('Importar de YouTube Music'),

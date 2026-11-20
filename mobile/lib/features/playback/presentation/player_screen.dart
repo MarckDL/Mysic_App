@@ -5,17 +5,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../favorites/application/favorite_providers.dart';
+import '../../connected_library/presentation/music_mode_host.dart';
 import '../../ratings/application/rating_providers.dart';
 import '../../search/domain/catalog_track.dart';
 import '../../search/presentation/catalog_widgets.dart';
 import '../application/playback_providers.dart';
 import '../application/track_playback_controller.dart';
 import '../domain/track_audio_engine.dart';
-import 'player_widgets.dart';
-
-const _playerBackground = Color(0xFF15131B);
-const _playerSurface = Color(0xFF282431);
-const _playerAccent = Color(0xFFC6A5FF);
+import 'playback_progress.dart';
+import 'player_backdrop.dart';
+import 'player_queue_sheet.dart';
+import '../../lyrics/presentation/lyrics_sheet.dart';
+import 'package:flutter/services.dart';
 
 class PlayerScreen extends ConsumerWidget {
   const PlayerScreen({super.key});
@@ -23,32 +24,33 @@ class PlayerScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.watch(trackPlaybackControllerProvider);
-    final appTheme = Theme.of(context);
-    final theme = ThemeData.dark(useMaterial3: true).copyWith(
-      colorScheme: const ColorScheme.dark(
-        primary: _playerAccent,
-        onPrimary: Color(0xFF221336),
-        secondaryContainer: _playerSurface,
-        onSecondaryContainer: Color(0xFFF1E6FF),
-        surface: _playerBackground,
-        surfaceContainerHigh: _playerSurface,
-        surfaceContainerHighest: _playerSurface,
-        onSurface: Color(0xFFF8F3FF),
-        onSurfaceVariant: Color(0xFFC9BFDA),
-      ),
-    );
-    return Theme(
-      data: theme,
-      child: ListenableBuilder(
-        listenable: controller,
-        builder: (context, _) {
-          final track = controller.current;
-          return Scaffold(
-            backgroundColor: _playerBackground,
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final track = controller.current;
+        final musicMode = MusicModeScope.of(context)?.showMusic == true;
+        final ImageProvider<Object>? artwork = controller.isBundledTrack
+            ? const AssetImage('assets/images/discover-mountains.webp')
+            : switch (track?.thumbnailUrl) {
+                final String url => NetworkImage(url),
+                _ => null,
+              };
+        return PlayerBackdrop(
+          artwork: artwork,
+          builder: (context, theme, backdrop) => Scaffold(
+            extendBodyBehindAppBar: true,
+            backgroundColor: theme.colorScheme.surface,
             appBar: AppBar(
-              backgroundColor: _playerBackground,
+              backgroundColor: Colors.transparent,
+              foregroundColor: theme.colorScheme.onSurface,
+              surfaceTintColor: Colors.transparent,
+              scrolledUnderElevation: 0,
               centerTitle: true,
               title: const Text('Reproductor'),
+              titleTextStyle: theme.textTheme.titleSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
               actions: [
                 if (track != null)
                   PopupMenuButton<String>(
@@ -62,12 +64,13 @@ class PlayerScreen extends ConsumerWidget {
                         unawaited(controller.stop());
                       }
                     },
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(
-                        value: 'details',
-                        child: Text('Detalles de la canción'),
-                      ),
-                      PopupMenuItem(
+                    itemBuilder: (context) => [
+                      if (!controller.isBundledTrack && !musicMode)
+                        const PopupMenuItem(
+                          value: 'details',
+                          child: Text('Detalles de la canción'),
+                        ),
+                      const PopupMenuItem(
                         value: 'stop',
                         child: Text('Detener reproducción'),
                       ),
@@ -75,62 +78,172 @@ class PlayerScreen extends ConsumerWidget {
                   ),
               ],
             ),
-            body: SafeArea(
-              top: false,
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 480),
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
-                    children: [
-                      if (track != null)
-                        _NowPlaying(track: track, controller: controller)
-                      else
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 40),
-                          child: Text(
-                            'Elige una canción para empezar',
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      const SizedBox(height: 24),
-                      Align(
-                        child: FilledButton.tonalIcon(
-                          onPressed: controller.queue.isEmpty
-                              ? null
-                              : () {
-                                  showModalBottomSheet<void>(
-                                    context: context,
-                                    useSafeArea: true,
-                                    isScrollControlled: true,
-                                    constraints: BoxConstraints(
-                                      maxHeight:
-                                          MediaQuery.sizeOf(context).height *
-                                          0.72,
-                                    ),
-                                    backgroundColor:
-                                        appTheme.colorScheme.surface,
-                                    showDragHandle: true,
-                                    builder: (context) => Theme(
-                                      data: appTheme,
-                                      child: _QueueSheet(
-                                        controller: controller,
+            body: Stack(
+              fit: StackFit.expand,
+              children: [
+                RepaintBoundary(child: backdrop),
+                SafeArea(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 480),
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+                        children: [
+                          if (track != null)
+                            _NowPlaying(track: track, controller: controller)
+                          else
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 40),
+                              child: Text(
+                                'Elige una canción para empezar',
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          const SizedBox(height: 14),
+                          Wrap(
+                            alignment: WrapAlignment.spaceEvenly,
+                            runSpacing: 8,
+                            spacing: 12,
+                            children: [
+                              _PlayerShortcut(
+                                icon: Icons.lyrics_outlined,
+                                label: 'Letra',
+                                onPressed:
+                                    track == null || controller.isBundledTrack
+                                    ? null
+                                    : () => showModalBottomSheet<void>(
+                                        context: context,
+                                        isScrollControlled: true,
+                                        useSafeArea: true,
+                                        showDragHandle: true,
+                                        constraints: BoxConstraints(
+                                          maxHeight:
+                                              MediaQuery.sizeOf(
+                                                context,
+                                              ).height *
+                                              .76,
+                                        ),
+                                        backgroundColor:
+                                            theme.colorScheme.surfaceContainer,
+                                        builder: (_) => Theme(
+                                          data: theme,
+                                          child: LyricsSheet(
+                                            controller: controller,
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  );
+                              ),
+                              _PlayerShortcut(
+                                icon: Icons.queue_music_rounded,
+                                label: 'Cola',
+                                onPressed: controller.queue.isEmpty
+                                    ? null
+                                    : () => showModalBottomSheet<void>(
+                                        context: context,
+                                        useSafeArea: true,
+                                        isScrollControlled: true,
+                                        enableDrag: false,
+                                        clipBehavior: Clip.antiAlias,
+                                        constraints: BoxConstraints(
+                                          maxHeight:
+                                              MediaQuery.sizeOf(
+                                                context,
+                                              ).height *
+                                              .91,
+                                        ),
+                                        backgroundColor:
+                                            theme.colorScheme.surfaceContainer,
+                                        builder: (sheetContext) => Theme(
+                                          data: theme,
+                                          child: PlayerQueueSheet(
+                                            controller: controller,
+                                            openMusicLikes: musicMode
+                                                ? () {
+                                                    Navigator.of(
+                                                      sheetContext,
+                                                    ).pop();
+                                                    context.push(
+                                                      '/music/liked',
+                                                    );
+                                                  }
+                                                : null,
+                                          ),
+                                        ),
+                                      ),
+                              ),
+                              _PlayerShortcut(
+                                icon: Icons.devices_outlined,
+                                label: 'Dispositivos',
+                                onPressed: () async {
+                                  try {
+                                    await const MethodChannel(
+                                      'com.mysic/audio_output',
+                                    ).invokeMethod<void>('open');
+                                  } catch (_) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Configura la salida de audio desde los ajustes del dispositivo.',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  }
                                 },
-                          icon: const Icon(Icons.queue_music_rounded),
-                          label: Text('Cola (${controller.queue.length}/100)'),
-                        ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
-          );
-        },
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _PlayerShortcut extends StatelessWidget {
+  const _PlayerShortcut({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        foregroundColor: colors.onSurface,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: colors.secondaryContainer,
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: SizedBox.square(dimension: 48, child: Icon(icon, size: 22)),
+          ),
+          const SizedBox(height: 5),
+          Text(label, textAlign: TextAlign.center),
+        ],
       ),
     );
   }
@@ -145,28 +258,45 @@ class _NowPlaying extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final duration = controller.duration;
-    final length = duration?.inMilliseconds ?? 0;
     final playing = controller.phase == TrackAudioPhase.playing;
     final loading = controller.phase == TrackAudioPhase.loading;
-    final interactions = ref
-        .watch(trackInteractionsProvider(track.id))
-        .asData
-        ?.value;
-    final favoriteAction = ref.watch(favoriteActionsProvider);
+    final musicMode = MusicModeScope.of(context)?.showMusic == true;
+    final interactions = controller.isBundledTrack || musicMode
+        ? null
+        : ref.watch(trackInteractionsProvider(track.id)).asData?.value;
+    final favoriteAction = musicMode
+        ? null
+        : ref.watch(favoriteActionsProvider);
     final favorite = interactions?.isFavorite == true;
     return Column(
       children: [
         LayoutBuilder(
-          builder: (context, constraints) => Align(
-            child: TrackArtwork(
-              url: track.thumbnailUrl,
-              size: constraints.maxWidth.clamp(0, 360).toDouble(),
-              borderRadius: 24,
-            ),
-          ),
+          builder: (context, constraints) {
+            final height = MediaQuery.sizeOf(context).height;
+            final size = constraints.maxWidth
+                .clamp(0, (height * 0.40).clamp(150, 290))
+                .toDouble();
+            return Align(
+              child: controller.isBundledTrack
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: Image.asset(
+                        'assets/images/discover-mountains.webp',
+                        width: size,
+                        height: size,
+                        fit: BoxFit.cover,
+                        excludeFromSemantics: true,
+                      ),
+                    )
+                  : TrackArtwork(
+                      url: track.thumbnailUrl,
+                      size: size,
+                      borderRadius: 24,
+                    ),
+            );
+          },
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 20),
         Row(
           children: [
             Expanded(
@@ -193,89 +323,110 @@ class _NowPlaying extends ConsumerWidget {
                 ],
               ),
             ),
-            IconButton(
-              tooltip: favorite ? 'Quitar de favoritos' : 'Añadir a favoritos',
-              icon: Icon(favorite ? Icons.favorite : Icons.favorite_border),
-              color: _playerAccent,
-              onPressed: interactions == null || favoriteAction.isLoading
-                  ? null
-                  : () async {
-                      final updated = await ref
-                          .read(favoriteActionsProvider.notifier)
-                          .setFavorite(track.id, !favorite);
-                      if (!updated && context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('No se pudo actualizar favoritos.'),
-                          ),
-                        );
-                      }
-                    },
-            ),
+            if (musicMode)
+              IconButton(
+                tooltip: 'Ver mis Me gusta de YouTube Music',
+                icon: const Icon(Icons.library_music_outlined),
+                onPressed: () => context.push('/music/liked'),
+              )
+            else if (!controller.isBundledTrack)
+              IconButton(
+                tooltip: favorite
+                    ? 'Quitar de favoritos'
+                    : 'Añadir a favoritos',
+                icon: Icon(favorite ? Icons.favorite : Icons.favorite_border),
+                color: theme.colorScheme.primary,
+                onPressed: interactions == null || favoriteAction!.isLoading
+                    ? null
+                    : () async {
+                        final updated = await ref
+                            .read(favoriteActionsProvider.notifier)
+                            .setFavorite(track.id, !favorite);
+                        if (!updated && context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('No se pudo actualizar favoritos.'),
+                            ),
+                          );
+                        }
+                      },
+              ),
           ],
         ),
+        const SizedBox(height: 8),
+        PlaybackProgress(key: ValueKey(track.id), controller: controller),
         const SizedBox(height: 12),
-        Slider(
-          value: controller.position.inMilliseconds.clamp(0, length).toDouble(),
-          max: length > 0 ? length.toDouble() : 1,
-          onChanged: length <= 0
-              ? null
-              : (value) => unawaited(
-                  controller.seek(Duration(milliseconds: value.round())),
+        SizedBox(
+          width: double.infinity,
+          child: Wrap(
+            alignment: WrapAlignment.spaceEvenly,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            runSpacing: 8,
+            children: [
+              IconButton(
+                tooltip: 'Aleatorio',
+                color: controller.shuffleEnabled
+                    ? theme.colorScheme.primary
+                    : null,
+                onPressed: controller.queue.length < 2
+                    ? null
+                    : controller.toggleShuffle,
+                icon: const Icon(Icons.shuffle),
+              ),
+              IconButton(
+                tooltip: 'Anterior',
+                iconSize: 30,
+                onPressed: controller.hasPrevious
+                    ? () => unawaited(controller.previous())
+                    : null,
+                icon: const Icon(Icons.skip_previous_rounded),
+              ),
+              IconButton.filled(
+                tooltip: playing ? 'Pausar' : 'Reproducir',
+                style: IconButton.styleFrom(minimumSize: const Size.square(58)),
+                iconSize: 34,
+                onPressed: loading
+                    ? null
+                    : () => unawaited(
+                        playing ? controller.pause() : controller.resume(),
+                      ),
+                icon: loading
+                    ? const SizedBox.square(
+                        dimension: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        playing
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                      ),
+              ),
+              IconButton(
+                tooltip: 'Siguiente',
+                iconSize: 30,
+                onPressed: controller.hasNext
+                    ? () => unawaited(controller.next())
+                    : null,
+                icon: const Icon(Icons.skip_next_rounded),
+              ),
+              IconButton(
+                tooltip: switch (controller.repeat) {
+                  PlaybackRepeat.off => 'Repetir desactivado',
+                  PlaybackRepeat.all => 'Repetir cola',
+                  PlaybackRepeat.one => 'Repetir canción',
+                },
+                color: controller.repeat == PlaybackRepeat.off
+                    ? null
+                    : theme.colorScheme.primary,
+                onPressed: controller.cycleRepeat,
+                icon: Icon(
+                  controller.repeat == PlaybackRepeat.one
+                      ? Icons.repeat_one
+                      : Icons.repeat,
                 ),
-          semanticFormatterCallback: (value) =>
-              audioTime(Duration(milliseconds: value.round())),
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(audioTime(controller.position)),
-            Text(
-              duration == null
-                  ? track.durationLabel ?? '—'
-                  : audioTime(duration),
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            IconButton(
-              tooltip: 'Anterior',
-              iconSize: 30,
-              onPressed: controller.hasPrevious
-                  ? () => unawaited(controller.previous())
-                  : null,
-              icon: const Icon(Icons.skip_previous_rounded),
-            ),
-            IconButton.filled(
-              tooltip: playing ? 'Pausar' : 'Reproducir',
-              style: IconButton.styleFrom(minimumSize: const Size.square(68)),
-              iconSize: 34,
-              onPressed: loading
-                  ? null
-                  : () => unawaited(
-                      playing ? controller.pause() : controller.resume(),
-                    ),
-              icon: loading
-                  ? const SizedBox.square(
-                      dimension: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(
-                      playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                    ),
-            ),
-            IconButton(
-              tooltip: 'Siguiente',
-              iconSize: 30,
-              onPressed: controller.hasNext
-                  ? () => unawaited(controller.next())
-                  : null,
-              icon: const Icon(Icons.skip_next_rounded),
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
         if (controller.phase == TrackAudioPhase.error)
           const Padding(
@@ -288,97 +439,4 @@ class _NowPlaying extends ConsumerWidget {
       ],
     );
   }
-}
-
-class _QueueSheet extends StatelessWidget {
-  const _QueueSheet({required this.controller});
-
-  final TrackPlaybackController controller;
-
-  @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: controller,
-    builder: (context, _) {
-      final queue = controller.queue;
-      final theme = Theme.of(context);
-      return SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-              title: Text(
-                'Cola de reproducción',
-                style: theme.textTheme.titleLarge,
-              ),
-              subtitle: Text(
-                '${queue.length} ${queue.length == 1 ? 'canción' : 'canciones'}',
-              ),
-              trailing: TextButton(
-                onPressed: queue.isEmpty
-                    ? null
-                    : () => unawaited(controller.clear()),
-                child: const Text('Vaciar'),
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: queue.isEmpty
-                  ? const Center(child: Text('La cola está vacía'))
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-                      itemCount: queue.length,
-                      separatorBuilder: (context, index) =>
-                          const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final track = queue[index];
-                        final current = index == controller.index;
-                        return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          selected: current,
-                          selectedTileColor:
-                              theme.colorScheme.secondaryContainer,
-                          leading: TrackArtwork(
-                            url: track.thumbnailUrl,
-                            size: 48,
-                          ),
-                          title: Text(
-                            track.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            [
-                              if (current) 'En reproducción',
-                              track.artistName,
-                              ?track.durationLabel,
-                            ].join(' · '),
-                          ),
-                          onTap: current
-                              ? null
-                              : () => unawaited(controller.jump(index)),
-                          trailing: current
-                              ? Icon(
-                                  Icons.equalizer,
-                                  color: theme.colorScheme.primary,
-                                )
-                              : IconButton(
-                                  tooltip: 'Quitar de la cola',
-                                  onPressed: () => controller.remove(index),
-                                  icon: const Icon(Icons.close),
-                                ),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      );
-    },
-  );
 }

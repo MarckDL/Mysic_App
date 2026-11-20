@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:mysic/features/playback/domain/track_audio_engine.dart';
 
 class FakeTrackAudioEngine implements TrackAudioEngine {
@@ -8,6 +9,8 @@ class FakeTrackAudioEngine implements TrackAudioEngine {
   bool fail = false;
   String? sourceId;
   String? token;
+  Uri? lastLicensedAudio;
+  Uri? lastDeviceAudio;
   int plays = 0;
   int stops = 0;
   int disposals = 0;
@@ -32,8 +35,19 @@ class FakeTrackAudioEngine implements TrackAudioEngine {
   void markPlaybackRequested() {}
 
   @override
-  Future<void> load(String sourceId, String token) async {
+  void cancelLoad() {}
+
+  @override
+  Future<void> load(
+    String sourceId,
+    String token, {
+    Uri? licensedAudio,
+    Uri? deviceAudio,
+    bool refresh = false,
+  }) async {
     this.sourceId = sourceId;
+    lastLicensedAudio = licensedAudio;
+    lastDeviceAudio = deviceAudio;
     this.token = token;
     if (fail) throw StateError('Unavailable');
     await pendingLoad?.future;

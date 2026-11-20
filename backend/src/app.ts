@@ -1,3 +1,21 @@
+import { AccountMusicService } from './modules/integrations/youtube-music/account-service.js';
+import {
+  OAuthMusicCatalog,
+  type MusicAccountCatalog,
+} from './infrastructure/youtube/music-account-catalog.js';
+import { createPreviewMusicProvider } from './modules/integrations/youtube-music/preview-provider.js';
+import type { YouTubeMusicProvider } from './modules/integrations/youtube-music/provider.js';
+import {
+  youtubeMusicRoot,
+  youtubeMusicRouter,
+} from './modules/integrations/youtube-music/routes.js';
+import {
+  ChannelMusicService,
+  licensedRecordings,
+  type ChannelMusicProvider,
+} from './modules/integrations/youtube-music/channel-service.js';
+import { YoutubeDataLibraryProvider } from './infrastructure/youtube/youtube-data-library-provider.js';
+import { YouTubeMusicService } from './modules/integrations/youtube-music/service.js';
 import { installYoutubeAppLinks } from './modules/integrations/youtube/android-links.js';
 import type { ConnectedLibraryProvider } from './modules/integrations/youtube/library-domain.js';
 import { createYoutubeService } from './infrastructure/youtube/service.js';
@@ -62,6 +80,9 @@ export function createApp(
     tokenVerifier?: TokenVerifier;
     youtubeLinkService?: YoutubeLinkService;
     youtubeLibraryProvider?: ConnectedLibraryProvider;
+    channelMusicProvider?: ChannelMusicProvider;
+    musicAccountCatalog?: MusicAccountCatalog;
+    youtubeMusicProvider?: YouTubeMusicProvider | null;
     importRepository?: ImportRepository;
     userRepository?: UserRepository;
     musicProvider?: MusicProvider;
@@ -89,14 +110,49 @@ export function createApp(
   });
 
   const verifier = options.tokenVerifier ?? createFirebaseTokenVerifier();
+  const youtubeLink = options.youtubeLinkService ?? createYoutubeService();
+  const data = new YoutubeDataLibraryProvider();
   app.use(
     youtubeRoot,
     youtubeRouter(
       verifier,
-      options.youtubeLinkService ?? createYoutubeService(),
-      options.youtubeLibraryProvider,
+      youtubeLink,
+      options.youtubeLibraryProvider ?? data,
     ),
   );
+  const preview =
+    options.youtubeMusicProvider === undefined
+      ? createPreviewMusicProvider()
+      : options.youtubeMusicProvider;
+  const direct = youtubeLink
+    ? new ChannelMusicService(
+        youtubeLink,
+        options.channelMusicProvider ?? data,
+        licensedRecordings(process.env.MYSIC_LICENSED_AUDIO_JSON),
+      )
+    : undefined;
+  app.use(
+    youtubeMusicRoot,
+    youtubeMusicRouter(verifier, new YouTubeMusicService(preview), direct),
+  );
+
+  const accountMusic = youtubeLink
+    ? new AccountMusicService(
+        youtubeLink,
+        options.channelMusicProvider ?? data,
+        licensedRecordings(process.env.MYSIC_LICENSED_AUDIO_JSON),
+        options.musicAccountCatalog ?? new OAuthMusicCatalog(),
+      )
+    : undefined;
+  app.use(
+    '/api/v2/integrations/youtube-music',
+    youtubeMusicRouter(
+      verifier,
+      new YouTubeMusicService(preview),
+      accountMusic,
+    ),
+  );
+
   const users = new UserService(
     options.userRepository ?? new PrismaUserRepository(),
   );

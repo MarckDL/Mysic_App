@@ -688,3 +688,9 @@ Los contratos, límites y aceptación figuran en
 Firebase identifica al propietario de Mysic. El módulo de integración autoriza por separado al canal de YouTube mediante OAuth web. Sus credenciales pertenecen al backend. Catálogo y reproducción conservan MusicProvider.
 
 El puerto `ConnectedLibraryProvider` lee YouTube Data API v3 con el permiso del vínculo. El backend comprueba la propiedad de cada lista solicitada por ID y entrega páginas bajo demanda. Los contratos de consulta y recuperación de cursores figuran en [la guía de la biblioteca](youtube-library.md).
+
+### Reproductor de Mysic en el modo YouTube Music
+
+El catálogo conectado y el motor de audio comparten la cola, el minirreproductor y los controles de Android. Una grabación del canal puede tener un archivo seleccionado en ese dispositivo o un recurso HTTPS autorizado por el backend. Las copias locales se guardan en el directorio privado de la app, separadas por usuario y vínculo, y quedan excluidas de la copia de seguridad de Android. El backend recibe el ID del tema y los milisegundos escuchados cuando el usuario activa el registro. Los detalles de la biblioteca y las pruebas se describen en la [guía del modo YouTube Music](youtube-music-mode.md).
+
+El APK 4026 lee las colecciones de la cuenta y el Inicio de YouTube Music mediante `MusicAccountCatalog` y el consentimiento OAuth existente. El backend limita cada consulta y su cursor al usuario, canal y generación del vínculo. La app conserva el reproductor nativo para las canciones recibidas. [Contrato del modo musical](youtube-music-mode.md)

@@ -8,6 +8,11 @@ enum TrackAudioPhase {
   interrupted,
 }
 
+/// A source could not be resolved or opened. A fresh URL may recover it.
+class PlaybackSourceFailure implements Exception {
+  const PlaybackSourceFailure();
+}
+
 abstract interface class TrackAudioEngine {
   Stream<TrackAudioPhase> get states;
   Stream<Duration> get positions;
@@ -15,7 +20,14 @@ abstract interface class TrackAudioEngine {
   Duration? get duration;
   Future<void> warmUp();
   void markPlaybackRequested();
-  Future<void> load(String sourceId, String token);
+  Future<void> load(
+    String sourceId,
+    String token, {
+    Uri? licensedAudio,
+    Uri? deviceAudio,
+    bool refresh = false,
+  });
+  void cancelLoad();
   Future<void> prefetch(String sourceId, String token);
   void cancelPrefetch();
   Future<void> play();

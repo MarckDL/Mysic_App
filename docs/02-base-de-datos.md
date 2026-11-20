@@ -421,3 +421,9 @@ las ocho migraciones al día después del despliegue.
 La migración `20261118010000_youtube_oauth` añade tres tablas privadas con RLS. El intento y el vínculo se asocian a `users.id`. La tarea de revocación conserva su propio identificador de propietario y sobre cifrado, sin FK que pueda borrarla durante un reintento. El alcance de estas tablas es exclusivamente YouTube. La biblioteca sigue consultándose al proveedor.
 
 El contrato, ciclo de vida de las credenciales y requisitos de mantenimiento se describen en [Vinculación OAuth de YouTube](youtube-oauth.md).
+
+## Actividad musical del canal en Mysic
+
+La migración `20261120010000_channel_music_listens` guarda las escuchas de Mysic en `mysic.channel_music_listens`. La clave combina el UUID interno del usuario, la generación del vínculo y el UUID del evento para que un reintento conserve una única escucha. La base guarda el ID de la grabación, el tiempo escuchado y la fecha del servidor. La API limita el historial a las últimas 600 escuchas por vínculo. El borrado se propaga al desvincular la cuenta. El reemplazo de canal elimina los eventos de la generación anterior. Al renovar el consentimiento del mismo titular y canal, la transacción mueve las escuchas a la nueva generación y conserva el identificador estable de su biblioteca en el dispositivo.
+
+La conexión guarda la preferencia de pausa y una versión de la actividad. Un cambio de preferencia o un borrado invalida las escrituras pendientes de versiones anteriores y los cursores de actividad. Express verifica la identidad de Firebase y la generación del canal antes de exponer datos. RLS y la revocación de privilegios de los roles públicos protegen la tabla.

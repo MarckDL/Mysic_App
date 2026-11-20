@@ -13,7 +13,11 @@ class PlaybackSource {
 
 abstract interface class PlaybackSourceResolver {
   Future<void> warmUp();
-  Future<PlaybackSource> resolve(String sourceId, String token);
+  Future<PlaybackSource> resolve(
+    String sourceId,
+    String token, {
+    bool refresh = false,
+  });
   Future<void> prefetch(String sourceId, String token);
   void cancelPrefetch();
   Future<void> clear();
@@ -45,11 +49,18 @@ class AndroidPlaybackSourceResolver implements PlaybackSourceResolver {
   }
 
   @override
-  Future<PlaybackSource> resolve(String sourceId, String token) async {
+  Future<PlaybackSource> resolve(
+    String sourceId,
+    String token, {
+    bool refresh = false,
+  }) async {
     _validate(sourceId, token);
     if (_disposed) throw StateError('Resolvedor cerrado');
     final response = await _channel
-        .invokeMapMethod<String, Object?>('resolve', {'sourceId': sourceId})
+        .invokeMapMethod<String, Object?>('resolve', {
+          'sourceId': sourceId,
+          if (refresh) 'refresh': true,
+        })
         .timeout(const Duration(seconds: 35));
     final rawUrl = response?['url'];
     if (rawUrl is! String) throw StateError('Fuente nativa inválida');
@@ -122,7 +133,11 @@ class BackendPlaybackSourceResolver implements PlaybackSourceResolver {
   Future<void> warmUp() async {}
 
   @override
-  Future<PlaybackSource> resolve(String sourceId, String token) async {
+  Future<PlaybackSource> resolve(
+    String sourceId,
+    String token, {
+    bool refresh = false,
+  }) async {
     _validate(sourceId, token);
     return PlaybackSource(
       _base.resolve('/api/v1/playback/audio/$sourceId'),

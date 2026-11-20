@@ -186,9 +186,10 @@ export function youtubeRouter(
         : { status: 'unlinked', channel: null },
     ),
   );
-  router.delete('/connection', async (_req, res) => {
+  router.delete('/connection', async (req, res) => {
+    const generation = z.uuid().optional().parse(req.query.generation);
     const pending = service
-      ? await service.unlink(res.locals.youtubeOwner)
+      ? await service.unlink(res.locals.youtubeOwner, generation)
       : false;
     res.status(pending ? 202 : 204).end();
   });

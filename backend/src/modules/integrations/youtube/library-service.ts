@@ -12,6 +12,10 @@ export interface LibraryQuery {
   limit?: number;
   cursor?: string;
 }
+export type AuthorizedRead = <T>(
+  operation: (context: ReadContext) => Promise<T>,
+) => Promise<T>;
+
 export class YoutubeLibraryService {
   private readonly cursors: LibraryCursors;
   constructor(
@@ -20,36 +24,52 @@ export class YoutubeLibraryService {
   ) {
     this.cursors = new LibraryCursors(grants.box);
   }
-  async list(
+  async authorized<T>(
     userId: string,
-    playlistId: string | undefined,
-    query: LibraryQuery,
+    expectedGeneration: string | undefined,
     clientSignal: AbortSignal,
-  ) {
+    run: (
+      channelId: string,
+      generation: string,
+      read: AuthorizedRead,
+      activityEpoch: number,
+    ) => Promise<T>,
+    verifyActivityEpoch = false,
+  ): Promise<T> {
     const connections = getDatabase().externalMusicConnection;
     const current = await connections.findUnique({
       where: { userId },
-      select: { status: true, channelId: true, generation: true },
+      select: {
+        status: true,
+        channelId: true,
+        generation: true,
+        mysicActivityEpoch: true,
+      },
     });
     if (!current || current.status !== 'linked')
       throw new LinkError(409, 'REAUTHORIZE_YOUTUBE');
+    if (
+      expectedGeneration !== undefined &&
+      current.generation !== expectedGeneration
+    )
+      throw new LinkError(409, 'YOUTUBE_LINK_CHANGED');
     const binding = {
       userId,
       generation: current.generation,
       status: 'linked',
     };
     const ensureCurrent = async () => {
-      if (!(await connections.count({ where: binding })))
-        throw new LinkError(409, 'YOUTUBE_LINK_CHANGED');
+      const latest = await connections.findFirst({
+        where: binding,
+        select: { mysicActivityEpoch: true },
+      });
+      if (!latest) throw new LinkError(409, 'YOUTUBE_LINK_CHANGED');
+      if (
+        verifyActivityEpoch &&
+        latest.mysicActivityEpoch !== current.mysicActivityEpoch
+      )
+        throw new LinkError(409, 'MYSIC_ACTIVITY_CHANGED');
     };
-    const context = JSON.stringify([
-      'youtube-library-v1',
-      userId,
-      current.generation,
-      current.channelId,
-      playlistId ?? null,
-    ]);
-    const page = this.cursors.resume(context, query.cursor, query.limit);
     const signal = AbortSignal.any([clientSignal, AbortSignal.timeout(15_000)]);
     const deadline = Date.now() + 15_000;
     const checkTime = () => {
@@ -85,73 +105,102 @@ export class YoutubeLibraryService {
         }
       }
     };
-    const request = { maxResults: page.size, pageToken: page.token };
-    const pageIds: string[] = [];
-    const isNew = (id: string) => {
-      if (page.seen.has(id)) return false;
-      page.seen.add(id);
-      pageIds.push(id);
-      return true;
-    };
-    const finish = async <T>(items: T[], nextToken?: string) => {
-      await ensureCurrent();
-      checkTime();
-      return {
-        items,
-        nextCursor: this.cursors.next(context, page, pageIds, nextToken),
-        fetchedAt: new Date().toISOString(),
-      };
-    };
-    if (!playlistId) {
-      const result = await read((ctx) =>
-        this.provider.listPlaylists(ctx, request),
-      );
-      const items = result.items
-        .filter(
-          (item) => item.channelId === current.channelId && isNew(item.id),
-        )
-        .map(({ channelId: _owner, ...dto }) => dto);
-      return finish(items, result.nextPageToken);
-    }
-    const owner = await read((ctx) =>
-      this.provider.playlistOwner(ctx, playlistId),
+    const result = await run(
+      current.channelId,
+      current.generation,
+      read,
+      current.mysicActivityEpoch,
     );
-    if (owner !== current.channelId)
-      throw new LinkError(404, 'PLAYLIST_NOT_FOUND');
-    const result = await read((ctx) =>
-      this.provider.listPlaylistItems(ctx, playlistId, request),
+    await ensureCurrent();
+    checkTime();
+    return result;
+  }
+
+  async list(
+    userId: string,
+    playlistId: string | undefined,
+    query: LibraryQuery,
+    clientSignal: AbortSignal,
+  ) {
+    return this.authorized(
+      userId,
+      undefined,
+      clientSignal,
+      async (channelId, generation, read) => {
+        const context = JSON.stringify([
+          'youtube-library-v1',
+          userId,
+          generation,
+          channelId,
+          playlistId ?? null,
+        ]);
+        const page = this.cursors.resume(context, query.cursor, query.limit);
+        const request = { maxResults: page.size, pageToken: page.token };
+        const pageIds: string[] = [];
+        const isNew = (id: string) => {
+          if (page.seen.has(id)) return false;
+          page.seen.add(id);
+          pageIds.push(id);
+          return true;
+        };
+        const finish = <T>(items: T[], nextToken?: string) => {
+          return {
+            items,
+            nextCursor: this.cursors.next(context, page, pageIds, nextToken),
+            fetchedAt: new Date().toISOString(),
+          };
+        };
+        if (!playlistId) {
+          const result = await read((ctx) =>
+            this.provider.listPlaylists(ctx, request),
+          );
+          const items = result.items
+            .filter((item) => item.channelId === channelId && isNew(item.id))
+            .map(({ channelId: _owner, ...dto }) => dto);
+          return finish(items, result.nextPageToken);
+        }
+        const owner = await read((ctx) =>
+          this.provider.playlistOwner(ctx, playlistId),
+        );
+        if (owner !== channelId) throw new LinkError(404, 'PLAYLIST_NOT_FOUND');
+        const result = await read((ctx) =>
+          this.provider.listPlaylistItems(ctx, playlistId, request),
+        );
+        const entries = result.items.filter((item) =>
+          isNew(item.playlistItemId),
+        );
+        const ids = [
+          ...new Set(
+            entries.flatMap((item) => (item.videoId ? [item.videoId] : [])),
+          ),
+        ];
+        const videos = ids.length
+          ? await read((ctx) => this.provider.getVideos(ctx, ids))
+          : [];
+        const byId = new Map(videos.map((video) => [video.id, video]));
+        const items = entries.map((item) => {
+          const video = item.videoId ? byId.get(item.videoId) : undefined;
+          const availability = video?.availability ?? 'unavailable';
+          return {
+            ...item,
+            title: video?.title ?? item.title,
+            channelTitle: video?.channelTitle ?? null,
+            thumbnailUrl: video?.thumbnailUrl ?? null,
+            durationSeconds: video?.durationSeconds ?? null,
+            availability,
+            openUrl:
+              availability === 'available'
+                ? 'https://www.youtube.com/watch?v=' + item.videoId
+                : null,
+          };
+        });
+        return {
+          ...finish(items, result.nextPageToken),
+          unavailableCount: items.filter(
+            (item) => item.availability === 'unavailable',
+          ).length,
+        };
+      },
     );
-    const entries = result.items.filter((item) => isNew(item.playlistItemId));
-    const ids = [
-      ...new Set(
-        entries.flatMap((item) => (item.videoId ? [item.videoId] : [])),
-      ),
-    ];
-    const videos = ids.length
-      ? await read((ctx) => this.provider.getVideos(ctx, ids))
-      : [];
-    const byId = new Map(videos.map((video) => [video.id, video]));
-    const items = entries.map((item) => {
-      const video = item.videoId ? byId.get(item.videoId) : undefined;
-      const availability = video?.availability ?? 'unavailable';
-      return {
-        ...item,
-        title: video?.title ?? item.title,
-        channelTitle: video?.channelTitle ?? null,
-        thumbnailUrl: video?.thumbnailUrl ?? null,
-        durationSeconds: video?.durationSeconds ?? null,
-        availability,
-        openUrl:
-          availability === 'available'
-            ? 'https://www.youtube.com/watch?v=' + item.videoId
-            : null,
-      };
-    });
-    return {
-      ...(await finish(items, result.nextPageToken)),
-      unavailableCount: items.filter(
-        (item) => item.availability === 'unavailable',
-      ).length,
-    };
   }
 }

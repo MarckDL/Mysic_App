@@ -12,6 +12,7 @@ class MysicAudioHandler extends BaseAudioHandler {
   TrackAudioPhase? _publishedPhase;
   int? _publishedIndex;
   Duration? _publishedDuration;
+  (PlaybackRepeat, bool, int)? _publishedOptions;
   void bind(TrackPlaybackController controller) {
     final old = _controller;
     if (old != null) old.removeListener(_publish);
@@ -30,6 +31,7 @@ class MysicAudioHandler extends BaseAudioHandler {
     _publishedPhase = null;
     _publishedIndex = null;
     _publishedDuration = null;
+    _publishedOptions = null;
     queue.add(const []);
     _clearMediaItem();
     playbackState.add(
@@ -80,14 +82,22 @@ class MysicAudioHandler extends BaseAudioHandler {
       _publishedDuration = controller.duration;
       _publishedCurrent = current;
     }
-    // El sistema extrapola la posición entre cambios de estado, sin emitir cada tick.
+    // Publish explicit seeks and playback mode changes, while Android
+    // extrapolates the position between updates.
+    final options = (
+      controller.repeat,
+      controller.shuffleEnabled,
+      controller.seekRevision,
+    );
     if (!queueChanged &&
         _publishedPhase == phase &&
-        _publishedIndex == controller.index) {
+        _publishedIndex == controller.index &&
+        _publishedOptions == options) {
       return;
     }
     _publishedPhase = phase;
     _publishedIndex = controller.index;
+    _publishedOptions = options;
     final controls = <MediaControl>[
       if (controller.hasPrevious) MediaControl.skipToPrevious,
       if (current != null)
@@ -120,6 +130,14 @@ class MysicAudioHandler extends BaseAudioHandler {
         updatePosition: controller.position,
         bufferedPosition: controller.position,
         queueIndex: current == null ? null : controller.index,
+        repeatMode: switch (controller.repeat) {
+          PlaybackRepeat.off => AudioServiceRepeatMode.none,
+          PlaybackRepeat.all => AudioServiceRepeatMode.all,
+          PlaybackRepeat.one => AudioServiceRepeatMode.one,
+        },
+        shuffleMode: controller.shuffleEnabled
+            ? AudioServiceShuffleMode.all
+            : AudioServiceShuffleMode.none,
         errorCode: phase == TrackAudioPhase.error ? 1 : null,
         errorMessage: phase == TrackAudioPhase.error
             ? 'No se pudo reproducir esta pista. Puedes reintentar o elegir la siguiente.'
@@ -141,11 +159,7 @@ class MysicAudioHandler extends BaseAudioHandler {
   @override
   Future<void> skipToQueueItem(int index) async => _controller?.jump(index);
   @override
-  Future<void> seek(Duration position) async {
-    await _controller?.seek(position);
-    _publishedPhase = null;
-    _publish();
-  }
+  Future<void> seek(Duration position) async => _controller?.seek(position);
 
   @override
   Future<void> onTaskRemoved() async {

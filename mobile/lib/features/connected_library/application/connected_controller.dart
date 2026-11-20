@@ -13,12 +13,17 @@ class ConnectedController extends ChangeNotifier {
   final LinkPlatform platform;
   final _cancel = CancelToken();
   late Future<void> _tail = Future.value();
-  bool _dead = false, _loaded = false;
+  bool _dead = false, _loaded = false, _failed = false;
   bool busy = false, forceConsent = false, replaceRequired = false;
+  bool needsUnlinkRetry = false;
   Connection? connection;
   PendingLink? pending;
   Channel? candidate;
   String? message;
+  // Dispatched after the server confirms the binding, including a manual return.
+  void Function(bool confirmed)? onBindingChanged;
+  bool _confirmed = false, _observedBinding = false;
+  String? _knownGeneration, _unlinkGeneration;
   bool get alive => !_dead;
 
   Future<void> _serial(Future<void> Function() action) {
@@ -27,9 +32,17 @@ class ConnectedController extends ChangeNotifier {
       busy = true;
       _notify();
       try {
+        if (!_loaded) {
+          pending = await platform.load(uid);
+          _loaded = true;
+        }
+        if (_dead) return;
         await action();
       } catch (e) {
-        if (!_dead) message = libraryError(e);
+        if (!_dead) {
+          _failed = true;
+          message = libraryError(e);
+        }
       } finally {
         busy = false;
         _notify();
@@ -48,6 +61,8 @@ class ConnectedController extends ChangeNotifier {
   }
 
   Future<void> _end() async {
+    // A completed or expired attempt can leave the cached generation obsolete.
+    connection = null;
     candidate = null;
     replaceRequired = false;
     await _write(null);
@@ -55,18 +70,25 @@ class ConnectedController extends ChangeNotifier {
 
   Future<void> _connection() async {
     final value = await client.connection(_cancel);
-    if (!_dead) connection = value;
+    if (_dead) return;
+    connection = value;
+    final generation = value.linked ? value.generation : null;
+    final confirmed = _confirmed && value.linked;
+    final changed = _observedBinding && generation != _knownGeneration;
+    _knownGeneration = generation;
+    _observedBinding = true;
+    _confirmed = false;
+    if (confirmed || changed) onBindingChanged?.call(confirmed);
   }
 
   Future<void> sync({bool browser = false, void Function()? onReturn}) =>
       _serial(() async {
-        message = null;
-        if (!_loaded) {
-          pending = await platform.load(uid);
-          _loaded = true;
-        }
         final returned = browser ? await platform.takeReturn() : null;
-        if (_dead) return;
+        if (_dead || needsUnlinkRetry) return;
+        if (_failed) {
+          _failed = false;
+          message = null;
+        }
         final match = returned != null && pending?.id == returned.id;
         if (match) onReturn?.call();
         if (pending != null && !pending!.expires.isAfter(DateTime.now())) {
@@ -78,6 +100,7 @@ class ConnectedController extends ChangeNotifier {
         await _connection();
       });
   Future<void> start({bool restart = false}) => _serial(() async {
+    _failed = false;
     message = null;
     candidate = null;
     replaceRequired = false;
@@ -96,6 +119,12 @@ class ConnectedController extends ChangeNotifier {
       started = await client.start(local.key, local.force, _cancel);
     } on ApiFailure catch (error) {
       if (error.code == 'LINK_DISABLED') await _end();
+      if (error.code == 'STALE_ATTEMPT') {
+        await _end();
+        message = 'El intento venció. Puedes volver a vincular.';
+        await _connection();
+        return;
+      }
       rethrow;
     }
     if (_dead) return;
@@ -110,6 +139,7 @@ class ConnectedController extends ChangeNotifier {
     if (_dead) return;
     if (started.launch == null) {
       await _inspect(null);
+      await _connection();
       return;
     }
     final uri = client.launchUri(started.launch);
@@ -133,9 +163,15 @@ class ConnectedController extends ChangeNotifier {
     switch (attempt.status) {
       case 'awaiting_confirmation':
         candidate = attempt.channel;
-        message = null;
-        if (returnRef != null) await _confirm({'returnRef': returnRef});
+        final currentChannel = connection?.channel?.id;
+        replaceRequired =
+            replaceRequired ||
+            (currentChannel != null && currentChannel != candidate?.id);
+        if (returnRef != null && !replaceRequired) {
+          await _confirm({'returnRef': returnRef});
+        }
       case 'confirmed':
+        _confirmed = true;
         await _end();
         forceConsent = false;
         message = null;
@@ -167,6 +203,7 @@ class ConnectedController extends ChangeNotifier {
       message = null;
       return;
     }
+    _confirmed = true;
     await _end();
     forceConsent = false;
     message = null;
@@ -175,6 +212,8 @@ class ConnectedController extends ChangeNotifier {
   Future<void> confirmCandidate() => _serial(() async {
     final channel = candidate;
     if (channel == null) return;
+    _failed = false;
+    message = null;
     await _confirm({
       'channelId': channel.id,
       if (replaceRequired) 'replace': true,
@@ -182,6 +221,8 @@ class ConnectedController extends ChangeNotifier {
     await _connection();
   });
   Future<void> cancel() => _serial(() async {
+    _failed = false;
+    message = null;
     final id = pending?.id;
     if (id != null) {
       try {
@@ -195,11 +236,21 @@ class ConnectedController extends ChangeNotifier {
     message = 'La vinculación se canceló.';
   });
   Future<void> unlink() => _serial(() async {
+    _failed = false;
     message = null;
-    await client.unlink(_cancel);
+    _unlinkGeneration ??= connection?.generation;
     connection = null;
+    needsUnlinkRetry = true;
     _notify();
+    try {
+      await client.unlink(_cancel, generation: _unlinkGeneration);
+    } on ApiFailure catch (error) {
+      if (error.code != 'MUSIC_LINK_CHANGED') rethrow;
+      message = 'Cambió el canal. Comprueba la cuenta actual.';
+    }
+    _unlinkGeneration = null;
     await _end();
+    needsUnlinkRetry = false;
     forceConsent = false;
     await _connection();
   });

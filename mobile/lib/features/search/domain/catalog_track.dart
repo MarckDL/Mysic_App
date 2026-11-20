@@ -7,12 +7,23 @@ class CatalogTrack {
     required this.artistName,
     this.durationSeconds,
     this.thumbnailUrl,
+    this.licensedAudio,
+    this.deviceAudio,
+    this.musicAccountTrack = false,
   });
+  static const musicPreviewPrefix = 'music-preview:';
+
   final String id;
+  bool get isMusicPreview => id.startsWith(musicPreviewPrefix);
   final String title;
   final String artistName;
   final int? durationSeconds;
   final String? thumbnailUrl;
+  final Uri? licensedAudio;
+  final Uri? deviceAudio;
+  final bool musicAccountTrack;
+  bool get isConnectedAudio =>
+      musicAccountTrack || deviceAudio != null || licensedAudio != null;
 
   factory CatalogTrack.fromJson(Map<String, dynamic> data) {
     final id = data['id'];
