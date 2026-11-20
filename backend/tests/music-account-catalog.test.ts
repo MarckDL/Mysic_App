@@ -68,6 +68,29 @@ const token = (t: string) => ({
 });
 
 describe('catálogo de la cuenta de Music', () => {
+  it('conserva las tarjetas de mixes y playlists recomendados con su ID de lista canónico', () => {
+    const page = parseMusicAccountPage(
+      {
+        contents: {
+          musicCarouselShelfRenderer: {
+            contents: [
+              shelf('RDTMAK5uy_example', 'PLAYLIST', 'Mi mix'),
+              shelf('PLlibrary', 'PLAYLIST', 'Lista recomendada'),
+              shelf('VLPLnormal', 'PLAYLIST', 'Otra lista'),
+              shelf('RDTMAK5uy_podcast', 'PODCAST_SHOW', 'Un programa'),
+            ],
+          },
+        },
+      },
+      'home',
+    );
+    expect(page.items.map(({ kind, id }) => [kind, id])).toEqual([
+      ['playlist', 'RDTMAK5uy_example'],
+      ['playlist', 'PLlibrary'],
+      ['playlist', 'PLnormal'],
+    ]);
+  });
+
   it('conserva orden y duplicados de la lista y excluye cursos, podcasts y sugerencias ajenas a la lista', () => {
     const page = parseMusicAccountPage(
       {
@@ -137,7 +160,18 @@ describe('catálogo de la cuenta de Music', () => {
           contents: [
             {
               musicCarouselShelfRenderer: {
+                header: {
+                  musicCarouselShelfBasicHeaderRenderer: {
+                    title: text('Para ti'),
+                  },
+                },
                 contents: [album, pl, track, token('otra-seccion')],
+              },
+            },
+            {
+              musicShelfRenderer: {
+                title: text('Escucha de nuevo'),
+                contents: [track, token('otra-lista')],
               },
             },
             token('mas-inicio'),
@@ -147,9 +181,10 @@ describe('catálogo de la cuenta de Music', () => {
     };
     expect(parseMusicAccountPage(raw, 'home')).toMatchObject({
       items: [
-        { kind: 'album', id: 'MPREb_album' },
-        { kind: 'playlist', id: 'PLrock' },
-        { kind: 'track' },
+        { kind: 'album', id: 'MPREb_album', shelfTitle: 'Para ti' },
+        { kind: 'playlist', id: 'PLrock', shelfTitle: 'Para ti' },
+        { kind: 'track', shelfTitle: 'Para ti' },
+        { kind: 'track', shelfTitle: 'Escucha de nuevo' },
       ],
       next: 'mas-inicio',
     });
@@ -180,6 +215,21 @@ describe('catálogo de la cuenta de Music', () => {
       ),
     ).toThrow();
   });
+  it('omite una tarjeta que abre Shorts incluso si contiene un enlace musical', () => {
+    const short = {
+      musicResponsiveListItemRenderer: {
+        ...clip.musicResponsiveListItemRenderer,
+        navigationEndpoint: { reelWatchEndpoint: { videoId: 'ccccccccccc' } },
+      },
+    };
+    const raw = {
+      contents: { musicShelfRenderer: { contents: [short, track] } },
+    };
+    expect(parseMusicAccountPage(raw, 'liked')).toMatchObject({
+      items: [{ id: 'zzzzzzzzzzz' }],
+      excluded: 1,
+    });
+  });
   it('mantiene el videoclip subido por un usuario y descarta el curso en la misma playlist', async () => {
     const uploaded = song('mmmmmmmmmmm', 'MUSIC_VIDEO_TYPE_UGC');
     const transport = vi.fn<typeof fetch>().mockImplementation(async () =>
@@ -196,8 +246,8 @@ describe('catálogo de la cuenta de Music', () => {
     const getVideos = vi.fn(async () =>
       ['aaaaaaaaaaa', 'mmmmmmmmmmm'].map((id) => ({
         id,
-        isMusicCategory: id === 'mmmmmmmmmmm',
-        isRecording: false,
+        isMusicCategory: true,
+        isRecording: id === 'mmmmmmmmmmm',
         artistId: undefined,
         availability: 'available' as const,
         title: null,
@@ -223,18 +273,38 @@ describe('catálogo de la cuenta de Music', () => {
       access: 'test-account',
       signal: new AbortController().signal,
     };
-    const page = (auth?: boolean) =>
+    const page = (auth?: boolean, entries: unknown[] = [track]) =>
       Response.json({
         responseContext: {
           mainAppWebResponseContext:
             auth === undefined ? {} : { loggedOut: !auth },
         },
-        contents: { sectionListRenderer: { contents: [] } },
+        contents: { sectionListRenderer: { contents: entries } },
       });
     const wire = vi.fn<typeof fetch>();
     const catalog = new OAuthMusicCatalog(wire);
     wire.mockResolvedValueOnce(page(true)).mockResolvedValueOnce(page(true));
     await expect(catalog.verify(ctx)).resolves.toBeUndefined();
+    wire
+      .mockResolvedValueOnce(new Response(null, { status: 403 }))
+      .mockResolvedValueOnce(page(true));
+    await expect(catalog.verify(ctx)).resolves.toBe('personalHome');
+    wire.mockResolvedValueOnce(page()).mockResolvedValueOnce(page(true));
+    await expect(catalog.verify(ctx)).resolves.toBe('personalHome');
+    wire
+      .mockResolvedValueOnce(new Response(null, { status: 403 }))
+      .mockResolvedValueOnce(page(true, []));
+    await expect(catalog.verify(ctx)).rejects.toMatchObject({
+      code: 'MUSIC_CATALOG_RESPONSE',
+    });
+    wire
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(page(true));
+    await expect(catalog.verify(ctx)).resolves.toBe('personalHome');
+    wire
+      .mockResolvedValueOnce(page(true))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }));
+    await expect(catalog.verify(ctx)).resolves.toBe('privatePlaylists');
     wire.mockResolvedValueOnce(page(true)).mockResolvedValueOnce(page(false));
     await expect(catalog.verify(ctx)).resolves.toBe('privatePlaylists');
     wire.mockResolvedValueOnce(page(true)).mockResolvedValueOnce(page());
@@ -263,11 +333,12 @@ describe('catálogo de la cuenta de Music', () => {
     });
   });
   it('envía la autorización del usuario solo a Music y usa la colección correspondiente a cada vista', async () => {
-    const wire = vi
-      .fn<typeof fetch>()
-      .mockImplementation(async () =>
-        Response.json({ contents: { sectionListRenderer: { contents: [] } } }),
-      );
+    const wire = vi.fn<typeof fetch>().mockImplementation(async () =>
+      Response.json({
+        responseContext: { mainAppWebResponseContext: { loggedOut: false } },
+        contents: { sectionListRenderer: { contents: [] } },
+      }),
+    );
     const api = new OAuthMusicCatalog(wire);
     const ctx = {
       access: 'test-account',
@@ -300,6 +371,14 @@ describe('catálogo de la cuenta de Music', () => {
     await expect(api.read(ctx, { surface: 'home' })).rejects.toMatchObject({
       code: 'MUSIC_ACCESS_DENIED',
     });
-    expect(wire).toHaveBeenCalledTimes(6);
+    wire.mockResolvedValueOnce(
+      Response.json({
+        contents: { sectionListRenderer: { contents: [track] } },
+      }),
+    );
+    await expect(api.read(ctx, { surface: 'home' })).rejects.toMatchObject({
+      code: 'MUSIC_ACCESS_DENIED',
+    });
+    expect(wire).toHaveBeenCalledTimes(7);
   });
 });

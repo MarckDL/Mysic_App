@@ -235,7 +235,10 @@ class MusicModeController extends ChangeNotifier {
     }
   }
 
-  Future<void> refresh({bool invalidate = false}) async {
+  Future<void> refresh({
+    bool invalidate = false,
+    bool recheckMusic = false,
+  }) async {
     if (!_active) return;
     if (invalidate) {
       _bindingEpoch++;
@@ -255,7 +258,7 @@ class MusicModeController extends ChangeNotifier {
     failureCode = null;
     notifyListeners();
     try {
-      final next = await _client.connection();
+      final next = await _client.connection(recheckMusic: recheckMusic);
       if (!_active || epoch != _bindingEpoch) return;
       final previous = connection;
       if (previous != null &&

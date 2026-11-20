@@ -32,7 +32,7 @@ class OriginalMusicCatalog {
     return null;
   }
 
-  static MusicItem? item(Object? raw, String kind) {
+  static MusicItem? item(Object? raw, String kind, {String? shelfTitle}) {
     if (raw is! Map) return null;
     final id = _text(raw['id'], 150),
         title = _text(raw['title'] ?? raw['name']);
@@ -51,6 +51,7 @@ class OriginalMusicCatalog {
           null,
           nativePlayback: true,
           thumbnailUrl: thumbnail,
+          shelfTitle: shelfTitle,
           artistId:
               raw['artistId'] is String &&
                   RegExp(r'^UC[A-Za-z0-9_-]{22}$').hasMatch(raw['artistId'])
@@ -58,15 +59,26 @@ class OriginalMusicCatalog {
               : null,
         );
       case 'album':
-        return MusicAlbum(id, title, thumbnailUrl: thumbnail);
+        return MusicAlbum(
+          id,
+          title,
+          thumbnailUrl: thumbnail,
+          shelfTitle: shelfTitle,
+        );
       case 'artist':
-        return MusicArtist(id, title, thumbnailUrl: thumbnail);
+        return MusicArtist(
+          id,
+          title,
+          thumbnailUrl: thumbnail,
+          shelfTitle: shelfTitle,
+        );
       case 'playlist':
         return MusicPlaylist(
           id.startsWith('VL') ? id.substring(2) : id,
           title,
           false,
           thumbnailUrl: thumbnail,
+          shelfTitle: shelfTitle,
         );
       default:
         return null;
@@ -101,7 +113,11 @@ class OriginalMusicCatalog {
       hasRows = hasRows || rows.isNotEmpty;
       for (final row in rows) {
         if (row is! Map || row['kind'] is! String) continue;
-        final entry = item(row, row['kind'] as String);
+        final entry = item(
+          row,
+          row['kind'] as String,
+          shelfTitle: _text(shelf['title']),
+        );
         if (entry != null) items.add(entry);
       }
     }

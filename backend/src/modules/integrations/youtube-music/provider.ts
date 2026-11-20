@@ -60,7 +60,11 @@ export interface MusicAlbum {
   title: string;
   thumbnailUrl?: string;
 }
-export type MusicItem = MusicTrack | MusicPlaylist | MusicArtist | MusicAlbum;
+export type MusicItem = (
+  MusicTrack | MusicPlaylist | MusicArtist | MusicAlbum
+) & {
+  shelfTitle?: string;
+};
 export interface AccountPageResult {
   items: MusicItem[];
   nextCursor: string | null;

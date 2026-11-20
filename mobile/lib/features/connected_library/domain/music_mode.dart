@@ -73,12 +73,9 @@ class MusicConnection {
   bool get channelOnly =>
       personalization == 'channelOnly' || personalization == 'unverified';
   String get accessDescription => switch (personalization) {
-    'partialMusic' =>
-      'Google autorizó parte de tu biblioteca musical. Para ver tu Inicio personal, conecta Mysic de escritorio.',
-    'channelOnly' =>
-      'Google autorizó este canal. Para ver tu Inicio y tus álbumes personales, conecta la biblioteca de Mysic de escritorio.',
-    'unverified' =>
-      'Canal vinculado. Aún no se pudo verificar la biblioteca personal de YouTube Music.',
+    'partialMusic' => 'Acceso parcial a tu biblioteca de YouTube Music.',
+    'channelOnly' => 'Acceso al canal de YouTube.',
+    'unverified' => 'Biblioteca musical pendiente de verificar.',
     'verified' => 'Canal y biblioteca musical verificados.',
     _ => 'Canal vinculado',
   };
@@ -101,7 +98,7 @@ class MusicConnection {
 }
 
 sealed class MusicItem {
-  const MusicItem(this.id, this.title);
+  const MusicItem(this.id, this.title, {this.shelfTitle});
 
   factory MusicItem.fromJson(Map<String, dynamic> data) =>
       switch (data['kind']) {
@@ -111,17 +108,20 @@ sealed class MusicItem {
           data['id'] as String,
           data['title'] as String,
           thumbnailUrl: data['thumbnailUrl'] as String?,
+          shelfTitle: data['shelfTitle'] as String?,
         ),
         'artist' => MusicArtist(
           data['id'] as String,
           data['title'] as String,
           thumbnailUrl: data['thumbnailUrl'] as String?,
+          shelfTitle: data['shelfTitle'] as String?,
         ),
         _ => throw const FormatException('Elemento musical desconocido.'),
       };
 
   final String id;
   final String title;
+  final String? shelfTitle;
 }
 
 class MusicTrack extends MusicItem {
@@ -132,6 +132,7 @@ class MusicTrack extends MusicItem {
     this.durationSeconds,
     this.canPreview,
     this.listenedAt, {
+    super.shelfTitle,
     this.audioUri,
     this.nativePlayback = false,
     this.artistId,
@@ -163,6 +164,7 @@ class MusicTrack extends MusicItem {
         ? _licensedUri(data['audioUrl'])
         : null,
     thumbnailUrl: data['thumbnailUrl'] as String?,
+    shelfTitle: data['shelfTitle'] as String?,
   );
 
   final String artist;
@@ -209,6 +211,7 @@ class MusicPlaylist extends MusicItem {
     super.id,
     super.title,
     this.isPrivate, {
+    super.shelfTitle,
     this.thumbnailUrl,
   });
   final String? thumbnailUrl;
@@ -218,18 +221,29 @@ class MusicPlaylist extends MusicItem {
     data['title'] as String,
     data['private'] == true,
     thumbnailUrl: data['thumbnailUrl'] as String?,
+    shelfTitle: data['shelfTitle'] as String?,
   );
 
   final bool isPrivate;
 }
 
 class MusicAlbum extends MusicItem {
-  const MusicAlbum(super.id, super.title, {this.thumbnailUrl});
+  const MusicAlbum(
+    super.id,
+    super.title, {
+    this.thumbnailUrl,
+    super.shelfTitle,
+  });
   final String? thumbnailUrl;
 }
 
 class MusicArtist extends MusicItem {
-  const MusicArtist(super.id, super.title, {this.thumbnailUrl});
+  const MusicArtist(
+    super.id,
+    super.title, {
+    this.thumbnailUrl,
+    super.shelfTitle,
+  });
   final String? thumbnailUrl;
 }
 

@@ -11,15 +11,20 @@ class MusicModeClient {
   static const _root = '/api/v2/integrations/youtube-music';
   final AuthenticatedApiClient _api;
 
-  Future<MusicConnection> connection() async {
+  Future<MusicConnection> connection({bool recheckMusic = false}) async {
     final restored = await desktop?.connection();
     if (restored != null) return restored;
-    return channelConnection();
+    return channelConnection(recheckMusic: recheckMusic);
   }
 
-  Future<MusicConnection> channelConnection() async {
+  Future<MusicConnection> channelConnection({bool recheckMusic = false}) async {
     try {
-      return MusicConnection.fromJson(await _api.get('$_root/connection'));
+      return MusicConnection.fromJson(
+        await _api.get(
+          '$_root/connection',
+          query: recheckMusic ? {'recheckMusic': '1'} : null,
+        ),
+      );
     } on ApiFailure catch (error) {
       // The Android update can arrive before the backend exposes this route.
       if (error.statusCode != 404 || error.code != 'NOT_FOUND') rethrow;

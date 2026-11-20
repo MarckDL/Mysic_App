@@ -136,7 +136,8 @@ export function createApp(
   const accountMusic = youtubeLink
     ? new AccountMusicService(
         youtubeLink,
-        options.channelMusicProvider ?? data,
+        options.channelMusicProvider ??
+          new YoutubeDataLibraryProvider(fetch, { verifyMusic: true }),
         licensedRecordings(process.env.MYSIC_LICENSED_AUDIO_JSON),
         options.musicAccountCatalog ?? new OAuthMusicCatalog(),
         catalog,

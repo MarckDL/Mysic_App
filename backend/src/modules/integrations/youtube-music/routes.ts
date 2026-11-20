@@ -51,9 +51,11 @@ export function youtubeMusicRouter(
   // Explicit preview cohorts keep their isolated accounts; all other users use their own OAuth grant.
   const accountService = (uid: string) =>
     direct && !service.connection(uid).accounts.length ? direct : service;
-  router.get('/connection', async (_req, res) => {
+  router.get('/connection', async (req, res) => {
     const uid = res.locals.auth.firebaseUid;
-    res.json(await accountService(uid).connection(uid));
+    res.json(
+      await accountService(uid).connection(uid, req.query.recheckMusic === '1'),
+    );
   });
   router.post('/connection', async (req, res) => {
     const input = linkBody.parse(req.body);

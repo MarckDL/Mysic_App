@@ -1,5 +1,13 @@
 # YouTube Music en Mysic_App
 
+## Android 4029
+
+El Inicio conserva los títulos, el orden y las continuaciones de las secciones que entrega YouTube Music. La cuenta de escritorio utiliza su sesión de Mysic con la API original. Para el canal vinculado con Google, la API móvil comprueba el Inicio y la biblioteca musical por separado. Si únicamente puede leer el canal, la pantalla identifica la colección disponible y ofrece abrir el acceso a la cuenta personal de Mysic. El botón **Actualizar** de un Inicio limitado vuelve a comprobar el permiso del canal. Las solicitudes simultáneas comparten una comprobación y los resultados recientes se reutilizan durante 15 segundos.
+
+En los Me gusta y las playlists del canal, la categoría de YouTube por sí sola es insuficiente. Mysic conserva las grabaciones con atribución musical y comprueba los vídeos públicos ambiguos con el catálogo de Music. Las tarjetas de Shorts y los vídeos sin identificación musical quedan fuera. Una canción corta puede aparecer si está identificada como grabación.
+
+Al regresar de YouTube Music o pulsar **Actualizar** en Biblioteca se consulta de nuevo la primera página de la colección seleccionada. La app mantiene la lista anterior mientras llega la respuesta. Una playlist vacía puede mostrarse cuando la devuelve la biblioteca musical de la cuenta. En el canal general se necesita al menos una canción identificada para clasificar la playlist como musical. La ruta de escritorio solicita datos recientes cuando utiliza el listado completo de la API original.
+
 ## Android 4028
 
 Cuenta permite seleccionar el canal de Google o la biblioteca personal de Mysic de escritorio. El servidor de Android comprueba el Inicio y una colección privada con la autorización de Google. Si el servicio deniega el Inicio, conserva las playlists musicales ya verificadas y comprueba por separado Me gusta, Álbumes y Artistas. Cada sección privada necesita una respuesta musical identificada con la sesión. El canal tiene una sección propia para sus Me gusta musicales. En todas las fuentes el buscador pide canciones y la cola usa el reproductor de Mysic.

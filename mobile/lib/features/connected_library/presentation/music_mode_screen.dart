@@ -222,6 +222,18 @@ class MusicModeSettings extends StatelessWidget {
         connection?.status == MusicLinkStatus.linked ||
         (connection?.status == MusicLinkStatus.unavailable &&
             connection?.generation != null);
+    final link = ConnectedScope.of(context);
+    VoidCallback? manageChannel;
+    if (connection?.isDirect == true &&
+        (connection?.status != MusicLinkStatus.unavailable || managesAccount) &&
+        link != null) {
+      manageChannel = () {
+        context.push('/library/youtube');
+        if (!link.busy && link.pending == null && !managesAccount) {
+          unawaited(link.start());
+        }
+      };
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -230,30 +242,41 @@ class MusicModeSettings extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.headphones),
             title: Text(
-              connection?.isPreview == true
+              manageChannel != null && !managesAccount
+                  ? 'Vincular YouTube Music'
+                  : connection?.isPreview == true
                   ? 'YouTube Music · simulación'
                   : 'YouTube Music',
             ),
-            subtitle: Text(switch (connection?.status) {
-              MusicLinkStatus.linked when controller.wantsMusic =>
-                connection!.channelOnly
-                    ? 'Canal de YouTube · ${account!.name}'
-                    : 'Modo activo · ${account!.name}',
-              MusicLinkStatus.expired => 'Sesión caducada · ${account!.name}',
-              MusicLinkStatus.unavailable => 'Conexión musical no disponible',
-              MusicLinkStatus.unlinked ||
-              MusicLinkStatus.linked => 'Modo activo · Mysic',
-              null =>
-                controller.failed
-                    ? 'Conexión sin verificar'
-                    : 'Comprobando conexión…',
-            }),
+            subtitle:
+                manageChannel != null &&
+                    connection?.status == MusicLinkStatus.unlinked
+                ? null
+                : Text(switch (connection?.status) {
+                    MusicLinkStatus.linked when controller.wantsMusic =>
+                      connection!.channelOnly
+                          ? 'Canal de YouTube · ${account!.name}'
+                          : account!.name,
+                    MusicLinkStatus.expired =>
+                      'Sesión caducada · ${account!.name}',
+                    MusicLinkStatus.unavailable =>
+                      'Conexión musical no disponible',
+                    MusicLinkStatus.unlinked ||
+                    MusicLinkStatus.linked => 'Modo activo · Mysic',
+                    null =>
+                      controller.failed
+                          ? 'Conexión sin verificar'
+                          : 'Comprobando conexión…',
+                  }),
             trailing: controller.busy
                 ? const SizedBox.square(
                     dimension: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : null,
+                : manageChannel == null
+                ? null
+                : const Icon(Icons.chevron_right),
+            onTap: controller.busy ? null : manageChannel,
           ),
         if (controller.failed)
           ListTile(
@@ -270,40 +293,19 @@ class MusicModeSettings extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.switch_account_outlined),
             title: const Text('Elegir un canal de Google'),
-            subtitle: const Text('Cambiar la fuente de la biblioteca'),
             trailing: const Icon(Icons.chevron_right),
             onTap: controller.busy
                 ? null
                 : () => context.push('/library/youtube'),
           ),
-        if (connection?.isDirect == true &&
-            (connection?.status != MusicLinkStatus.unavailable ||
-                managesAccount) &&
-            ConnectedScope.of(context) != null) ...[
-          if (connection!.status == MusicLinkStatus.linked &&
-              !controller.wantsMusic)
-            ListTile(
-              leading: const Icon(Icons.library_music),
-              title: const Text('Usar el canal vinculado'),
-              onTap: controller.useLinkedAccount,
-            ),
+        if (manageChannel != null &&
+            connection?.status == MusicLinkStatus.linked &&
+            !controller.wantsMusic)
           ListTile(
-            leading: const Icon(Icons.link),
-            title: Text(
-              managesAccount
-                  ? 'Gestionar cuenta vinculada'
-                  : 'Vincular YouTube Music',
-            ),
-            subtitle: const Text('Con tu cuenta de Google'),
-            onTap: () {
-              final link = ConnectedScope.of(context)!;
-              context.push('/library/youtube');
-              if (!link.busy && link.pending == null && !managesAccount) {
-                unawaited(link.start());
-              }
-            },
+            leading: const Icon(Icons.library_music),
+            title: const Text('Usar el canal vinculado'),
+            onTap: controller.useLinkedAccount,
           ),
-        ],
         if (connection?.accounts.isNotEmpty == true)
           ListTile(
             title: Text(switch (connection!.status) {
@@ -319,28 +321,36 @@ class MusicModeSettings extends StatelessWidget {
         if (controller.wantsMusic &&
             connection?.isDirect == true &&
             connection!.capabilities.contains('recordInMysic') &&
-            connection.generation != null) ...[
-          SwitchListTile(
-            title: const Text('Registrar escuchas en Mysic'),
-            subtitle: const Text('Para Recientes en Mysic y En repetición'),
-            value: connection.account?.historyPaused != true,
-            onChanged: controller.updatingActivity
-                ? null
-                : (value) => _activity(
-                    context,
-                    controller,
-                    connection.generation!,
-                    paused: !value,
-                  ),
+            connection.generation != null)
+          ExpansionTile(
+            leading: const Icon(Icons.history),
+            title: const Text('Historial de escucha'),
+            children: [
+              SwitchListTile(
+                title: const Text('Registrar escuchas en Mysic'),
+                value: connection.account?.historyPaused != true,
+                onChanged: controller.updatingActivity
+                    ? null
+                    : (value) => _activity(
+                        context,
+                        controller,
+                        connection.generation!,
+                        paused: !value,
+                      ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('Borrar actividad de Mysic'),
+                onTap: controller.updatingActivity
+                    ? null
+                    : () => _activity(
+                        context,
+                        controller,
+                        connection.generation!,
+                      ),
+              ),
+            ],
           ),
-          ListTile(
-            leading: const Icon(Icons.delete_outline),
-            title: const Text('Borrar actividad de Mysic'),
-            onTap: controller.updatingActivity
-                ? null
-                : () => _activity(context, controller, connection.generation!),
-          ),
-        ],
         if (controller.wantsMusic && connection?.isDirect == true)
           ListTile(
             title: const Text('Usar mi biblioteca de Mysic'),
@@ -383,7 +393,8 @@ class _MusicPage extends ConsumerStatefulWidget {
   ConsumerState<_MusicPage> createState() => _MusicPageState();
 }
 
-class _MusicPageState extends ConsumerState<_MusicPage> {
+class _MusicPageState extends ConsumerState<_MusicPage>
+    with WidgetsBindingObserver {
   final _items = <MusicItem>[];
   final _search = TextEditingController();
   CancelToken? _request;
@@ -392,7 +403,7 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
   String? _playlistTitle;
   String? _error;
   bool _loading = false;
-  int _excluded = 0;
+  bool _wasInBackground = false;
   late MusicSurface _surface = _initialSurface();
   MusicSurface _initialSurface() {
     final caps = widget.connection.capabilities;
@@ -417,10 +428,30 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (_surface != MusicSurface.search) unawaited(_load(reset: true));
   }
 
-  Future<void> _load({required bool reset, String? query}) async {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused) {
+      _wasInBackground = true;
+    } else if (state == AppLifecycleState.resumed && _wasInBackground) {
+      _wasInBackground = false;
+      if (widget.surface == MusicSurface.songs ||
+          _surface == MusicSurface.playlists ||
+          _surface == MusicSurface.playlist) {
+        unawaited(_load(reset: true, keepItems: true));
+      }
+    }
+  }
+
+  Future<void> _load({
+    required bool reset,
+    String? query,
+    bool keepItems = false,
+  }) async {
     final generation = widget.connection.generation!;
     if (!widget.connection.capabilities.contains(_surface.name) ||
         !widget.controller.isCurrent(generation) ||
@@ -435,12 +466,11 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
     setState(() {
       _loading = true;
       _error = null;
-      if (reset) {
+      if (reset && !keepItems) {
         _items.clear();
         _cursor = null;
-        _excluded = 0;
-        if (query != null) _query = query;
       }
+      if (query != null) _query = query;
     });
     try {
       var page = await widget.controller.page(
@@ -448,28 +478,36 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
         _surface,
         playlistId: widget.playlistId,
         query: _query,
-        cursor: _cursor,
+        cursor: reset ? null : _cursor,
         cancelToken: request,
       );
-      var excluded = page.excludedCount;
+      final incoming = [...page.items];
+      final collectPlaylists =
+          widget.connection.isDirect && _surface == MusicSurface.playlists;
       final followed = <String>{};
-      while (widget.connection.channelOnly &&
-          page.items.isEmpty &&
+      while (((collectPlaylists && incoming.length < 20) ||
+              (widget.connection.channelOnly && incoming.isEmpty)) &&
           page.nextCursor != null &&
           followed.length < 3 &&
           followed.add(page.nextCursor!) &&
           mounted &&
           request == _request &&
           widget.controller.isCurrent(generation)) {
-        page = await widget.controller.page(
-          generation,
-          _surface,
-          playlistId: widget.playlistId,
-          query: _query,
-          cursor: page.nextCursor,
-          cancelToken: request,
-        );
-        excluded += page.excludedCount;
+        try {
+          page = await widget.controller.page(
+            generation,
+            _surface,
+            playlistId: widget.playlistId,
+            query: _query,
+            cursor: page.nextCursor,
+            cancelToken: request,
+          );
+          incoming.addAll(page.items);
+        } on ApiFailure {
+          // Keep the successful pages and let the user retry their continuation.
+          if (incoming.isEmpty) rethrow;
+          break;
+        }
       }
       if (!mounted ||
           request != _request ||
@@ -478,9 +516,9 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
       }
       setState(() {
         _cursor = page.nextCursor;
-        _items.addAll(page.items);
+        if (reset && keepItems) _items.clear();
+        _items.addAll(incoming);
         _playlistTitle = page.title ?? page.playlist?.title ?? _playlistTitle;
-        _excluded += excluded;
       });
     } on ApiFailure catch (error) {
       if (mounted && request == _request) {
@@ -514,6 +552,28 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
     } finally {
       if (mounted && request == _request) setState(() => _loading = false);
     }
+  }
+
+  bool get _needsHomeCheck =>
+      widget.surface == MusicSurface.home &&
+      widget.connection.isDirect &&
+      !widget.connection.capabilities.contains('home');
+
+  Future<void> _refreshPage() async {
+    if (_loading) return;
+    if (_needsHomeCheck) {
+      final controller = widget.controller;
+      if (controller.busy) return;
+      final revision = controller.revision;
+      await controller.refresh(recheckMusic: true);
+      // A change in the source's permissions mounts its newly available Home.
+      if (!mounted ||
+          controller.revision != revision ||
+          !controller.isCurrent(widget.connection.generation!)) {
+        return;
+      }
+    }
+    await _load(reset: true, keepItems: true);
   }
 
   void _searchFor(String value) {
@@ -700,6 +760,8 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
   @override
   Widget build(BuildContext context) {
     final account = widget.connection.account!;
+    final isHome = widget.surface == MusicSurface.home;
+    final hasShelves = isHome && _items.any((item) => item.shelfTitle != null);
     final firstPlayable = _items
         .whereType<MusicTrack>()
         .where(_canPlayTrack)
@@ -728,7 +790,9 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
           IconButton(
             tooltip: 'Actualizar',
             icon: const Icon(Icons.refresh),
-            onPressed: _loading ? null : () => unawaited(_load(reset: true)),
+            onPressed: _loading || (_needsHomeCheck && widget.controller.busy)
+                ? null
+                : _refreshPage,
           ),
           if (widget.surface != MusicSurface.playlist &&
               widget.surface != MusicSurface.history)
@@ -766,31 +830,19 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
               ],
             ),
             const SizedBox(height: 12),
-            if ((widget.connection.channelOnly ||
-                    widget.connection.personalization == 'partialMusic') &&
-                {
-                  MusicSurface.home,
-                  MusicSurface.songs,
-                }.contains(widget.surface))
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Text(widget.connection.accessDescription),
-              ),
             if (widget.connection.isDirect &&
                 !widget.connection.capabilities.contains('home') &&
                 widget.surface == MusicSurface.home)
-              DesktopMusicAccess(widget.controller),
-            if (widget.surface == MusicSurface.home &&
+              DesktopMusicAccess(widget.controller, forHome: true),
+            if (_surface == MusicSurface.mysicRecents &&
                 widget.connection.capabilities.contains('onRepeat'))
               ListTile(
                 leading: const Icon(Icons.repeat),
                 title: const Text('En repetición'),
-                subtitle: const Text(
-                  'Tus canciones más escuchadas en Mysic en los últimos 30 días',
-                ),
+                subtitle: const Text('Últimos 30 días'),
                 onTap: () => context.push('/music/repeat'),
               ),
-            if (widget.surface == MusicSurface.home)
+            if (isHome && !hasShelves)
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text(
@@ -845,12 +897,6 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
                       ),
                   ],
                 ),
-              ),
-            if (_surface == MusicSurface.songs &&
-                widget.connection.nativeCatalog)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text('Canciones de tu biblioteca musical'),
               ),
             if (widget.connection.nativeCatalog &&
                 firstPlayable != null &&
@@ -934,23 +980,30 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
                 contentPadding: EdgeInsets.zero,
                 title: Text('El historial está pausado.'),
               ),
-            if (_excluded > 0)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text('Elementos omitidos: $_excluded'),
-                subtitle: const Text(
-                  'Incluye videos ajenos a la biblioteca musical y pistas no disponibles.',
+            for (final (index, item) in _items.indexed) ...[
+              if (hasShelves &&
+                  item.shelfTitle != null &&
+                  (index == 0 ||
+                      _items[index - 1].shelfTitle != item.shelfTitle))
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 18, 0, 6),
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      item.shelfTitle!,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
                 ),
-              ),
-            if (widget.surface == MusicSurface.home && firstPlayable != null)
-              _FeaturedTrack(
-                track: firstPlayable,
-                onTap: () => _play(firstPlayable),
-                actions: _actions(firstPlayable),
-              ),
-            for (final item in _items)
-              if (widget.surface != MusicSurface.home ||
-                  !identical(item, firstPlayable))
+              if (isHome &&
+                  item is MusicTrack &&
+                  identical(item, firstPlayable))
+                _FeaturedTrack(
+                  track: item,
+                  onTap: () => _play(item),
+                  actions: _actions(item),
+                )
+              else
                 switch (item) {
                   MusicAlbum() => ListTile(
                     leading: TrackArtwork(
@@ -1024,6 +1077,7 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
                     onTap: _canPlayTrack(item) ? () => _play(item) : null,
                   ),
                 },
+            ],
             if (_loading)
               const Center(
                 child: Padding(
@@ -1040,18 +1094,16 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
                   child: const Text('Reintentar'),
                 ),
               ),
-            if (!_loading && _error == null && _items.isEmpty)
+            if (!_loading &&
+                _error == null &&
+                _items.isEmpty &&
+                _cursor == null &&
+                (_surface != MusicSurface.search || _query != null))
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text(
                   !widget.connection.capabilities.contains(_surface.name)
                       ? 'Esta función no está habilitada para la cuenta.'
-                      : _surface == MusicSurface.search && _query == null
-                      ? (widget.connection.nativeCatalog
-                            ? 'Busca por canción o artista.'
-                            : 'Busca canciones y playlists.')
-                      : _cursor != null
-                      ? 'Hay más resultados por revisar.'
                       : _surface == MusicSurface.onRepeat
                       ? 'Aquí aparecerán las canciones que escuches al menos dos veces en Mysic.'
                       : _surface == MusicSurface.history ||
@@ -1078,6 +1130,7 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _request?.cancel();
     _search.dispose();
     super.dispose();

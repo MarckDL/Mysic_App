@@ -266,6 +266,98 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       expect(provider.listLikedVideos).not.toHaveBeenCalled();
       expect(provider.listPlaylists).not.toHaveBeenCalled();
     });
+    it('vuelve a consultar las playlists de Music y conserva una nueva vacía, sin confundirla con cursos o una lista inaccesible', async () => {
+      const listed: string[] = [];
+      const catalog = {
+        verify: vi
+          .fn<MusicAccountCatalog['verify']>()
+          .mockResolvedValue(undefined),
+        read: vi.fn<MusicAccountCatalog['read']>(async (_ctx, r) => {
+          if (r.surface === 'playlists' || r.surface === 'home')
+            return {
+              items: listed.map((id) => ({
+                kind: 'playlist',
+                id,
+                title: id,
+                private: true,
+              })),
+              excluded: 0,
+            };
+          if (r.playlistId === 'PLforbidden')
+            throw new LinkError(403, 'MUSIC_ACCESS_DENIED');
+          return { items: [], excluded: r.playlistId === 'PLtutorial' ? 2 : 0 };
+        }),
+      };
+      const v2 = createApp({
+        youtubeLinkService: link,
+        channelMusicProvider: provider,
+        tokenVerifier: verifier,
+        musicAccountCatalog: catalog,
+      });
+      const view = (p: string) =>
+        request(v2)
+          .get('/api/v2/integrations/youtube-music/' + p)
+          .set('Authorization', 'Bearer ' + uidA);
+      const { body: state } = await view('connection').expect(200);
+      const root = 'connections/' + state.generation + '/pages/';
+      expect((await view(root + 'playlists').expect(200)).body.items).toEqual(
+        [],
+      );
+      listed.push('PLnew', 'PLtutorial', 'PLforbidden');
+      expect(
+        (await view(root + 'playlists').expect(200)).body.items.map(
+          (r: { id: string }) => r.id,
+        ),
+      ).toEqual(['PLnew']);
+      listed.splice(0, listed.length, 'PLmixRecomendado');
+      catalog.read.mockClear();
+      expect((await view(root + 'home').expect(200)).body.items[0].id).toBe(
+        'PLmixRecomendado',
+      );
+      expect(catalog.read).toHaveBeenCalledTimes(1);
+    });
+    it('recomprueba Inicio sin esperar cinco minutos y agrupa los intentos repetidos', async () => {
+      let now = Date.now();
+      const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+      try {
+        const verify = vi
+          .fn<MusicAccountCatalog['verify']>()
+          .mockRejectedValueOnce(new LinkError(403, 'MUSIC_ACCESS_DENIED'))
+          .mockResolvedValue('personalHome');
+        const api = createApp({
+          youtubeLinkService: link,
+          channelMusicProvider: provider,
+          tokenVerifier: verifier,
+          musicAccountCatalog: { verify, read: vi.fn() },
+        });
+        const connection = (fresh = false) =>
+          request(api)
+            .get('/api/v2/integrations/youtube-music/connection')
+            .query(fresh ? { recheckMusic: '1' } : {})
+            .set('Authorization', 'Bearer ' + uidA);
+        expect((await connection().expect(200)).body.personalization).toBe(
+          'channelOnly',
+        );
+        await connection(true).expect(200);
+        expect(verify).toHaveBeenCalledTimes(1);
+        now += 16_000;
+        expect((await connection().expect(200)).body.personalization).toBe(
+          'channelOnly',
+        );
+        const results = await Promise.all([
+          connection(true).expect(200),
+          connection(true).expect(200),
+        ]);
+        for (const response of results)
+          expect(response.body.capabilities).toContain('home');
+        expect(verify).toHaveBeenCalledTimes(2);
+        expect((await connection().expect(200)).body.capabilities).toContain(
+          'home',
+        );
+      } finally {
+        clock.mockRestore();
+      }
+    });
     it('identifica la música del canal y busca exclusivamente canciones cuando el Inicio personal está denegado', async () => {
       const catalog = {
         verify: vi
@@ -321,7 +413,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
             ...recording,
             id: 'ccccccccccc',
             isRecording: false,
-            isMusicCategory: false,
+            isMusicCategory: true,
           },
         ],
       });
@@ -393,6 +485,82 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       await read(path + 'liked').expect(200);
       await read(path + 'home').expect(403);
       expect(provider.listLikedVideos).not.toHaveBeenCalled();
+    });
+    it('muestra únicamente el Inicio personal concedido, en el orden de sus secciones', async () => {
+      const track = {
+        kind: 'track' as const,
+        id: video,
+        title: 'Tema',
+        artist: 'Artista',
+        durationSeconds: 80,
+        playback: 'native' as const,
+      };
+      const catalog: MusicAccountCatalog = {
+        verify: vi.fn().mockResolvedValue('personalHome'),
+        verifyCollection: vi
+          .fn()
+          .mockRejectedValue(new LinkError(403, 'MUSIC_ACCESS_DENIED')),
+        read: vi.fn().mockResolvedValue({
+          items: [
+            { ...track, shelfTitle: 'Para ti' },
+            { ...track, shelfTitle: 'Para ti' },
+            { ...track, shelfTitle: 'Escucha de nuevo' },
+          ],
+          excluded: 0,
+        }),
+      };
+      const api = createApp({
+        youtubeLinkService: link,
+        channelMusicProvider: provider,
+        tokenVerifier: verifier,
+        musicAccountCatalog: catalog,
+      });
+      const read = (path: string, uid = uidA) =>
+        request(api)
+          .get('/api/v2/integrations/youtube-music/' + path)
+          .set('Authorization', 'Bearer ' + uid);
+      const { body: state } = await read('connection').expect(200);
+      expect(state.personalization).toBe('partialMusic');
+      expect(state.capabilities).toContain('home');
+      expect(state.capabilities).not.toContain('liked');
+      const path = 'connections/' + state.generation + '/pages/';
+      await read(path + 'home', uidB).expect(409);
+      await read(path + 'liked').expect(403);
+      const { body: first } = await read(path + 'home')
+        .query({ limit: 1 })
+        .expect(200);
+      expect(first.items).toMatchObject([{ id: video, shelfTitle: 'Para ti' }]);
+      const { body: rest } = await read(path + 'home')
+        .query({ cursor: first.nextCursor })
+        .expect(200);
+      expect(rest.items).toMatchObject([
+        { id: video, shelfTitle: 'Escucha de nuevo' },
+      ]);
+      expect(rest.nextCursor).toBeNull();
+      expect(catalog.read).toHaveBeenCalledTimes(1);
+      expect(state.capabilities).toContain('album');
+      expect(state.capabilities).not.toContain('albums');
+      for (const resource of ['album/MPREmiDisco', 'playlist/RDmiMix']) {
+        vi.mocked(catalog.read).mockResolvedValueOnce({
+          items: [track],
+          excluded: 0,
+        });
+        expect(
+          (await read(path + resource).expect(200)).body.items,
+        ).toMatchObject([{ id: video }]);
+      }
+      expect(provider.playlistInfo).not.toHaveBeenCalled();
+      provider.listPlaylistItems.mockResolvedValue({ items: [] });
+      vi.mocked(catalog.read).mockRejectedValueOnce(
+        new LinkError(404, 'MUSIC_PLAYLIST_NOT_FOUND'),
+      );
+      const channelDetail = (
+        await read(path + 'playlist/PLprivada').expect(200)
+      ).body;
+      expect(channelDetail.playlist).toMatchObject({
+        id: 'PLprivada',
+        private: true,
+      });
     });
     it('conserva las playlists privadas de Music aunque se deniegue el Inicio y las demás colecciones', async () => {
       const catalog: MusicAccountCatalog = {
@@ -537,6 +705,41 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       } finally {
         vi.unstubAllEnvs();
       }
+    });
+    it('examina todo el lote de playlists del canal y detecta listas nuevas al volver a la primera página', async () => {
+      const { generation } = (await get(connection)).body;
+      const rows = [
+        { ...playlist('PLempty', 'channelA'), itemCount: 0 },
+        { ...playlist('PLother', 'channelB'), itemCount: 1 },
+        { ...playlist('PLvideos', 'channelA'), itemCount: 1 },
+        { ...playlist('PLmusic', 'channelA'), itemCount: 1 },
+      ];
+      provider.listPlaylists.mockImplementation(async () => ({
+        items: [...rows],
+      }));
+      provider.listPlaylistItems.mockImplementation(async (_ctx, id) => ({
+        items: [entry(0, id === 'PLvideos' ? omitted : video)],
+      }));
+      const listUrl = musicPath(generation, 'playlists');
+      const ids = (res: { body: { items: { id: string }[] } }) =>
+        res.body.items.map((row) => row.id);
+      expect(ids(await get(listUrl).expect(200))).toEqual(['PLmusic']);
+      expect(provider.listPlaylists).toHaveBeenCalledTimes(1);
+      rows.push({ ...playlist('PLadded', 'channelA'), itemCount: 1 });
+      expect(ids(await get(listUrl).expect(200))).toEqual([
+        'PLmusic',
+        'PLadded',
+      ]);
+      rows.push({ ...playlist('PLlast', 'channelA'), itemCount: 1 });
+      const page = await get(listUrl).expect(200);
+      expect(ids(page)).toEqual(['PLmusic', 'PLadded']);
+      expect(
+        ids(
+          await get(listUrl)
+            .query({ cursor: page.body.nextCursor })
+            .expect(200),
+        ),
+      ).toEqual(['PLlast']);
     });
     it('reanuda una playlist mixta con la primera canción en la cuarta página', async () => {
       const { generation } = (await get(connection)).body;

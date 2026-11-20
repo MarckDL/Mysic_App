@@ -79,6 +79,7 @@ const capabilities = [
 const allowed = new Set<string>(capabilities);
 const scanPosition = z.object({
   list: z.string().optional(),
+  offset: z.int().min(0).max(49).optional(),
   playlist: z.string().optional(),
   contents: z.string().optional(),
 });
@@ -126,7 +127,7 @@ export class ChannelMusicService {
     this.cursors = new LibraryCursors(link.grants.box);
   }
 
-  async connection(uid: string) {
+  async connection(uid: string, _recheckMusic = false) {
     const current = await this.link.connection(await this.link.owner(uid));
     const linked = current.status === 'linked';
     const expired = current.status === 'reauthorization_required';
@@ -259,18 +260,27 @@ export class ChannelMusicService {
     const visited = new Set<string>();
     let list:
       Awaited<ReturnType<ChannelMusicProvider['listPlaylists']>> | undefined;
-    for (let batch = 0; batch < 3 && items.length < size; batch++) {
+    let listPages = 0;
+    let contentPages = 0;
+    while (items.length < size) {
       const key = JSON.stringify(position);
       if (visited.has(key)) throw new LinkError(503, 'GOOGLE_INVALID_RESPONSE');
       visited.add(key);
-      list ??= await read((ctx) =>
-        this.provider.listPlaylists(ctx, {
-          maxResults: 1,
-          pageToken: position.list,
-        }),
-      );
-      const item = list.items[0];
+      if (!list) {
+        if (listPages >= 3) break;
+        list = await read((ctx) =>
+          this.provider.listPlaylists(ctx, {
+            maxResults: 50,
+            pageToken: position.list,
+          }),
+        );
+        listPages++;
+      }
+      const offset = position.offset ?? 0;
+      const item = list.items[offset];
       if (item && item.channelId === channel && item.itemCount !== 0) {
+        if (contentPages >= 3) break;
+        contentPages++;
         const result = await this.tracks(read, item.id, {
           maxResults: songs ? Math.min(50, size - items.length) : 50,
           pageToken:
@@ -293,11 +303,16 @@ export class ChannelMusicService {
         } else if (result.nextPageToken) {
           position = {
             list: position.list,
+            offset,
             playlist: item.id,
             contents: result.nextPageToken,
           };
           continue;
         }
+      }
+      if (offset + 1 < list.items.length) {
+        position = { list: position.list, offset: offset + 1 };
+        continue;
       }
       if (!list.nextPageToken)
         return { items, nextPageToken: undefined, excludedCount };
