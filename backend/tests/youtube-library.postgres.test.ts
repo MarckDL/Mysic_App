@@ -1,3 +1,4 @@
+import { DiscoveryService } from '../src/modules/catalog/application/discovery-service.js';
 import type { MusicAccountCatalog } from '../src/infrastructure/youtube/music-account-catalog.js';
 import { randomBytes, randomUUID } from 'node:crypto';
 import {
@@ -184,7 +185,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       thumbnailUrl: null,
       availability: 'available' as const,
     };
-    it('4026 lee Inicio y Me gusta con el vínculo activo; descarta cursos y sigue una playlist mixta hasta su primera canción', async () => {
+    it('lee Inicio, Me gusta y todas las páginas de la biblioteca musical con el vínculo activo', async () => {
       const track = {
         kind: 'track' as const,
         id: video,
@@ -211,20 +212,18 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
             };
           if (r.surface === 'playlists')
             return {
-              items: ['PLcurso', 'PLmix'].map((id) => ({
+              items: [token ? 'PLmix' : 'PLnueva'].map((id) => ({
                 kind: 'playlist',
                 id,
                 title: id,
                 private: true,
               })),
+              next: token ? undefined : 'siguiente',
               excluded: 0,
             };
-          if (r.playlistId === 'PLcurso') return { items: [], excluded: 2 };
-          if (!token) return { items: [], next: '1', excluded: 1 };
-          const n = Number(token);
-          return n < 6
-            ? { items: [], next: String(n + 1), excluded: 1 }
-            : { items: [track], excluded: 0 };
+          throw new Error(
+            'Enumerar la biblioteca musical no requiere abrir cada playlist',
+          );
         }),
       };
       const v2 = createApp({
@@ -250,8 +249,8 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       expect((await view(page + 'liked')).body.items[0].title).toBe(
         'Me gusta musical',
       );
-      const first = (await view(page + 'playlists').expect(200)).body;
-      expect(first.items).toEqual([]);
+      const first = (await view(page + 'playlists?limit=1').expect(200)).body;
+      expect(first.items).toMatchObject([{ id: 'PLnueva' }]);
       expect(first.nextCursor).toBeTruthy();
       await view(page + 'liked')
         .query({ cursor: first.nextCursor })
@@ -266,7 +265,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       expect(provider.listLikedVideos).not.toHaveBeenCalled();
       expect(provider.listPlaylists).not.toHaveBeenCalled();
     });
-    it('vuelve a consultar las playlists de Music y conserva una nueva vacía, sin confundirla con cursos o una lista inaccesible', async () => {
+    it('vuelve a consultar la biblioteca privada y conserva una lista nueva aunque su detalle aún no esté disponible', async () => {
       const listed: string[] = [];
       const catalog = {
         verify: vi
@@ -303,12 +302,15 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       expect((await view(root + 'playlists').expect(200)).body.items).toEqual(
         [],
       );
-      listed.push('PLnew', 'PLtutorial', 'PLforbidden');
+      listed.push('PLnew', 'PLforbidden');
+      catalog.read.mockClear();
       expect(
         (await view(root + 'playlists').expect(200)).body.items.map(
           (r: { id: string }) => r.id,
         ),
-      ).toEqual(['PLnew']);
+      ).toEqual(['PLnew', 'PLforbidden']);
+      expect(catalog.read).toHaveBeenCalledTimes(1);
+      await view(root + 'playlist/PLforbidden').expect(403);
       listed.splice(0, listed.length, 'PLmixRecomendado');
       catalog.read.mockClear();
       expect((await view(root + 'home').expect(200)).body.items[0].id).toBe(
@@ -357,6 +359,65 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       } finally {
         clock.mockRestore();
       }
+    });
+    it('recomienda a partir de música del canal y aísla la paginación de cada cuenta', async () => {
+      const rows = ['BBBBBBBBBBB', 'CCCCCCCCCCC'].map((id) => ({
+        id,
+        kind: 'track' as const,
+        title: 'Nueva canción',
+        artist: 'Música',
+        playback: 'native' as const,
+        durationSeconds: 200,
+        shelfTitle: 'También te puede gustar',
+      }));
+      const loader = vi
+        .fn()
+        .mockResolvedValue({ items: rows, excludedCount: 0, nextCursor: null });
+      const catalog = {
+        verify: vi
+          .fn()
+          .mockRejectedValue(new LinkError(403, 'MUSIC_ACCESS_DENIED')),
+        read: vi.fn(),
+      };
+      const v2 = createApp({
+        tokenVerifier: verifier,
+        youtubeLinkService: link,
+        channelMusicProvider: provider,
+        musicAccountCatalog: catalog,
+        discoveryService: new DiscoveryService(loader, vi.fn()),
+      });
+      const base = '/api/v2/integrations/youtube-music/';
+      const view = (path: string, uid = uidA) =>
+        request(v2)
+          .get(base + path)
+          .set('Authorization', 'Bearer ' + uid);
+      const a = (await view('connection').expect(200)).body;
+      const b = (await view('connection', uidB).expect(200)).body;
+      expect(a.capabilities).toContain('channelRecommendations');
+      expect(a.capabilities).not.toContain('home');
+      const path = (g: string) =>
+        'connections/' + g + '/pages/channelRecommendations';
+      provider.listLikedVideos.mockResolvedValue({ items: [recording] });
+      const first = (await view(path(a.generation) + '?limit=1').expect(200))
+        .body;
+      expect(first.items).toEqual([rows[0]]);
+      expect(loader).toHaveBeenCalledWith(
+        { view: 'related', id: video },
+        expect.any(AbortSignal),
+      );
+      const cursor = '?cursor=' + encodeURIComponent(first.nextCursor);
+      await view(path(a.generation) + cursor, uidB).expect(409);
+      await view(path(b.generation) + cursor, uidB).expect(409);
+      const second = (await view(path(a.generation) + cursor).expect(200)).body;
+      expect(second.items).toEqual([rows[1]]);
+      expect(second.nextCursor).toBeNull();
+      expect(loader).toHaveBeenCalledTimes(1);
+      provider.listLikedVideos.mockResolvedValue({ items: [] });
+      provider.listPlaylists.mockResolvedValue({ items: [] });
+      expect(
+        (await view(path(b.generation), uidB).expect(200)).body.items,
+      ).toEqual([]);
+      expect(loader).toHaveBeenCalledTimes(1);
     });
     it('identifica la música del canal y busca exclusivamente canciones cuando el Inicio personal está denegado', async () => {
       const catalog = {
@@ -561,6 +622,106 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
         id: 'PLprivada',
         private: true,
       });
+    });
+    it('muestra once entradas en el orden del canal y descubre una nueva playlist que contiene solo una subida musical', async () => {
+      const api = createApp({
+        youtubeLinkService: link,
+        channelMusicProvider: provider,
+        tokenVerifier: verifier,
+        musicAccountCatalog: {
+          verify: vi
+            .fn()
+            .mockRejectedValue(new LinkError(403, 'MUSIC_ACCESS_DENIED')),
+          read: vi.fn(),
+        },
+      });
+      const read = (path: string) =>
+        request(api)
+          .get('/api/v2/integrations/youtube-music/' + path)
+          .set('Authorization', 'Bearer ' + uidA);
+      const state = (await read('connection').expect(200)).body;
+      const path = 'connections/' + state.generation + '/pages/';
+      const trackIds = [
+        'Dl9fMXwvLIA',
+        'LmosGbHCCts',
+        ...Array.from(
+          { length: 9 },
+          (_, i) => 't' + String(i).padStart(10, '0'),
+        ),
+      ];
+      const uploads = new Set(trackIds.slice(0, 9));
+      const film = 'nH8m5gdLaLs';
+      function classification(id: string) {
+        return {
+          ...recording,
+          id,
+          isRecording: !uploads.has(id) && id !== film,
+          catalogKind:
+            id === film
+              ? ('other' as const)
+              : uploads.has(id)
+                ? ('musicUpload' as const)
+                : ('recording' as const),
+        };
+      }
+      provider.listPlaylists.mockResolvedValue({
+        items: [
+          ['PLonce', 11],
+          ['PLnueva', 1],
+          ['PLshorts', 1],
+        ].map(([id, n]) => ({
+          id: String(id),
+          channelId: 'channelA',
+          title: String(id),
+          visibility: 'private' as const,
+          itemCount: Number(n),
+          thumbnailUrl: null,
+        })),
+      });
+      provider.listPlaylistItems.mockImplementation(async (_ctx, id) => ({
+        items: (id === 'PLonce'
+          ? trackIds
+          : id === 'PLnueva'
+            ? [trackIds[0]!]
+            : [film]
+        ).map((id, i) => entry(i, id)),
+      }));
+      provider.getVideos.mockImplementation(async (_ctx, ids) =>
+        ids.map(classification),
+      );
+      provider.listLikedVideos.mockResolvedValue({
+        items: [
+          classification(film),
+          classification(trackIds[0]!),
+          classification(trackIds[10]!),
+        ],
+      });
+      const playlists = (await read(path + 'playlists').expect(200)).body.items;
+      expect(playlists.map((v: { id: string }) => v.id)).toEqual([
+        'PLonce',
+        'PLnueva',
+      ]);
+      const original = (await read(path + 'playlist/PLonce').expect(200)).body;
+      expect(original.items.map((v: { id: string }) => v.id)).toEqual(trackIds);
+      expect(original.excludedCount).toBe(0);
+      provider.getVideos.mockRejectedValueOnce(
+        new LinkError(429, 'YOUTUBE_QUOTA', 15),
+      );
+      const failedRefresh = await read(path + 'playlist/PLonce')
+        .expect(429)
+        .expect('Retry-After', '15');
+      expect(failedRefresh.body.error.code).toBe('YOUTUBE_QUOTA');
+      expect(failedRefresh.body).not.toHaveProperty('items');
+      expect(
+        (await read(path + 'playlist/PLonce').expect(200)).body.items,
+      ).toEqual(original.items);
+
+      expect(
+        (await read(path + 'playlist/PLnueva').expect(200)).body.items,
+      ).toMatchObject([{ id: trackIds[0] }]);
+      expect(
+        (await read(path + 'channelLiked').expect(200)).body.items,
+      ).toMatchObject([{ id: trackIds[10] }]);
     });
     it('conserva las playlists privadas de Music aunque se deniegue el Inicio y las demás colecciones', async () => {
       const catalog: MusicAccountCatalog = {

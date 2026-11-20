@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../application/connected_controller.dart';
 import '../application/connected_host.dart';
+import '../domain/music_mode.dart';
 import 'music_mode_host.dart';
 import 'desktop_music_access.dart';
 
@@ -21,7 +22,7 @@ class ConnectedTile extends StatelessWidget {
       leading: const Icon(Icons.subscriptions_outlined),
       title: Text(
         account
-            ? 'YouTube Music'
+            ? 'Canal de YouTube'
             : initial
             ? 'Vincular YouTube'
             : 'Biblioteca de YouTube',
@@ -52,9 +53,19 @@ class ConnectedScreen extends StatelessWidget {
     final connection = model?.connection;
     final listing =
         model != null && connection?.linked == true && model.pending == null;
+    final music = MusicModeScope.of(context);
+    final access = music?.connection;
+    final direct = access?.isDirect == true;
+    final hasPersonalHome = access?.capabilities.contains('home') == true;
+    final needsSelection = direct && music?.wantsMusic == false;
+    final offerPersonalLibrary =
+        needsSelection &&
+        access?.status == MusicLinkStatus.linked &&
+        !hasPersonalHome &&
+        music?.supportsDesktop == true;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Cuenta de YouTube Music'),
+        title: const Text('Canal de YouTube'),
         actions: [
           if (listing)
             PopupMenuButton<String>(
@@ -113,36 +124,51 @@ class ConnectedScreen extends StatelessWidget {
             : listing
             ? ListView(
                 children: [
+                  if (offerPersonalLibrary)
+                    DesktopMusicAccess(music!, forHome: true),
                   ListTile(
                     leading: const Icon(Icons.account_circle_outlined),
                     title: Text(connection!.channel!.title),
                     subtitle: Text(
-                      MusicModeScope.of(context)?.connection?.isDesktop == true
-                          ? 'Canal vinculado con Google'
-                          : (MusicModeScope.of(
-                                  context,
-                                )?.connection?.accessDescription ??
-                                'Canal vinculado'),
+                      music?.busy == true
+                          ? 'Comprobando acceso musical…'
+                          : direct && hasPersonalHome
+                          ? 'Inicio personal de YouTube Music disponible'
+                          : direct && access?.personalization == 'partialMusic'
+                          ? 'Biblioteca musical parcial'
+                          : direct && access?.channelOnly == true
+                          ? 'Solo biblioteca del canal'
+                          : 'Canal vinculado',
                     ),
                     trailing: TextButton(
-                      onPressed: () {
-                        final music = MusicModeScope.of(context);
-                        if (music != null &&
-                            music.connection?.isDesktop == true) {
-                          switchMusicSource(context, music, toDesktop: false);
-                        } else {
-                          context.go('/library');
-                        }
-                      },
+                      onPressed: music?.busy == true
+                          ? null
+                          : () async {
+                              if (music != null && access?.isDesktop == true) {
+                                await switchMusicSource(
+                                  context,
+                                  music,
+                                  toDesktop: false,
+                                );
+                                return;
+                              }
+                              if (music != null && needsSelection) {
+                                await music.useLinkedAccount();
+                                if (!context.mounted || !music.wantsMusic) {
+                                  return;
+                                }
+                              }
+                              if (context.mounted) context.go('/library');
+                            },
                       child: Text(
-                        MusicModeScope.of(context)?.connection?.isDesktop ==
-                                true
+                        access?.isDesktop == true ||
+                                (needsSelection && !hasPersonalHome)
                             ? 'Usar este canal'
                             : 'Biblioteca',
                       ),
                     ),
                   ),
-                  if (MusicModeScope.of(context) case final music?)
+                  if (music != null && !offerPersonalLibrary)
                     DesktopMusicAccess(music),
                 ],
               )
@@ -186,7 +212,6 @@ class _LinkPanel extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.account_circle_outlined),
             title: Text(channel.title),
-            subtitle: Text(channel.id),
           ),
           FilledButton(
             onPressed: busy ? null : model.confirmCandidate,
@@ -218,12 +243,10 @@ class _LinkPanel extends StatelessWidget {
           Text(
             connection.status == 'reauthorization_required'
                 ? 'Vuelve a autorizar tu canal'
-                : 'Tu cuenta de YouTube Music',
+                : 'Vincular un canal de YouTube',
             style: Theme.of(context).textTheme.titleLarge,
           ),
-          Text(
-            'Elige en Google el canal de YouTube Music que quieres usar en Mysic.',
-          ),
+          Text('Elige el canal cuyas playlists quieres consultar.'),
           FilledButton.icon(
             onPressed: busy ? null : () => model.start(),
             icon: const Icon(Icons.open_in_new),

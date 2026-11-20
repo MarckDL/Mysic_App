@@ -6,6 +6,7 @@ enum MusicSurface {
   songs,
   liked,
   channelLiked,
+  channelRecommendations,
   albums,
   album,
   playlists,
@@ -16,6 +17,7 @@ enum MusicSurface {
   onRepeat,
   artist,
   artists,
+  libraryArtists,
 }
 
 enum MusicLinkStatus { unavailable, unlinked, linked, expired }
@@ -98,7 +100,7 @@ class MusicConnection {
 }
 
 sealed class MusicItem {
-  const MusicItem(this.id, this.title, {this.shelfTitle});
+  const MusicItem(this.id, this.title, {this.shelfTitle, this.subtitle});
 
   factory MusicItem.fromJson(Map<String, dynamic> data) =>
       switch (data['kind']) {
@@ -109,12 +111,14 @@ sealed class MusicItem {
           data['title'] as String,
           thumbnailUrl: data['thumbnailUrl'] as String?,
           shelfTitle: data['shelfTitle'] as String?,
+          subtitle: data['subtitle'] as String?,
         ),
         'artist' => MusicArtist(
           data['id'] as String,
           data['title'] as String,
           thumbnailUrl: data['thumbnailUrl'] as String?,
           shelfTitle: data['shelfTitle'] as String?,
+          subtitle: data['subtitle'] as String?,
         ),
         _ => throw const FormatException('Elemento musical desconocido.'),
       };
@@ -122,6 +126,7 @@ sealed class MusicItem {
   final String id;
   final String title;
   final String? shelfTitle;
+  final String? subtitle;
 }
 
 class MusicTrack extends MusicItem {
@@ -135,6 +140,7 @@ class MusicTrack extends MusicItem {
     super.shelfTitle,
     this.audioUri,
     this.nativePlayback = false,
+    this.isVideo = false,
     this.artistId,
     this.playCount,
     this.thumbnailUrl,
@@ -147,6 +153,7 @@ class MusicTrack extends MusicItem {
     data['durationSeconds'] as int,
     data['playback'] == 'bundledPreview',
     DateTime.tryParse(data['listenedAt'] as String? ?? ''),
+    isVideo: data['mediaType'] == 'video',
     nativePlayback:
         data['playback'] == 'native' &&
         RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(data['id'] as String),
@@ -171,6 +178,7 @@ class MusicTrack extends MusicItem {
   final int durationSeconds;
   final bool canPreview;
   final bool nativePlayback;
+  final bool isVideo;
   final DateTime? listenedAt;
   final Uri? audioUri;
   final String? artistId;
@@ -212,6 +220,7 @@ class MusicPlaylist extends MusicItem {
     super.title,
     this.isPrivate, {
     super.shelfTitle,
+    super.subtitle,
     this.thumbnailUrl,
   });
   final String? thumbnailUrl;
@@ -222,6 +231,7 @@ class MusicPlaylist extends MusicItem {
     data['private'] == true,
     thumbnailUrl: data['thumbnailUrl'] as String?,
     shelfTitle: data['shelfTitle'] as String?,
+    subtitle: data['subtitle'] as String?,
   );
 
   final bool isPrivate;
@@ -233,6 +243,7 @@ class MusicAlbum extends MusicItem {
     super.title, {
     this.thumbnailUrl,
     super.shelfTitle,
+    super.subtitle,
   });
   final String? thumbnailUrl;
 }
@@ -243,6 +254,7 @@ class MusicArtist extends MusicItem {
     super.title, {
     this.thumbnailUrl,
     super.shelfTitle,
+    super.subtitle,
   });
   final String? thumbnailUrl;
 }

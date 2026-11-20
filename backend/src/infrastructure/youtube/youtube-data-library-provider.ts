@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { PublicMusicRecordings } from './public-music-recordings.js';
-import { LinkError } from '../../modules/integrations/youtube/domain.js';
+import {
+  LinkError,
+  retryAfterSeconds,
+} from '../../modules/integrations/youtube/domain.js';
 import type {
   ConnectedLibraryProvider,
   ReadContext,
@@ -149,13 +152,6 @@ function availability(
     return 'unknown';
   return 'available';
 }
-function retrySeconds(value: string | null) {
-  if (!value) return undefined;
-  const seconds = /^\d+$/.test(value)
-    ? Number(value)
-    : (Date.parse(value) - Date.now()) / 1000;
-  return Number.isFinite(seconds) ? Math.max(1, Math.ceil(seconds)) : undefined;
-}
 export class YoutubeDataLibraryProvider implements ConnectedLibraryProvider {
   private readonly publicMusic?: PublicMusicRecordings;
   constructor(
@@ -192,7 +188,7 @@ export class YoutubeDataLibraryProvider implements ConnectedLibraryProvider {
       });
       if (!response.ok) {
         const reason = data?.error?.errors?.[0]?.reason;
-        const retry = retrySeconds(response.headers.get('retry-after'));
+        const retry = retryAfterSeconds(response.headers.get('retry-after'));
         if (response.status === 401)
           throw new LinkError(401, 'YOUTUBE_ACCESS_REJECTED');
         if (
@@ -464,7 +460,7 @@ export class YoutubeDataLibraryProvider implements ConnectedLibraryProvider {
       video,
       context,
     );
-    const items = result.items.map((x) => ({
+    const items = result.items.map((x): VideoDetails => ({
       id: x.id,
       title: x.snippet?.title ?? null,
       channelTitle: x.snippet?.channelTitle ?? null,
@@ -484,17 +480,23 @@ export class YoutubeDataLibraryProvider implements ConnectedLibraryProvider {
     if (this.publicMusic) {
       const candidates = items.filter(
         (item, index) =>
-          item.isMusicCategory &&
-          !item.isRecording &&
-          item.availability === 'available' &&
+          (!item.isRecording || item.availability === 'unknown') &&
+          item.availability !== 'unavailable' &&
+          result.items[index]?.status?.uploadStatus === 'processed' &&
           result.items[index]?.status?.privacyStatus === 'public' &&
           youtubeSourceIdPattern.test(item.id),
       );
-      const confirmed = await this.publicMusic.confirm(
+      const classified = await this.publicMusic.classify(
         candidates.map((item) => item.id),
         context.signal,
       );
-      for (const item of candidates) item.isRecording = confirmed.has(item.id);
+      for (const item of candidates) {
+        const kind = classified.get(item.id);
+        if (kind) {
+          item.catalogKind = kind;
+          item.isRecording = kind === 'recording';
+        }
+      }
     }
     return { nextPageToken: result.nextPageToken, items };
   }

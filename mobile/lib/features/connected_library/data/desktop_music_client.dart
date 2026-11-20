@@ -14,6 +14,11 @@ class DesktopSessionStore {
   const DesktopSessionStore(this.uid);
   final String uid;
   static const _channel = MethodChannel('com.mysic/desktop_session');
+  Future<bool> localPreferred() async =>
+      await _channel.invokeMethod<bool>('localPreferred', {'uid': uid}) ??
+      false;
+  Future<void> preferLocal(bool local) =>
+      _channel.invokeMethod<void>('preferLocal', {'uid': uid, 'local': local});
   Future<String?> read() => _channel.invokeMethod<String>('read', {'uid': uid});
   Future<void> write(String? value) =>
       _channel.invokeMethod<void>('write', {'uid': uid, 'value': value});
@@ -50,29 +55,32 @@ class _DesktopSession {
     'session': value,
     'generation': generation,
   });
-  MusicConnection connection([
+  MusicConnection connection({
     MusicLinkStatus status = MusicLinkStatus.linked,
-  ]) => MusicConnection(
+    Set<String>? available,
+  }) => MusicConnection(
     status: status,
     provider: 'mysicDesktop',
     personalization: status == MusicLinkStatus.linked
-        ? 'verified'
+        ? (available == null ? 'verified' : 'partialMusic')
         : 'unverified',
     account: MusicAccount(id, name, false),
     generation: generation,
     capabilities: status == MusicLinkStatus.linked
-        ? const {
-            'home',
-            'liked',
-            'albums',
-            'album',
-            'playlists',
-            'playlist',
-            'artists',
-            'artist',
-            'search',
-            'playback',
-          }
+        ? available ??
+              const {
+                'home',
+                'liked',
+                'albums',
+                'album',
+                'playlists',
+                'playlist',
+                'artists',
+                'libraryArtists',
+                'artist',
+                'search',
+                'playback',
+              }
         : const {},
   );
 }
@@ -96,6 +104,7 @@ class DesktopMusicClient {
   final Dio _dio;
   _DesktopSession? _session;
   MusicPage? _firstHome;
+  Set<String>? _available;
   ({_DesktopSession session, bool remember})? _pending;
   bool _remembered = false, _useChannel = false;
   bool get hasPendingLink => _pending != null;
@@ -203,7 +212,9 @@ class DesktopMusicClient {
           )).data
           as Map<String, dynamic>;
 
-  Future<MusicPage> _verify(_DesktopSession session) async {
+  Future<({MusicPage? home, Set<String>? available})> _verify(
+    _DesktopSession session,
+  ) async {
     final account = await _get(session, 'account');
     if (account['connected'] != true ||
         account['personalized'] != true ||
@@ -213,11 +224,62 @@ class DesktopMusicClient {
         code: 'DESKTOP_MUSIC_LINK',
       );
     }
-    final home = OriginalMusicCatalog.homePage(
-      await _get(session, 'home'),
-      first: true,
-    );
-    return home;
+    try {
+      final home = OriginalMusicCatalog.homePage(
+        await _get(session, 'home'),
+        first: true,
+      );
+      return (home: home, available: null);
+    } on ApiFailure catch (homeError) {
+      if (!const {
+        'DESKTOP_HOME',
+        'DESKTOP_SERVICE',
+        'DESKTOP_ROUTE',
+        'DESKTOP_MUSIC_LINK',
+        'DESKTOP_NETWORK',
+      }.contains(homeError.code)) {
+        rethrow;
+      }
+      // Only a session-bound library response can establish private access if Home fails.
+      late final Map<String, dynamic> library;
+      var legacy = false;
+      try {
+        library = await _get(session, 'library/overview');
+      } on ApiFailure catch (e) {
+        if (e.code == 'DESKTOP_EXPIRED' || e.code == 'TOO_MANY_REQUESTS') {
+          rethrow;
+        }
+        if (e.code != 'DESKTOP_ROUTE') throw homeError;
+        legacy = true;
+        library = await _get(session, 'library');
+      }
+      final sections = legacy ? library : library['sections'];
+      final errors = library['errors'];
+      final available = <String>{};
+      if (sections is Map) {
+        for (final (field, route, surface, detail) in const [
+          ('likedSongs', 'liked-songs', 'liked', null),
+          ('playlists', 'playlists', 'playlists', 'playlist'),
+          ('albums', 'albums', 'albums', 'album'),
+          ('artists', 'artists', 'libraryArtists', 'artist'),
+          ('subscriptions', 'subscriptions', 'artists', 'artist'),
+        ]) {
+          final result = sections[field];
+          if (errors is List && errors.contains(route)) continue;
+          if (legacy
+              ? result is List
+              : result is Map &&
+                    result['items'] is List &&
+                    result['error'] == null) {
+            available.add(surface);
+            if (detail != null) available.add(detail);
+          }
+        }
+      }
+      if (available.isEmpty) rethrow;
+      available.addAll({'search', 'playback'});
+      return (home: null, available: available);
+    }
   }
 
   Future<MusicConnection> login(
@@ -276,9 +338,9 @@ class DesktopMusicClient {
       throw const ApiFailure('Vuelve a iniciar la vinculación.');
     }
     final (:session, :remember) = pending;
-    late final MusicPage home;
+    late final ({MusicPage? home, Set<String>? available}) verified;
     try {
-      home = await _verify(session);
+      verified = await _verify(session);
     } on ApiFailure catch (error) {
       if (error.code == 'DESKTOP_EXPIRED' &&
           identical(_pending?.session, session)) {
@@ -303,10 +365,11 @@ class DesktopMusicClient {
     _pending = null;
     _remembered = remember;
     _useChannel = false;
-    _firstHome = home;
+    _firstHome = verified.home;
+    _available = verified.available;
     _restored = true;
     _verified = DateTime.now();
-    return session.connection();
+    return session.connection(available: _available);
   }
 
   Future<void> preferChannel(bool enabled) async {
@@ -319,7 +382,10 @@ class DesktopMusicClient {
     _cancelAudio();
   }
 
-  Future<MusicConnection?> connection({bool includeInactive = false}) async {
+  Future<MusicConnection?> connection({
+    bool includeInactive = false,
+    bool recheckMusic = false,
+  }) async {
     if (!_restored) {
       final stored = await _store.read();
       _checkOwner();
@@ -339,25 +405,32 @@ class DesktopMusicClient {
     }
     final session = _session;
     if (session == null || (_useChannel && !includeInactive)) return null;
-    if (_verified != null &&
-        DateTime.now().difference(_verified!) < const Duration(minutes: 2)) {
-      return session.connection();
+    final ttl = recheckMusic && _available != null
+        ? const Duration(seconds: 15)
+        : const Duration(minutes: 2);
+    if (_verified != null && DateTime.now().difference(_verified!) < ttl) {
+      return session.connection(available: _available);
     }
     try {
-      final home = await _verify(session);
+      final verified = await _verify(session);
       _checkOwner();
       if (!identical(_session, session)) {
         throw const ApiFailure('Cambió la conexión.');
       }
-      _firstHome = home;
+      _firstHome = verified.home;
+      _available = verified.available;
       _verified = DateTime.now();
-      return session.connection();
+      return session.connection(available: _available);
     } on ApiFailure catch (e) {
+      if (e.code == 'DESKTOP_EXPIRED' || e.code == 'DESKTOP_MUSIC_LINK') {
+        _verified = null;
+        _firstHome = null;
+      }
       if (e.code == 'DESKTOP_EXPIRED') {
-        return session.connection(MusicLinkStatus.expired);
+        return session.connection(status: MusicLinkStatus.expired);
       }
       if (e.code == 'DESKTOP_MUSIC_LINK') {
-        return session.connection(MusicLinkStatus.unavailable);
+        return session.connection(status: MusicLinkStatus.unavailable);
       }
       rethrow;
     }
@@ -371,6 +444,7 @@ class DesktopMusicClient {
     _useChannel = false;
     _cancelAudio();
     _session = null;
+    _available = null;
     _verified = null;
     _firstHome = null;
     _restored = true;
@@ -410,6 +484,12 @@ class DesktopMusicClient {
     if (session == null || _useChannel || session.generation != generation) {
       throw const ApiFailure('Cambió la cuenta de escritorio.');
     }
+    if (_available != null && !_available!.contains(surface.name)) {
+      throw const ApiFailure(
+        'Esta sección no está disponible en tu biblioteca.',
+        code: 'DESKTOP_MUSIC_SECTION',
+      );
+    }
     if (playlistId != null && !OriginalMusicCatalog.validId(playlistId)) {
       throw const ApiFailure('El identificador musical no es válido.');
     }
@@ -436,6 +516,7 @@ class DesktopMusicClient {
         MusicSurface.playlists => ('library/playlists', 'items', 'playlist'),
         MusicSurface.albums => ('library/albums', 'items', 'album'),
         MusicSurface.artists => ('library/subscriptions', 'items', 'artist'),
+        MusicSurface.libraryArtists => ('library/artists', 'items', 'artist'),
         MusicSurface.search => ('search', 'items', 'song'),
         MusicSurface.playlist when playlistId != null => (
           'playlist/$playlistId',
@@ -467,6 +548,7 @@ class DesktopMusicClient {
           MusicSurface.liked => 'likedSongs',
           MusicSurface.albums => 'albums',
           MusicSurface.artists => 'subscriptions',
+          MusicSurface.libraryArtists => 'artists',
           MusicSurface.playlists => 'playlists',
           _ => null,
         };

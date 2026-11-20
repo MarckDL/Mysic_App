@@ -29,7 +29,7 @@ class DesktopMusicAccess extends StatelessWidget {
                 ? 'Usar la biblioteca de ${controller.desktopName}'
                 : forHome
                 ? 'Conectar mi Inicio de YouTube Music'
-                : 'Conectar Mysic de escritorio',
+                : 'Vincular mi biblioteca de YouTube Music',
           ),
           subtitle: linked
               ? Text(connection!.account!.name)
@@ -38,7 +38,7 @@ class DesktopMusicAccess extends StatelessWidget {
               : Text(
                   forHome
                       ? 'Con tu cuenta de Mysic de escritorio'
-                      : 'Biblioteca personal de YouTube Music',
+                      : 'Con tu cuenta de Mysic de escritorio',
                 ),
           trailing: linked ? null : const Icon(Icons.chevron_right),
           onTap: linked || controller.busy

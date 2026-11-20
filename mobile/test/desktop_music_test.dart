@@ -1,6 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mysic/features/connected_library/presentation/music_mode_host.dart';
+import 'package:mysic/features/connected_library/presentation/music_mode_screen.dart';
 import 'package:mysic/core/network/authenticated_api_client.dart';
 import 'package:mysic/features/connected_library/application/music_mode_controller.dart';
 import 'package:mysic/features/connected_library/data/desktop_music_client.dart';
@@ -38,6 +41,8 @@ class _DesktopService {
       wrongPassword = false,
       redirectAudio = false,
       legacy = false;
+  Map<String, dynamic>? overview;
+  bool pagedPlaylists = false;
   final requests = <RequestOptions>[];
   final dio = Dio();
   _DesktopService() {
@@ -123,6 +128,16 @@ class _DesktopService {
                 ],
               });
               return;
+            case '/api/youtube/library/overview':
+              reply(
+                overview ?? {},
+                status: legacy
+                    ? 404
+                    : overview == null
+                    ? 503
+                    : 200,
+              );
+              return;
             case '/api/youtube/library/liked-songs':
               if (legacy) {
                 reply({}, status: 404);
@@ -150,6 +165,20 @@ class _DesktopService {
               });
               return;
             case '/api/youtube/library/playlists':
+              if (pagedPlaylists) {
+                final first = query['cursor'] == null;
+                reply({
+                  'items': [
+                    if (first) ...[
+                      {'id': 'PLz', 'title': 'Zafiro'},
+                      {'id': 'PLa', 'title': 'Andes'},
+                    ] else
+                      {'id': 'PLsur', 'title': 'Sonidos del sur'},
+                  ],
+                  'continuation': first ? 'next-playlists' : null,
+                });
+                return;
+              }
               if (legacy) {
                 reply({}, status: 404);
                 return;
@@ -157,6 +186,13 @@ class _DesktopService {
               reply({
                 'items': [
                   {'id': 'VLPL123', 'title': 'Playlist musical'},
+                ],
+              });
+              return;
+            case '/api/youtube/library/artists':
+              reply({
+                'items': [
+                  {'id': 'UC222', 'name': 'Artista en mis discos'},
                 ],
               });
               return;
@@ -278,6 +314,14 @@ void main() {
       expect(playlist.id, 'PL123');
       final album = (await client.page(g, MusicSurface.albums)).items.single;
       final artist = (await client.page(g, MusicSurface.artists)).items.single;
+      final libraryArtist = (await client.page(
+        g,
+        MusicSurface.libraryArtists,
+      )).items.single;
+      expect(
+        [artist.title, libraryArtist.title],
+        ['Mi artista', 'Artista en mis discos'],
+      );
       for (final detail in [
         (MusicSurface.playlist, playlist.id),
         (MusicSurface.album, album.id),
@@ -300,6 +344,70 @@ void main() {
         )).items.single.title,
         'Again',
       );
+    },
+  );
+  test(
+    'un Inicio anónimo conserva las secciones privadas que respondieron, incluso vacías',
+    () async {
+      server.personal = false;
+      server.overview = {
+        'sections': {
+          'playlists': {'items': []},
+          'artists': {'items': []},
+          'likedSongs': {'items': [], 'error': 'LIBRARY_TIMEOUT'},
+          'albums': {'items': []},
+          'subscriptions': {},
+        },
+        'errors': ['albums', 'liked-songs'],
+      };
+      final partial = await login();
+      expect(partial.personalization, 'partialMusic');
+      expect(partial.capabilities, {
+        'playlists',
+        'playlist',
+        'libraryArtists',
+        'artist',
+        'search',
+        'playback',
+      });
+      expect(
+        (await client.page(
+          partial.generation!,
+          MusicSurface.playlists,
+        )).items.single.title,
+        'Playlist musical',
+      );
+      final reopened = DesktopMusicClient(store, () => true, dio: server.dio);
+      addTearDown(reopened.close);
+      server.personal = true;
+      final full = (await reopened.connection())!;
+      expect(full.generation, partial.generation);
+      expect(
+        full.capabilities,
+        containsAll(['home', 'liked', 'artists', 'libraryArtists']),
+      );
+      expect(
+        server.requests.where((r) => r.uri.path.endsWith('/auth/login')),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
+    'la biblioteca privada anterior también sirve para recuperar las secciones disponibles',
+    () async {
+      server.personal = false;
+      server.legacy = true;
+      final result = await login();
+      expect(result.personalization, 'partialMusic');
+      expect(result.capabilities, {
+        'playlists',
+        'playlist',
+        'liked',
+        'search',
+        'playback',
+      });
+      expect(server.requests.last.uri.path, '/api/youtube/library');
     },
   );
   test(
@@ -567,6 +675,57 @@ void main() {
     },
   );
   testWidgets(
+    'ordenar y buscar playlists revisa también la siguiente página privada',
+    (tester) async {
+      final api = AuthenticatedApiClient(
+        FakeAuthRepository(user: const AuthUser(uid: 'A')),
+        baseUrl: 'https://example.test',
+      );
+      addTearDown(api.close);
+      final model = MusicModeController(
+        MusicModeClient(api, desktop: client),
+        () => true,
+        () async {},
+      );
+      addTearDown(model.dispose);
+      server.pagedPlaylists = true;
+      await tester.runAsync(
+        () => model.connectDesktop(
+          'test@example.invalid',
+          'solo-prueba',
+          remember: false,
+        ),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: MusicModeScope(
+              controller: model,
+              child: const MusicModeSurface(surface: MusicSurface.songs),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      double y(String title) => tester.getTopLeft(find.text(title)).dy;
+      expect(y('Zafiro'), lessThan(y('Andes')));
+      await tester.tap(find.byTooltip('Ordenar de A a Z'));
+      await tester.pumpAndSettle();
+      expect(y('Andes'), lessThan(y('Zafiro')));
+      await tester.enterText(find.byType(TextField), 'SUR');
+      await tester.pump(const Duration(milliseconds: 310));
+      await tester.pumpAndSettle();
+      expect(find.text('Sonidos del sur'), findsOneWidget);
+      expect(find.text('Andes'), findsNothing);
+      expect(
+        server.requests.where(
+          (r) => r.queryParameters['cursor'] == 'next-playlists',
+        ),
+        hasLength(1),
+      );
+    },
+  );
+  testWidgets(
     'el formulario muestra el destino y conserva el vínculo después de un error de contraseña',
     (tester) async {
       final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
@@ -581,7 +740,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(home: Scaffold(body: DesktopMusicAccess(model))),
       );
-      expect(find.text('Conectar Mysic de escritorio'), findsOneWidget);
+      expect(
+        find.text('Vincular mi biblioteca de YouTube Music'),
+        findsOneWidget,
+      );
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(body: DesktopMusicAccess(model, forHome: true)),

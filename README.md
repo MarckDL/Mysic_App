@@ -13,7 +13,7 @@ La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 > 79 pruebas Flutter, 186 backend y aceptación con dos cuentas Google en Android.
 > Ver [evidencia](docs/17-plan-sprint-11.md).
 >
-> Android 4028 conecta bibliotecas en vivo. La cuenta de escritorio y el canal de Google se pueden seleccionar desde Cuenta. [Fuentes musicales](docs/youtube-music-mode.md)
+> Android 4030 permite consultar las recomendaciones y colecciones de la sesión de Mysic de escritorio, las playlists musicales del canal de Google y el catálogo de Explorar desde Buscar. [Fuentes musicales](docs/youtube-music-mode.md)
 >
 > La matriz específica con red móvil del operador y las optimizaciones de latencia
 > no anticipada continúan como trabajo del Sprint 13.

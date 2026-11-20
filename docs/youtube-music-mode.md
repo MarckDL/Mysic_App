@@ -1,5 +1,15 @@
 # YouTube Music en Mysic_App
 
+## Android 4030
+
+**Inicio.** La biblioteca personal se conecta desde Cuenta con el usuario de Mysic de escritorio que ya tiene vinculada la cuenta de YouTube Music deseada. La app consulta sus secciones privadas y conserva el orden del proveedor. El nombre de usuario de escritorio y el nombre del canal de Google pueden ser distintos. El canal de Google tiene una opción de vinculación independiente. Si el permiso de ese canal solo admite YouTube, el servidor solicita música relacionada con una canción identificada entre los Me gusta o las playlists de ese canal. Si no encuentra una canción de partida, la app muestra Explorar.
+
+**Biblioteca.** En el canal general, una playlist puede contener remixes, subtitulados y otras subidas reproducibles en YouTube Music. El adaptador consulta los IDs públicos de una página en la cola musical para distinguir esas pistas de los clips que Music bloquea. La comprobación usa el ID y la disponibilidad de cada pista, conserva el orden de la playlist y admite una lista con una sola canción. Los Me gusta generales siguen un filtro de grabaciones musicales más estricto. Una lista vacía creada en Music se puede identificar en su biblioteca personal.
+
+**Buscar.** Al abrir la pestaña se consulta Explorar. Al escribir, el catálogo agrupa las coincidencias en canciones, vídeos, artistas y álbumes. Los resultados abren su ficha o la cola de reproducción de Mysic. Las rutas de descubrimiento usan la identidad de Firebase para atender a la app. Las consultas públicas al catálogo musical llevan los términos de búsqueda o identificadores de música y se ejecutan sin las credenciales de YouTube del usuario.
+
+Para probar en un teléfono, elige el mismo perfil en ambas aplicaciones, añade una pista a una playlist en YouTube Music, vuelve a Mysic y abre el detalle. Compara títulos y orden. En Inicio compara títulos de secciones utilizando la cuenta personal correspondiente. En Buscar, abre un álbum desde Explorar y reproduce una pista.
+
 ## Android 4029
 
 El Inicio conserva los títulos, el orden y las continuaciones de las secciones que entrega YouTube Music. La cuenta de escritorio utiliza su sesión de Mysic con la API original. Para el canal vinculado con Google, la API móvil comprueba el Inicio y la biblioteca musical por separado. Si únicamente puede leer el canal, la pantalla identifica la colección disponible y ofrece abrir el acceso a la cuenta personal de Mysic. El botón **Actualizar** de un Inicio limitado vuelve a comprobar el permiso del canal. Las solicitudes simultáneas comparten una comprobación y los resultados recientes se reutilizan durante 15 segundos.

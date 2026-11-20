@@ -12,7 +12,7 @@ class MusicModeClient {
   final AuthenticatedApiClient _api;
 
   Future<MusicConnection> connection({bool recheckMusic = false}) async {
-    final restored = await desktop?.connection();
+    final restored = await desktop?.connection(recheckMusic: recheckMusic);
     if (restored != null) return restored;
     return channelConnection(recheckMusic: recheckMusic);
   }

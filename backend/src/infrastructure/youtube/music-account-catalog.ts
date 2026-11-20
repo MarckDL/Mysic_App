@@ -1,7 +1,10 @@
 import { YoutubeDataLibraryProvider } from './youtube-data-library-provider.js';
 import { Constants } from 'youtubei.js';
 import { LinkError } from '../../modules/integrations/youtube/domain.js';
-import type { ReadContext } from '../../modules/integrations/youtube/library-domain.js';
+import {
+  isLibraryTrack,
+  type ReadContext,
+} from '../../modules/integrations/youtube/library-domain.js';
 import type {
   MusicItem,
   MusicPageRequest,
@@ -93,6 +96,17 @@ function card(
   const id = str(browse(endpoint).browseId);
   if (type.includes('PODCAST') || type.includes('NON_MUSIC')) return;
   if (id && resourceId.test(id)) {
+    const subtitle =
+      (
+        label(value.subtitle) ||
+        columns.slice(1).map(label).filter(Boolean).join(' · ')
+      )
+        .trim()
+        .replace(
+          /^(?:album|álbum|artist|artista|playlist|lista de reproducción|single|sencillo|ep)(?:\s*[•·]\s*|$)/iu,
+          '',
+        )
+        .slice(0, 300) || undefined;
     if (
       (type === 'MUSIC_PAGE_TYPE_ALBUM' || (!type && surface === 'albums')) &&
       /^(?:MPLA)?MPRE/.test(id)
@@ -101,6 +115,7 @@ function card(
         kind: 'album',
         id: id.replace(/^MPLA/, ''),
         title,
+        subtitle,
         thumbnailUrl,
       };
     // Music shelves can send the playlist ID directly or its VL browse ID.
@@ -115,11 +130,12 @@ function card(
         kind: 'playlist',
         id: playlistId,
         title,
+        subtitle,
         private: false,
         thumbnailUrl,
       };
     if (type === 'MUSIC_PAGE_TYPE_ARTIST' && /^UC[\w-]{22}$/.test(id))
-      return { kind: 'artist', id, title, thumbnailUrl };
+      return { kind: 'artist', id, title, thumbnailUrl, subtitle };
     return;
   }
   const overlay = at(
@@ -528,8 +544,7 @@ export class OAuthMusicCatalog implements MusicAccountCatalog {
         ids.slice(start, start + 50),
       );
       for (const video of details)
-        if (video.isRecording && video.availability === 'available')
-          confirmed.add(video.id);
+        if (isLibraryTrack(video, true)) confirmed.add(video.id);
     }
     return confirmed.size
       ? parseMusicAccountPage(json, request.surface, confirmed)

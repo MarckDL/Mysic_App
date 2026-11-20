@@ -7,10 +7,11 @@ import {
 function text(value: string) {
   return { runs: [{ text: value }] };
 }
-function shelf(id: string, kind: string, title: string) {
+function shelf(id: string, kind: string, title: string, subtitle = '') {
   return {
     musicTwoRowItemRenderer: {
       title: text(title),
+      subtitle: text(subtitle),
       navigationEndpoint: {
         browseEndpoint: {
           browseId: id,
@@ -76,7 +77,7 @@ describe('catálogo de la cuenta de Music', () => {
             contents: [
               shelf('RDTMAK5uy_example', 'PLAYLIST', 'Mi mix'),
               shelf('PLlibrary', 'PLAYLIST', 'Lista recomendada'),
-              shelf('VLPLnormal', 'PLAYLIST', 'Otra lista'),
+              shelf('VLPLnormal', 'PLAYLIST', 'Otra lista', 'Playlist • María'),
               shelf('RDTMAK5uy_podcast', 'PODCAST_SHOW', 'Un programa'),
             ],
           },
@@ -89,6 +90,7 @@ describe('catálogo de la cuenta de Music', () => {
       ['playlist', 'PLlibrary'],
       ['playlist', 'PLnormal'],
     ]);
+    expect(page.items.at(-1)?.subtitle).toBe('María');
   });
 
   it('conserva orden y duplicados de la lista y excluye cursos, podcasts y sugerencias ajenas a la lista', () => {
@@ -247,7 +249,9 @@ describe('catálogo de la cuenta de Music', () => {
       ['aaaaaaaaaaa', 'mmmmmmmmmmm'].map((id) => ({
         id,
         isMusicCategory: true,
-        isRecording: id === 'mmmmmmmmmmm',
+        catalogKind:
+          id === 'mmmmmmmmmmm' ? ('musicUpload' as const) : ('other' as const),
+        isRecording: false,
         artistId: undefined,
         availability: 'available' as const,
         title: null,

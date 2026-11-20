@@ -16,6 +16,9 @@ import '../application/connected_host.dart';
 import '../application/music_mode_controller.dart';
 import '../domain/music_mode.dart';
 import 'music_mode_host.dart';
+import '../data/music_discovery.dart';
+import 'music_discovery_screen.dart';
+import 'music_shelves.dart';
 import 'desktop_music_access.dart';
 
 class MusicModeSurface extends StatelessWidget {
@@ -33,6 +36,12 @@ class MusicModeSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = MusicModeScope.of(context);
+    if (surface == MusicSurface.search &&
+        controller?.connection?.nativeCatalog == true) {
+      return MusicDiscoveryScreen(
+        key: ValueKey(controller?.connection?.generation),
+      );
+    }
     if (local != null && controller?.showMusic != true) return local!;
     final connection = controller?.connection;
     if (controller == null ||
@@ -243,7 +252,9 @@ class MusicModeSettings extends StatelessWidget {
             leading: const Icon(Icons.headphones),
             title: Text(
               manageChannel != null && !managesAccount
-                  ? 'Vincular YouTube Music'
+                  ? 'Vincular un canal de YouTube'
+                  : connection?.channelOnly == true
+                  ? 'Canal de YouTube'
                   : connection?.isPreview == true
                   ? 'YouTube Music · simulación'
                   : 'YouTube Music',
@@ -254,9 +265,9 @@ class MusicModeSettings extends StatelessWidget {
                 ? null
                 : Text(switch (connection?.status) {
                     MusicLinkStatus.linked when controller.wantsMusic =>
-                      connection!.channelOnly
-                          ? 'Canal de YouTube · ${account!.name}'
-                          : account!.name,
+                      account!.name,
+                    MusicLinkStatus.linked when connection!.channelOnly =>
+                      account!.name,
                     MusicLinkStatus.expired =>
                       'Sesión caducada · ${account!.name}',
                     MusicLinkStatus.unavailable =>
@@ -400,16 +411,75 @@ class _MusicPageState extends ConsumerState<_MusicPage>
   CancelToken? _request;
   String? _cursor;
   String? _query;
+  String _libraryQuery = '';
+  bool _libraryAZ = false;
+  Timer? _libraryPageTimer;
+  final _libraryCursors = <String>{};
+
+  bool get _libraryTools =>
+      widget.connection.isDesktop && widget.surface == MusicSurface.songs;
+
+  List<MusicItem> get _visibleItems {
+    if (!_libraryTools || (_libraryQuery.isEmpty && !_libraryAZ)) return _items;
+    final visible = _items
+        .where(
+          (item) =>
+              item.title.toLowerCase().contains(_libraryQuery) ||
+              (item is MusicTrack &&
+                  item.artist.toLowerCase().contains(_libraryQuery)),
+        )
+        .toList();
+    if (_libraryAZ) {
+      visible.sort(
+        (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+      );
+    }
+    return visible;
+  }
+
+  void _continueLibraryFilter() {
+    _libraryPageTimer?.cancel();
+    if (!_libraryTools ||
+        _libraryQuery.isEmpty ||
+        _cursor == null ||
+        _loading ||
+        _error != null) {
+      return;
+    }
+    _libraryPageTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted && !_loading) unawaited(_load(reset: false));
+    });
+  }
+
   String? _playlistTitle;
   String? _error;
   bool _loading = false;
+  bool _retryReset = true;
   bool _wasInBackground = false;
   late MusicSurface _surface = _initialSurface();
   MusicSurface _initialSurface() {
     final caps = widget.connection.capabilities;
-    if (widget.connection.nativeCatalog &&
+    if (widget.connection.isDesktop &&
+        widget.connection.personalization == 'partialMusic' &&
         (widget.surface == MusicSurface.songs ||
-            (widget.surface == MusicSurface.home && !caps.contains('home')))) {
+            widget.surface == MusicSurface.home)) {
+      for (final section in const [
+        MusicSurface.liked,
+        MusicSurface.playlists,
+        MusicSurface.albums,
+        MusicSurface.libraryArtists,
+        MusicSurface.artists,
+      ]) {
+        if (caps.contains(section.name)) return section;
+      }
+    }
+    if (widget.surface == MusicSurface.home &&
+        widget.connection.isDirect &&
+        !caps.contains('home')) {
+      return MusicSurface.channelRecommendations;
+    }
+    if (widget.connection.nativeCatalog &&
+        widget.surface == MusicSurface.songs) {
       if (widget.connection.personalization == 'partialMusic' &&
           caps.contains('liked')) {
         return MusicSurface.liked;
@@ -461,7 +531,9 @@ class _MusicPageState extends ConsumerState<_MusicPage>
     if (_surface == MusicSurface.search && (query ?? _query ?? '').isEmpty) {
       return;
     }
+    _libraryPageTimer?.cancel();
     _request?.cancel();
+    final previousCursor = reset ? null : _cursor;
     final request = _request = CancelToken();
     setState(() {
       _loading = true;
@@ -505,7 +577,9 @@ class _MusicPageState extends ConsumerState<_MusicPage>
           incoming.addAll(page.items);
         } on ApiFailure {
           // Keep the successful pages and let the user retry their continuation.
-          if (incoming.isEmpty) rethrow;
+          if (incoming.isEmpty || (reset && keepItems && _items.isNotEmpty)) {
+            rethrow;
+          }
           break;
         }
       }
@@ -515,14 +589,30 @@ class _MusicPageState extends ConsumerState<_MusicPage>
         return;
       }
       setState(() {
-        _cursor = page.nextCursor;
+        if (reset) _libraryCursors.clear();
+        if (_libraryTools && previousCursor != null) {
+          _libraryCursors.add(previousCursor);
+        }
+        _cursor = _libraryTools && _libraryCursors.contains(page.nextCursor)
+            ? null
+            : page.nextCursor;
         if (reset && keepItems) _items.clear();
         _items.addAll(incoming);
         _playlistTitle = page.title ?? page.playlist?.title ?? _playlistTitle;
       });
+      if (reset &&
+          widget.surface == MusicSurface.home &&
+          (_surface == MusicSurface.home ||
+              _surface == MusicSurface.channelRecommendations)) {
+        await _fillHomeShelves(generation, request);
+      }
     } on ApiFailure catch (error) {
       if (mounted && request == _request) {
         setState(() {
+          _retryReset =
+              reset ||
+              error.code == 'INVALID_CURSOR' ||
+              error.code == 'CURSOR_EXPIRED';
           _error = switch (error.code) {
             'INVALID_CURSOR' ||
             'CURSOR_EXPIRED' => 'La página caducó. Actualiza la lista.',
@@ -547,16 +637,59 @@ class _MusicPageState extends ConsumerState<_MusicPage>
       }
     } catch (_) {
       if (mounted && request == _request && !request.isCancelled) {
-        setState(() => _error = 'No se pudo cargar. Inténtalo de nuevo.');
+        setState(() {
+          _retryReset = reset;
+          _error = 'No se pudo cargar. Inténtalo de nuevo.';
+        });
       }
     } finally {
-      if (mounted && request == _request) setState(() => _loading = false);
+      if (mounted && request == _request) {
+        setState(() => _loading = false);
+        _continueLibraryFilter();
+      }
+    }
+  }
+
+  Future<void> _fillHomeShelves(String generation, CancelToken request) async {
+    final visited = <String>{};
+    while (mounted &&
+        _request == request &&
+        widget.controller.isCurrent(generation) &&
+        _cursor != null &&
+        visited.length < 3 &&
+        _items
+                .map((item) => item.shelfTitle)
+                .whereType<String>()
+                .toSet()
+                .length <
+            3 &&
+        visited.add(_cursor!)) {
+      try {
+        final page = await widget.controller.page(
+          generation,
+          _surface,
+          cursor: _cursor,
+          cancelToken: request,
+        );
+        if (!mounted ||
+            _request != request ||
+            !widget.controller.isCurrent(generation)) {
+          return;
+        }
+        setState(() {
+          _items.addAll(page.items);
+          _cursor = visited.contains(page.nextCursor) ? null : page.nextCursor;
+        });
+      } catch (_) {
+        // The first shelves are already visible. Keep the cursor for manual continuation.
+        return;
+      }
     }
   }
 
   bool get _needsHomeCheck =>
       widget.surface == MusicSurface.home &&
-      widget.connection.isDirect &&
+      widget.connection.nativeCatalog &&
       !widget.connection.capabilities.contains('home');
 
   Future<void> _refreshPage() async {
@@ -712,7 +845,10 @@ class _MusicPageState extends ConsumerState<_MusicPage>
   void _play(MusicTrack selected, {bool shuffled = false}) {
     final generation = widget.connection.generation!;
     if (!widget.controller.isCurrent(generation)) return;
-    final tracks = _items.whereType<MusicTrack>().where(_canPlayTrack).toList();
+    final tracks = _visibleItems
+        .whereType<MusicTrack>()
+        .where(_canPlayTrack)
+        .toList();
     final selectedIndex = tracks.indexOf(selected);
     if (selectedIndex < 0) return;
     final start = selectedIndex ~/ 100 * 100;
@@ -740,7 +876,7 @@ class _MusicPageState extends ConsumerState<_MusicPage>
   }
 
   String get _title => switch (widget.surface) {
-    MusicSurface.home => 'Inicio',
+    MusicSurface.home || MusicSurface.channelRecommendations => 'Inicio',
     MusicSurface.songs => 'Biblioteca',
     MusicSurface.liked => 'Me gusta de YouTube Music',
     MusicSurface.channelLiked => 'Me gusta de mi canal',
@@ -754,6 +890,7 @@ class _MusicPageState extends ConsumerState<_MusicPage>
     MusicSurface.onRepeat => 'En repetición',
     MusicSurface.artist => 'Más de este canal',
     MusicSurface.artists => 'Canales musicales que sigues',
+    MusicSurface.libraryArtists => 'Artistas de tu biblioteca',
     MusicSurface.playlists => 'Biblioteca',
   };
 
@@ -761,8 +898,13 @@ class _MusicPageState extends ConsumerState<_MusicPage>
   Widget build(BuildContext context) {
     final account = widget.connection.account!;
     final isHome = widget.surface == MusicSurface.home;
-    final hasShelves = isHome && _items.any((item) => item.shelfTitle != null);
-    final firstPlayable = _items
+    final channelPicks = _surface == MusicSurface.channelRecommendations;
+    final showExplore = channelPicks && _items.isEmpty && !_loading;
+    final showShelves =
+        isHome &&
+        (channelPicks || _items.any((item) => item.shelfTitle != null));
+    final visible = _visibleItems;
+    final firstPlayable = visible
         .whereType<MusicTrack>()
         .where(_canPlayTrack)
         .firstOrNull;
@@ -842,7 +984,7 @@ class _MusicPageState extends ConsumerState<_MusicPage>
                 subtitle: const Text('Últimos 30 días'),
                 onTap: () => context.push('/music/repeat'),
               ),
-            if (isHome && !hasShelves)
+            if (isHome && !showShelves)
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text(
@@ -852,7 +994,13 @@ class _MusicPageState extends ConsumerState<_MusicPage>
                       ? 'Me gusta de YouTube Music'
                       : _surface == MusicSurface.channelLiked
                       ? 'Música que te gusta en YouTube'
-                      : 'Tus playlists musicales',
+                      : switch (_surface) {
+                          MusicSurface.albums => 'Tus álbumes',
+                          MusicSurface.libraryArtists =>
+                            'Artistas de tu biblioteca',
+                          MusicSurface.artists => 'Artistas que sigues',
+                          _ => 'Tus playlists musicales',
+                        },
                 ),
               ),
             if (widget.surface == MusicSurface.songs &&
@@ -882,9 +1030,14 @@ class _MusicPageState extends ConsumerState<_MusicPage>
                         'channelLiked',
                       ))
                         MusicSurface.channelLiked: 'Me gusta de mi canal',
-                      MusicSurface.playlists: 'Playlists',
+                      if (widget.connection.capabilities.contains('playlists'))
+                        MusicSurface.playlists: 'Playlists',
                       if (widget.connection.capabilities.contains('albums'))
                         MusicSurface.albums: 'Álbumes',
+                      if (widget.connection.capabilities.contains(
+                        'libraryArtists',
+                      ))
+                        MusicSurface.libraryArtists: 'Artistas',
                     }.entries)
                       ChoiceChip(
                         label: Text(section.value),
@@ -897,6 +1050,34 @@ class _MusicPageState extends ConsumerState<_MusicPage>
                       ),
                   ],
                 ),
+              ),
+            if (_libraryTools)
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        hintText: 'Buscar en esta sección',
+                        prefixIcon: Icon(Icons.search),
+                        isDense: true,
+                      ),
+                      onChanged: (value) {
+                        setState(
+                          () => _libraryQuery = value.trim().toLowerCase(),
+                        );
+                        _continueLibraryFilter();
+                      },
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: _libraryAZ
+                        ? 'Restaurar orden de YouTube Music'
+                        : 'Ordenar de A a Z',
+                    isSelected: _libraryAZ,
+                    icon: const Icon(Icons.sort_by_alpha),
+                    onPressed: () => setState(() => _libraryAZ = !_libraryAZ),
+                  ),
+                ],
               ),
             if (widget.connection.nativeCatalog &&
                 firstPlayable != null &&
@@ -927,7 +1108,7 @@ class _MusicPageState extends ConsumerState<_MusicPage>
                     icon: const Icon(Icons.playlist_add),
                     onSelected: (next) {
                       final message = _addToQueue(
-                        _items.whereType<MusicTrack>(),
+                        visible.whereType<MusicTrack>(),
                         next: next,
                       );
                       ScaffoldMessenger.of(
@@ -980,104 +1161,124 @@ class _MusicPageState extends ConsumerState<_MusicPage>
                 contentPadding: EdgeInsets.zero,
                 title: Text('El historial está pausado.'),
               ),
-            for (final (index, item) in _items.indexed) ...[
-              if (hasShelves &&
-                  item.shelfTitle != null &&
-                  (index == 0 ||
-                      _items[index - 1].shelfTitle != item.shelfTitle))
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 18, 0, 6),
-                  child: Semantics(
-                    header: true,
-                    child: Text(
-                      item.shelfTitle!,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
+            if (showExplore) ...[
+              Semantics(
+                header: true,
+                child: Text(
+                  'Explorar',
+                  style: Theme.of(context).textTheme.headlineSmall,
                 ),
-              if (isHome &&
-                  item is MusicTrack &&
-                  identical(item, firstPlayable))
-                _FeaturedTrack(
-                  track: item,
-                  onTap: () => _play(item),
-                  actions: _actions(item),
-                )
-              else
-                switch (item) {
-                  MusicAlbum() => ListTile(
-                    leading: TrackArtwork(
-                      url: item.thumbnailUrl,
-                      size: 52,
-                      fallbackIcon: Icons.album,
-                    ),
-                    title: Text(item.title),
-                    subtitle: const Text('Álbum'),
-                    onTap: () => context.push(
-                      '/music/album/${Uri.encodeComponent(item.id)}',
-                    ),
-                  ),
-                  MusicArtist() => ListTile(
-                    leading: TrackArtwork(
-                      url: item.thumbnailUrl,
-                      size: 52,
-                      borderRadius: 26,
-                      fallbackIcon: Icons.person_outline,
-                    ),
-                    title: Text(item.title),
-                    trailing: _actions(item),
-                    onTap: () => context.push(
-                      '/music/artist/${Uri.encodeComponent(item.id)}',
-                    ),
-                  ),
-                  MusicPlaylist() => ListTile(
-                    leading: TrackArtwork(
-                      url: item.thumbnailUrl,
-                      size: 52,
-                      fallbackIcon: Icons.queue_music,
-                    ),
-                    title: Text(item.title),
-                    subtitle: item.isPrivate ? const Text('Privada') : null,
-                    trailing: widget.connection.nativeCatalog
-                        ? _actions(item)
-                        : const Icon(Icons.chevron_right),
-                    onTap: () => context.push(
-                      '/music/playlist/${Uri.encodeComponent(item.id)}',
-                    ),
-                  ),
-                  MusicTrack() => ListTile(
-                    leading: TrackArtwork(
-                      url: item.thumbnailUrl,
-                      size: 52,
-                      fallbackIcon: _canPlayTrack(item)
-                          ? Icons.play_circle_outline
-                          : Icons.music_note,
-                    ),
-                    title: Text(item.title),
-                    trailing: widget.connection.nativeCatalog
-                        ? _actions(item)
-                        : null,
-                    subtitle: Text(
-                      [
-                        item.artist,
-                        if (item.playCount != null)
-                          '${item.playCount} escuchas',
-                        if (item.listenedAt != null && item.playCount == null)
-                          MaterialLocalizations.of(
-                            context,
-                          ).formatShortDate(item.listenedAt!.toLocal()),
-                        if (widget.connection.nativeCatalog &&
-                            widget.controller.deviceAudio(item.id) != null)
-                          'En este dispositivo'
-                        else if (widget.connection.nativeCatalog &&
-                            !_canPlayTrack(item))
-                          'Solo biblioteca',
-                      ].join(' · '),
-                    ),
-                    onTap: _canPlayTrack(item) ? () => _play(item) : null,
-                  ),
+              ),
+              const PublicMusicResults(request: exploreRequest),
+            ] else if (showShelves)
+              MusicShelves(
+                items: _items,
+                defaultTitle: channelPicks
+                    ? 'Según la música de tu canal'
+                    : 'Recomendaciones de YouTube Music',
+                actions: _actions,
+                open: (item) {
+                  if (item is MusicTrack) {
+                    if (_canPlayTrack(item)) _play(item);
+                  } else if (channelPicks) {
+                    openCatalogDetail(context, item);
+                  } else {
+                    final kind = catalogKind(item);
+                    if (widget.connection.capabilities.contains(kind)) {
+                      context.push(
+                        '/music/$kind/${Uri.encodeComponent(item.id)}',
+                      );
+                    } else {
+                      openCatalogDetail(context, item);
+                    }
+                  }
                 },
-            ],
+              )
+            else
+              for (final item in visible) ...[
+                if (isHome &&
+                    item is MusicTrack &&
+                    identical(item, firstPlayable))
+                  _FeaturedTrack(
+                    track: item,
+                    onTap: () => _play(item),
+                    actions: _actions(item),
+                  )
+                else
+                  switch (item) {
+                    MusicAlbum() => ListTile(
+                      leading: TrackArtwork(
+                        url: item.thumbnailUrl,
+                        size: 52,
+                        fallbackIcon: Icons.album,
+                      ),
+                      title: Text(item.title),
+                      subtitle: const Text('Álbum'),
+                      onTap: () => context.push(
+                        '/music/album/${Uri.encodeComponent(item.id)}',
+                      ),
+                    ),
+                    MusicArtist() => ListTile(
+                      leading: TrackArtwork(
+                        url: item.thumbnailUrl,
+                        size: 52,
+                        borderRadius: 26,
+                        fallbackIcon: Icons.person_outline,
+                      ),
+                      title: Text(item.title),
+                      trailing: _actions(item),
+                      onTap: () => context.push(
+                        '/music/artist/${Uri.encodeComponent(item.id)}',
+                      ),
+                    ),
+                    MusicPlaylist() => ListTile(
+                      leading: TrackArtwork(
+                        url: item.thumbnailUrl,
+                        size: 52,
+                        fallbackIcon: Icons.queue_music,
+                      ),
+                      title: Text(item.title),
+                      subtitle: item.isPrivate ? const Text('Privada') : null,
+                      trailing: widget.connection.nativeCatalog
+                          ? _actions(item)
+                          : const Icon(Icons.chevron_right),
+                      onTap: () => context.push(
+                        '/music/playlist/${Uri.encodeComponent(item.id)}',
+                      ),
+                    ),
+                    MusicTrack() => ListTile(
+                      leading: TrackArtwork(
+                        url: item.thumbnailUrl,
+                        size: 52,
+                        fallbackIcon: _canPlayTrack(item)
+                            ? Icons.play_circle_outline
+                            : Icons.music_note,
+                      ),
+                      title: Text(item.title),
+                      trailing: widget.connection.nativeCatalog
+                          ? _actions(item)
+                          : null,
+                      subtitle: Text(
+                        [
+                          item.artist,
+                          if (item.playCount != null)
+                            '${item.playCount} escuchas',
+                          if (item.listenedAt != null && item.playCount == null)
+                            MaterialLocalizations.of(
+                              context,
+                            ).formatShortDate(item.listenedAt!.toLocal()),
+                          if (widget.connection.nativeCatalog &&
+                              widget.controller.deviceAudio(item.id) != null)
+                            'En este dispositivo'
+                          else if (widget.connection.nativeCatalog &&
+                              !_canPlayTrack(item))
+                            'Solo biblioteca',
+                        ].join(' · '),
+                      ),
+                      onTap: _canPlayTrack(item) ? () => _play(item) : null,
+                    ),
+                  },
+              ],
             if (_loading)
               const Center(
                 child: Padding(
@@ -1085,18 +1286,21 @@ class _MusicPageState extends ConsumerState<_MusicPage>
                   child: CircularProgressIndicator(),
                 ),
               ),
-            if (_error != null)
+            if (_error != null && !showExplore)
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text(_error!),
                 trailing: TextButton(
-                  onPressed: () => unawaited(_load(reset: true)),
+                  onPressed: () => unawaited(
+                    _load(reset: _retryReset, keepItems: _items.isNotEmpty),
+                  ),
                   child: const Text('Reintentar'),
                 ),
               ),
             if (!_loading &&
+                !showExplore &&
                 _error == null &&
-                _items.isEmpty &&
+                visible.isEmpty &&
                 _cursor == null &&
                 (_surface != MusicSurface.search || _query != null))
               ListTile(
@@ -1104,6 +1308,8 @@ class _MusicPageState extends ConsumerState<_MusicPage>
                 title: Text(
                   !widget.connection.capabilities.contains(_surface.name)
                       ? 'Esta función no está habilitada para la cuenta.'
+                      : _libraryTools && _libraryQuery.isNotEmpty
+                      ? 'No hay coincidencias en esta sección.'
                       : _surface == MusicSurface.onRepeat
                       ? 'Aquí aparecerán las canciones que escuches al menos dos veces en Mysic.'
                       : _surface == MusicSurface.history ||
@@ -1131,6 +1337,7 @@ class _MusicPageState extends ConsumerState<_MusicPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _libraryPageTimer?.cancel();
     _request?.cancel();
     _search.dispose();
     super.dispose();

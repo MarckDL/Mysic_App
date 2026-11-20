@@ -11,6 +11,7 @@ import 'package:mysic/features/authentication/domain/auth_repository.dart';
 import 'package:mysic/features/authentication/domain/mysic_profile.dart';
 import 'package:mysic/features/connected_library/application/music_mode_controller.dart';
 import 'package:mysic/features/connected_library/data/device_recordings.dart';
+import 'package:mysic/features/connected_library/data/desktop_music_client.dart';
 import 'package:mysic/features/connected_library/data/music_mode_client.dart';
 import 'package:mysic/features/connected_library/domain/music_mode.dart';
 import 'package:mysic/features/connected_library/presentation/music_mode_screen.dart';
@@ -211,6 +212,8 @@ class _SessionFixture extends MusicModeClient {
       ),
       MusicSurface.album => MusicPage([one], null, null, 0, 'Disco guardado'),
 
+      MusicSurface.channelRecommendations ||
+      MusicSurface.libraryArtists ||
       MusicSurface.artists ||
       MusicSurface.onRepeat ||
       MusicSurface.artist ||
@@ -299,7 +302,148 @@ class _ConsentClient extends oauth.Client {
   }
 }
 
+class _Choice extends DesktopSessionStore {
+  _Choice() : super('A');
+  bool local = false;
+  @override
+  Future<bool> localPreferred() async => local;
+  @override
+  Future<void> preferLocal(bool value) async {
+    local = value;
+  }
+}
+
+class _PagedHome extends _SessionFixture {
+  _PagedHome(super.accounts, super.api) : super(direct: true);
+  final paused = Completer<MusicPage>();
+  final cursors = <String?>[];
+  @override
+  Future<MusicPage> page(
+    String generation,
+    MusicSurface surface, {
+    String? playlistId,
+    String? query,
+    String? cursor,
+    CancelToken? cancelToken,
+  }) async {
+    cursors.add(cursor);
+    if (cursor == null) {
+      return MusicPage(
+        [
+          for (var n = 0; n < 20; n++)
+            MusicTrack(
+              n.toString().padLeft(11, '0'),
+              'Pista $n',
+              'Prueba',
+              95,
+              false,
+              null,
+              nativePlayback: true,
+              shelfTitle: 'Selección rápida',
+            ),
+        ],
+        'segunda',
+        null,
+        0,
+      );
+    }
+    if (cursor == 'segunda') return paused.future;
+    return const MusicPage(
+      [
+        MusicPlaylist(
+          'PLprueba',
+          'Mi mix',
+          false,
+          shelfTitle: 'Playlists destacadas',
+        ),
+      ],
+      'resto',
+      null,
+      0,
+    );
+  }
+}
+
 void main() {
+  testWidgets(
+    'confirmar Google comprueba Music y pide elegir si solo concedió el canal',
+    (tester) async {
+      final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
+      final api = AuthenticatedApiClient(auth, baseUrl: 'https://example.test');
+      addTearDown(api.close);
+      final fixture = _SessionFixture([a], api, direct: true)
+        ..channelOnly = true;
+      final consent = _ConsentClient(fixture);
+      final platform = oauth.MemoryPlatform();
+      late MusicModeController model;
+      var cleared = 0;
+      final choices = _Choice();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(auth),
+            verifiedSessionProvider.overrideWith(
+              (ref) async => const MysicProfile(
+                id: 'test-A',
+                firebaseUid: 'A',
+                displayName: 'A',
+              ),
+            ),
+            recentListeningProvider.overrideWith((ref, uid) async => []),
+            youtubeMusicModeEnabledProvider.overrideWithValue(true),
+            youtubePilotProvider.overrideWithValue(true),
+            trackAudioEngineFactoryProvider.overrideWithValue(
+              FakeTrackAudioEngine.new,
+            ),
+            connectedControllerProvider.overrideWith((ref, uid) {
+              final value = ConnectedController(uid, consent, platform);
+              ref.onDispose(value.dispose);
+              return value;
+            }),
+            musicModeControllerProvider.overrideWith((ref, uid) {
+              model = MusicModeController(fixture, () => true, () async {
+                cleared++;
+              }, choiceStore: choices);
+              ref.onDispose(model.dispose);
+              return model;
+            }),
+          ],
+          child: const MysicApp(firebaseReady: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Abrir cuenta'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Vincular un canal de YouTube'));
+      await tester.pumpAndSettle();
+      platform.incoming = (id: oauth.id, ref: null);
+      platform.notifyReturn!();
+      await tester.pumpAndSettle();
+      final previousClears = cleared;
+      await tester.tap(find.text('Confirmar este canal'));
+      await tester.pumpAndSettle();
+      expect(model.connection?.channelOnly, isTrue);
+      expect(model.wantsMusic, isFalse);
+      expect(cleared, previousClears);
+      final reopened = MusicModeController(
+        fixture,
+        () => true,
+        () async {},
+        choiceStore: choices,
+      );
+      await reopened.refresh();
+      expect(reopened.wantsMusic, isFalse);
+      reopened.dispose();
+      expect(find.text('Solo biblioteca del canal'), findsOneWidget);
+      await tester.tap(find.text('Usar este canal'));
+      await tester.pumpAndSettle();
+      expect(model.wantsMusic, isTrue);
+      expect(choices.local, isFalse);
+      expect(find.text('Playlists'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'Actualizar Inicio vuelve a consultar el acceso y conserva el reproductor',
     (tester) async {
@@ -339,6 +483,49 @@ void main() {
       expect(fixture.explicitChecks, 1);
     },
   );
+  testWidgets(
+    'Inicio presenta la primera selección mientras precarga otros estantes y conserva la continuación',
+    (tester) async {
+      final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
+      final api = AuthenticatedApiClient(auth, baseUrl: 'https://example.test');
+      final pages = _PagedHome([a], api)..account = a;
+      final model = MusicModeController(pages, () => true, () async {});
+      addTearDown(api.close);
+      addTearDown(model.dispose);
+      await model.refresh();
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: MusicModeScope(
+              controller: model,
+              child: const MusicModeSurface(surface: MusicSurface.home),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('Pista 0'), findsOneWidget);
+      expect(pages.cursors, [null, 'segunda']);
+      pages.paused.complete(
+        const MusicPage(
+          [MusicAlbum('MPRE1', 'Nuevo disco', shelfTitle: 'Álbumes para ti')],
+          'tercera',
+          null,
+          0,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(pages.cursors, [null, 'segunda', 'tercera']);
+      final more = find.text('Cargar más');
+      await tester.scrollUntilVisible(
+        more,
+        240,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(more, findsOneWidget);
+    },
+  );
+
   testWidgets('Inicio respeta el orden y los títulos de YouTube Music', (
     tester,
   ) async {
@@ -391,21 +578,20 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final order = [
-      'Vuelve a escuchar',
-      'Disco de prueba',
-      'Mix de prueba',
-      'Selecciones rápidas',
-      'Primera canción',
-    ];
-    double previousTop = double.negativeInfinity;
-    for (final text in order) {
-      final label = find.text(text);
-      expect(label, findsOneWidget);
-      final top = tester.getTopLeft(label).dy;
-      expect(top, greaterThan(previousTop));
-      previousTop = top;
-    }
+    final album = tester.getTopLeft(find.text('Disco de prueba'));
+    final mix = tester.getTopLeft(find.text('Mix de prueba'));
+    expect(
+      album.dy,
+      greaterThan(tester.getTopLeft(find.text('Vuelve a escuchar')).dy),
+    );
+    expect(album.dy, equals(mix.dy));
+    expect(mix.dx, greaterThan(album.dx));
+    final quick = tester.getTopLeft(find.text('Selecciones rápidas')).dy;
+    expect(quick, greaterThan(album.dy));
+    expect(
+      tester.getTopLeft(find.text('Primera canción')).dy,
+      greaterThan(quick),
+    );
     expect(find.text('Recomendaciones de YouTube Music'), findsNothing);
     expect(find.text('En repetición'), findsNothing);
   });
@@ -465,7 +651,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Música que te gusta en YouTube'), findsOneWidget);
+      expect(find.text('Explorar'), findsOneWidget);
       expect(find.text('Tus playlists musicales'), findsNothing);
       expect(find.text('Recomendaciones de YouTube Music'), findsNothing);
     },
@@ -708,7 +894,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Abrir cuenta'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Vincular YouTube Music'));
+      await tester.tap(find.text('Vincular un canal de YouTube'));
       await tester.pumpAndSettle();
       expect(platform.uris.single.host, oauth.host);
       expect(find.text('Esperando autorización'), findsOneWidget);
@@ -797,7 +983,7 @@ void main() {
       expect(find.text('Registrar escuchas en Mysic'), findsOneWidget);
       await tester.tap(find.text('YouTube Music'));
       await tester.pumpAndSettle();
-      expect(find.text('Cuenta de YouTube Music'), findsOneWidget);
+      expect(find.text('Canal de YouTube'), findsOneWidget);
       expect(find.byTooltip('Abrir YouTube Music'), findsNothing);
       await tester.tap(find.byTooltip('Opciones del vínculo'));
       await tester.pumpAndSettle();

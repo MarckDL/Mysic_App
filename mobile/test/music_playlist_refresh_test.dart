@@ -19,6 +19,7 @@ class _Playlists extends MusicModeClient {
   final requests = <String?>[];
   String latest = 'Mi lista inicial';
   Completer<void>? pauseFirst;
+  bool failContinuation = false;
 
   @override
   Future<MusicConnection> connection({bool recheckMusic = false}) async =>
@@ -53,6 +54,7 @@ class _Playlists extends MusicModeClient {
         0,
       );
     }
+    if (failContinuation) throw const ApiFailure('Temporal');
     return MusicPage([MusicPlaylist('p2', latest, true)], null, null, 0);
   }
 }
@@ -112,6 +114,19 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Renombrada en YouTube Music'), findsOneWidget);
       expect(find.text('Creada en YouTube Music'), findsNothing);
+      catalog.failContinuation = true;
+      await tester.tap(find.byTooltip('Actualizar'));
+      await tester.pumpAndSettle();
+      expect(find.text('Renombrada en YouTube Music'), findsOneWidget);
+      await tester.tap(find.text('Reintentar'));
+      await tester.pumpAndSettle();
+      expect(find.text('Renombrada en YouTube Music'), findsOneWidget);
+      catalog.failContinuation = false;
+      catalog.latest = 'Segunda página recuperada';
+      await tester.tap(find.text('Reintentar'));
+      await tester.pumpAndSettle();
+      expect(find.text('Segunda página recuperada'), findsOneWidget);
+      expect(find.text('Reintentar'), findsNothing);
       expect(playbackClears, initialClears);
       expect(tester.takeException(), isNull);
     },

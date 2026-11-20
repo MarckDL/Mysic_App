@@ -43,6 +43,12 @@ import { createUsersRouter } from './modules/users/presentation/user.routes.js';
 
 import { YoutubeProvider } from './infrastructure/music/youtube-provider.js';
 import { CatalogService } from './modules/catalog/application/catalog-service.js';
+import { DiscoveryService } from './modules/catalog/application/discovery-service.js';
+import { discoveryRouter } from './modules/catalog/presentation/discovery.routes.js';
+import {
+  loadOriginalDiscovery,
+  loadYoutubeDiscovery,
+} from './infrastructure/music/public-discovery.js';
 import { CatalogLimiter } from './modules/catalog/application/catalog-limiter.js';
 import type { MusicProvider } from './modules/catalog/domain/music-provider.js';
 import { createCatalogRouter } from './modules/catalog/presentation/catalog.routes.js';
@@ -82,6 +88,7 @@ export function createApp(
     userRepository?: UserRepository;
     musicProvider?: MusicProvider;
     catalogService?: CatalogService;
+    discoveryService?: DiscoveryService;
     catalogLimiter?: CatalogLimiter;
     playbackService?: PlaybackService;
     audioStreamTransport?: AudioStreamTransport;
@@ -133,6 +140,9 @@ export function createApp(
 
   const music = options.musicProvider ?? new YoutubeProvider();
   const catalog = options.catalogService ?? new CatalogService(music);
+  const discovery =
+    options.discoveryService ??
+    new DiscoveryService(loadYoutubeDiscovery, loadOriginalDiscovery);
   const accountMusic = youtubeLink
     ? new AccountMusicService(
         youtubeLink,
@@ -141,6 +151,7 @@ export function createApp(
         licensedRecordings(process.env.MYSIC_LICENSED_AUDIO_JSON),
         options.musicAccountCatalog ?? new OAuthMusicCatalog(),
         catalog,
+        discovery,
       )
     : undefined;
   app.use(
@@ -176,6 +187,10 @@ export function createApp(
           ]),
         ),
     ),
+  );
+  app.use(
+    '/api/v1/catalog/discovery',
+    discoveryRouter(verifier, discovery, options.catalogLimiter),
   );
   app.use(
     '/api/v1',

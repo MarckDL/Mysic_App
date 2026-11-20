@@ -32,6 +32,24 @@ class OriginalMusicCatalog {
     return null;
   }
 
+  static final _kindPrefix = RegExp(
+    r'^(?:album|álbum|artist|artista|playlist|lista de reproducción|single|sencillo|ep)(?:\s*[•·]\s*|$)',
+    caseSensitive: false,
+  );
+  static final _year = RegExp(r'\b(?:19|20)\d{2}\b');
+
+  static String? _collectionSubtitle(Map raw, String kind) {
+    final subtitle = _text(
+      _text(raw['subtitle'])?.replaceFirst(_kindPrefix, ''),
+    );
+    if (kind == 'artist') return subtitle ?? _text(raw['subscribers']);
+    final by = _text(raw['artist']) ?? _text(raw['author']);
+    if (kind == 'playlist') return by ?? subtitle;
+    final year = _year.firstMatch("${raw['year'] ?? subtitle ?? ''}")?.group(0);
+    if (by == null) return subtitle ?? year;
+    return year == null ? by : '$by · $year';
+  }
+
   static MusicItem? item(Object? raw, String kind, {String? shelfTitle}) {
     if (raw is! Map) return null;
     final id = _text(raw['id'], 150),
@@ -64,6 +82,7 @@ class OriginalMusicCatalog {
           title,
           thumbnailUrl: thumbnail,
           shelfTitle: shelfTitle,
+          subtitle: _collectionSubtitle(raw, kind),
         );
       case 'artist':
         return MusicArtist(
@@ -71,6 +90,7 @@ class OriginalMusicCatalog {
           title,
           thumbnailUrl: thumbnail,
           shelfTitle: shelfTitle,
+          subtitle: _collectionSubtitle(raw, kind),
         );
       case 'playlist':
         return MusicPlaylist(
@@ -79,6 +99,7 @@ class OriginalMusicCatalog {
           false,
           thumbnailUrl: thumbnail,
           shelfTitle: shelfTitle,
+          subtitle: _collectionSubtitle(raw, kind),
         );
       default:
         return null;

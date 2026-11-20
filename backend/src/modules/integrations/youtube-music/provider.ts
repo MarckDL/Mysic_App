@@ -3,6 +3,7 @@ export const musicSurfaces = [
   'songs',
   'liked',
   'channelLiked',
+  'channelRecommendations',
   'albums',
   'album',
   'playlists',
@@ -26,6 +27,7 @@ export interface MusicAccount {
 
 export interface MusicTrack {
   kind: 'track';
+  mediaType?: 'song' | 'video';
   id: string;
   title: string;
   artist: string;
@@ -64,6 +66,7 @@ export type MusicItem = (
   MusicTrack | MusicPlaylist | MusicArtist | MusicAlbum
 ) & {
   shelfTitle?: string;
+  subtitle?: string;
 };
 export interface AccountPageResult {
   items: MusicItem[];
