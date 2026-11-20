@@ -360,6 +360,7 @@ class TrackPlaybackController extends ChangeNotifier {
         refresh: refresh,
         licensedAudio: current!.licensedAudio,
         deviceAudio: current!.deviceAudio,
+        readAudio: current!.readAudio,
       );
       if (!_valid(generation)) return;
       final actualDuration = _engine.duration;

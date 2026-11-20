@@ -2,14 +2,18 @@ import 'package:dio/dio.dart';
 
 import '../../../core/network/authenticated_api_client.dart';
 import '../domain/music_mode.dart';
+import 'desktop_music_client.dart';
 
 class MusicModeClient {
-  MusicModeClient(this._api);
+  MusicModeClient(this._api, {this.desktop});
+  final DesktopMusicClient? desktop;
 
   static const _root = '/api/v2/integrations/youtube-music';
   final AuthenticatedApiClient _api;
 
   Future<MusicConnection> connection() async {
+    final restored = await desktop?.connection();
+    if (restored != null) return restored;
     try {
       return MusicConnection.fromJson(await _api.get('$_root/connection'));
     } on ApiFailure catch (error) {
@@ -31,6 +35,9 @@ class MusicModeClient {
       );
 
   Future<void> unlink(String generation) async {
+    if (generation.startsWith('desktop-') && desktop != null) {
+      return desktop!.disconnect();
+    }
     await _api.delete('$_root/connections/$generation');
   }
 
@@ -42,6 +49,16 @@ class MusicModeClient {
     String? cursor,
     CancelToken? cancelToken,
   }) async {
+    if (generation.startsWith('desktop-') && desktop != null) {
+      return desktop!.page(
+        generation,
+        surface,
+        playlistId: playlistId,
+        query: query,
+        cursor: cursor,
+        cancelToken: cancelToken,
+      );
+    }
     final path = '$_root/connections/$generation/pages/${surface.name}';
     return MusicPage.fromJson(
       await _api.get(

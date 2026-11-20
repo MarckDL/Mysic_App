@@ -15,6 +15,7 @@ import '../application/connected_host.dart';
 import '../application/music_mode_controller.dart';
 import '../domain/music_mode.dart';
 import 'music_mode_host.dart';
+import 'desktop_music_access.dart';
 
 class MusicModeSurface extends StatelessWidget {
   const MusicModeSurface({
@@ -49,13 +50,21 @@ class MusicModeSurface extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      connection?.serverPending == true
+                      connection?.isDesktop == true &&
+                              connection?.status == MusicLinkStatus.expired
+                          ? 'La sesión de Mysic de escritorio venció. Vuelve a conectarla en Cuenta.'
+                          : connection?.isDesktop == true &&
+                                connection?.status ==
+                                    MusicLinkStatus.unavailable
+                          ? 'Revisa el vínculo de YouTube Music en tu cuenta de escritorio y vuelve a intentar.'
+                          : connection?.serverPending == true
                           ? 'El servidor de Mysic aún no ofrece la biblioteca musical de tu cuenta.'
                           : controller?.failed == true
                           ? 'No se pudo comprobar la conexión.'
                           : 'Selecciona una cuenta en las opciones de conexión.',
                     ),
                     if (controller?.failed == true ||
+                        connection?.isDesktop == true ||
                         connection?.serverPending == true)
                       TextButton(
                         onPressed: () => unawaited(controller!.refresh()),
@@ -75,9 +84,29 @@ class MusicModeSurface extends StatelessWidget {
         ),
       );
     }
+    if (connection!.channelOnly &&
+        {
+          MusicSurface.liked,
+          MusicSurface.album,
+          MusicSurface.albums,
+        }.contains(surface)) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Biblioteca de YouTube Music')),
+        body: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(connection.accessDescription),
+              DesktopMusicAccess(controller),
+            ],
+          ),
+        ),
+      );
+    }
     return _MusicPage(
       key: ValueKey((
-        connection!.generation,
+        connection.generation,
         controller.revision,
         surface,
         playlistId,
@@ -162,20 +191,26 @@ class MusicModeSettings extends StatelessWidget {
     if (controller == null) return const SizedBox.shrink();
     final connection = controller.connection;
     if (connection?.serverPending == true) {
-      return ListTile(
-        title: const Text('YouTube Music'),
-        subtitle: const Text(
-          'El servidor aún no ofrece la biblioteca musical de tu cuenta.',
-        ),
-        trailing: TextButton(
-          onPressed: controller.busy ? null : controller.refresh,
-          child: const Text('Reintentar'),
-        ),
+      return Column(
+        children: [
+          DesktopMusicAccess(controller),
+          ListTile(
+            title: const Text('YouTube Music'),
+            subtitle: const Text(
+              'El servidor aún no ofrece la biblioteca musical de tu cuenta.',
+            ),
+            trailing: TextButton(
+              onPressed: controller.busy ? null : controller.refresh,
+              child: const Text('Reintentar'),
+            ),
+          ),
+        ],
       );
     }
     if (connection?.status == MusicLinkStatus.unavailable &&
+        connection?.isDesktop != true &&
         ConnectedScope.of(context) != null) {
-      return const SizedBox.shrink();
+      return DesktopMusicAccess(controller);
     }
     final account = connection?.account;
     final managesAccount =
@@ -185,6 +220,7 @@ class MusicModeSettings extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        DesktopMusicAccess(controller),
         ListTile(
           leading: const Icon(Icons.headphones),
           title: Text(
@@ -194,7 +230,9 @@ class MusicModeSettings extends StatelessWidget {
           ),
           subtitle: Text(switch (connection?.status) {
             MusicLinkStatus.linked when controller.wantsMusic =>
-              'Modo activo · ${account!.name}',
+              connection!.channelOnly
+                  ? 'Canal de YouTube · ${account!.name}'
+                  : 'Modo activo · ${account!.name}',
             MusicLinkStatus.expired => 'Sesión caducada · ${account!.name}',
             MusicLinkStatus.unavailable => 'Conexión musical no disponible',
             MusicLinkStatus.unlinked ||
@@ -292,7 +330,7 @@ class MusicModeSettings extends StatelessWidget {
             title: const Text('Usar mi biblioteca de Mysic'),
             onTap: controller.useLocal,
           ),
-        if (connection?.isDirect != true &&
+        if (connection?.nativeCatalog != true &&
             (controller.wantsMusic || connection?.generation != null))
           ListTile(
             leading: const Icon(Icons.link_off),
@@ -343,10 +381,10 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
       (widget.surface == MusicSurface.songs ||
               (widget.surface == MusicSurface.home &&
                   !widget.connection.capabilities.contains('home'))) &&
-          widget.connection.isDirect
+          widget.connection.nativeCatalog
       ? MusicSurface.playlists
       : widget.surface == MusicSurface.history &&
-            widget.connection.isDirect &&
+            widget.connection.nativeCatalog &&
             widget.connection.capabilities.contains('mysicRecents')
       ? MusicSurface.mysicRecents
       : widget.surface;
@@ -405,6 +443,15 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
           _error = switch (error.code) {
             'INVALID_CURSOR' ||
             'CURSOR_EXPIRED' => 'La página caducó. Actualiza la lista.',
+            'YOUTUBE_QUOTA' || 'TOO_MANY_REQUESTS' =>
+              'Se alcanzó el límite de consultas. Vuelve a intentarlo más tarde.',
+            'DESKTOP_EXPIRED' ||
+            'DESKTOP_MUSIC_LINK' ||
+            'DESKTOP_SERVICE' ||
+            'DESKTOP_NETWORK' ||
+            'DESKTOP_HOME' => error.message,
+            'MUSIC_ACCESS_UNVERIFIED' =>
+              'Aún no se pudo verificar la biblioteca musical.',
             'MUSIC_ACCESS_DENIED' =>
               'YouTube Music no autorizó la lectura de esta cuenta.',
             'MUSIC_CATALOG_RESPONSE' =>
@@ -502,11 +549,7 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
         .queueConnected(
           tracks
               .where(_canPlayTrack)
-              .map(
-                (track) => track.toPlaybackTrack(
-                  deviceAudio: music.deviceAudio(track.id),
-                ),
-              ),
+              .map((track) => music.playbackTrack(generation, track)),
           next: next,
           listenForTrack: () => music.listenForTrack(generation),
         );
@@ -540,7 +583,9 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
             value: 'artist',
             child: Text('Más de este canal'),
           ),
-        if (track != null && widget.controller.device != null)
+        if (track != null &&
+            widget.connection.isDirect &&
+            widget.controller.device != null)
           PopupMenuItem(
             value: 'file',
             enabled: !widget.controller.pickingAudio,
@@ -569,11 +614,7 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
     final queue = tracks
         .skip(start)
         .take(100)
-        .map(
-          (item) => item.toPlaybackTrack(
-            deviceAudio: widget.controller.deviceAudio(item.id),
-          ),
-        )
+        .map((item) => widget.controller.playbackTrack(generation, item))
         .toList();
     final music = widget.controller;
     final controller = ref.read(trackPlaybackControllerProvider);
@@ -582,7 +623,7 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
         queue,
         initialIndex: selectedIndex - start,
         shuffled: shuffled,
-        listenForTrack: widget.connection.isDirect
+        listenForTrack: widget.connection.nativeCatalog
             ? () => music.listenForTrack(generation)
             : null,
         onPreviewListened: widget.connection.isPreview
@@ -602,7 +643,7 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
     MusicSurface.playlist => _playlistTitle ?? 'Playlist',
     MusicSurface.search => 'Buscar',
     MusicSurface.history =>
-      widget.connection.isDirect ? 'Recientes en Mysic' : 'Recientes',
+      widget.connection.nativeCatalog ? 'Recientes en Mysic' : 'Recientes',
     MusicSurface.mysicRecents => 'Recientes en Mysic',
     MusicSurface.onRepeat => 'En repetición',
     MusicSurface.artist => 'Más de este canal',
@@ -647,9 +688,25 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
             Text(
               widget.connection.isPreview
                   ? 'Simulación de YouTube Music · ${account.name}'
+                  : widget.connection.channelOnly
+                  ? 'Canal de YouTube · ${account.name}'
+                  : widget.connection.isDesktop
+                  ? 'YouTube Music · ${account.name} (escritorio)'
                   : 'YouTube Music · ${account.name}',
               style: Theme.of(context).textTheme.labelLarge,
             ),
+            if (widget.connection.channelOnly &&
+                {
+                  MusicSurface.home,
+                  MusicSurface.songs,
+                }.contains(widget.surface))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Text(widget.connection.accessDescription),
+              ),
+            if (widget.connection.channelOnly &&
+                widget.surface == MusicSurface.home)
+              DesktopMusicAccess(widget.controller),
             if (widget.surface == MusicSurface.home &&
                 widget.connection.capabilities.contains('onRepeat'))
               ListTile(
@@ -688,7 +745,7 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
                       if (widget.connection.capabilities.contains('songs'))
                         MusicSurface.songs: 'Canciones',
                       if (widget.connection.capabilities.contains('liked'))
-                        MusicSurface.liked: widget.connection.isDirect
+                        MusicSurface.liked: widget.connection.nativeCatalog
                             ? 'Me gusta de YouTube Music'
                             : 'Me gusta',
                       MusicSurface.playlists: 'Playlists',
@@ -707,12 +764,13 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
                   ],
                 ),
               ),
-            if (_surface == MusicSurface.songs && widget.connection.isDirect)
+            if (_surface == MusicSurface.songs &&
+                widget.connection.nativeCatalog)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Text('Canciones de tu biblioteca musical'),
               ),
-            if (widget.connection.isDirect &&
+            if (widget.connection.nativeCatalog &&
                 firstPlayable != null &&
                 const {
                   MusicSurface.songs,
@@ -772,8 +830,8 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
                   maxLength: 120,
                   textInputAction: TextInputAction.search,
                   decoration: InputDecoration(
-                    labelText: widget.connection.isDirect
-                        ? 'Buscar grabaciones en YouTube'
+                    labelText: widget.connection.nativeCatalog
+                        ? 'Buscar música por canción o artista'
                         : 'Buscar en YouTube Music',
                     counterText: '',
                     suffixIcon: IconButton(
@@ -836,7 +894,7 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
                   ),
                   title: Text(item.title),
                   subtitle: item.isPrivate ? const Text('Privada') : null,
-                  trailing: widget.connection.isDirect
+                  trailing: widget.connection.nativeCatalog
                       ? _actions(item)
                       : const Icon(Icons.chevron_right),
                   onTap: () => context.push(
@@ -852,7 +910,9 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
                         : Icons.music_note,
                   ),
                   title: Text(item.title),
-                  trailing: widget.connection.isDirect ? _actions(item) : null,
+                  trailing: widget.connection.nativeCatalog
+                      ? _actions(item)
+                      : null,
                   subtitle: Text(
                     [
                       item.artist,
@@ -861,10 +921,10 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
                         MaterialLocalizations.of(
                           context,
                         ).formatShortDate(item.listenedAt!.toLocal()),
-                      if (widget.connection.isDirect &&
+                      if (widget.connection.nativeCatalog &&
                           widget.controller.deviceAudio(item.id) != null)
                         'En este dispositivo'
-                      else if (widget.connection.isDirect &&
+                      else if (widget.connection.nativeCatalog &&
                           !_canPlayTrack(item))
                         'Solo biblioteca',
                     ].join(' · '),
@@ -895,7 +955,7 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
                   !widget.connection.capabilities.contains(_surface.name)
                       ? 'Esta función no está habilitada para la cuenta.'
                       : _surface == MusicSurface.search && _query == null
-                      ? (widget.connection.isDirect
+                      ? (widget.connection.nativeCatalog
                             ? 'Busca por canción o artista.'
                             : 'Busca canciones y playlists.')
                       : _cursor != null

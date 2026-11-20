@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../application/connected_controller.dart';
 import '../application/connected_host.dart';
 import 'music_mode_host.dart';
+import 'desktop_music_access.dart';
 
 class ConnectedTile extends StatelessWidget {
   const ConnectedTile({super.key, this.account = false});
@@ -85,7 +86,10 @@ class ConnectedScreen extends StatelessWidget {
                 );
                 if (confirmed == true && model.alive) {
                   if (context.mounted) {
-                    MusicModeScope.of(context)?.useLocal(disconnecting: true);
+                    final music = MusicModeScope.of(context);
+                    if (music?.connection?.isDesktop != true) {
+                      music?.useLocal(disconnecting: true);
+                    }
                   }
                   await model.unlink();
                 }
@@ -107,14 +111,27 @@ class ConnectedScreen extends StatelessWidget {
         child: model == null
             ? const Center(child: Text('El piloto está desactivado.'))
             : listing
-            ? ListTile(
-                leading: const Icon(Icons.account_circle_outlined),
-                title: Text(connection!.channel!.title),
-                subtitle: const Text('Canal vinculado'),
-                trailing: TextButton(
-                  onPressed: () => context.go('/library'),
-                  child: const Text('Biblioteca'),
-                ),
+            ? ListView(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.account_circle_outlined),
+                    title: Text(connection!.channel!.title),
+                    subtitle: Text(
+                      MusicModeScope.of(context)?.connection?.isDesktop == true
+                          ? 'Canal vinculado con Google'
+                          : (MusicModeScope.of(
+                                  context,
+                                )?.connection?.accessDescription ??
+                                'Canal vinculado'),
+                    ),
+                    trailing: TextButton(
+                      onPressed: () => context.go('/library'),
+                      child: const Text('Biblioteca'),
+                    ),
+                  ),
+                  if (MusicModeScope.of(context) case final music?)
+                    DesktopMusicAccess(music),
+                ],
               )
             : _LinkPanel(model: model),
       ),

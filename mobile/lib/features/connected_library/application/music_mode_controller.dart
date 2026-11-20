@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_config.dart';
@@ -11,6 +13,8 @@ import '../../playback/application/playback_providers.dart';
 import '../../history/application/listening_tracker.dart'
     show MusicListenCallback;
 import '../data/device_recordings.dart';
+import '../data/desktop_music_client.dart';
+import '../../search/domain/catalog_track.dart';
 import '../data/music_mode_client.dart';
 import '../domain/music_mode.dart';
 
@@ -28,15 +32,20 @@ final musicModeControllerProvider = Provider.autoDispose
         keepSessionOnForbidden: true,
       );
       final playback = ref.watch(trackPlaybackControllerProvider);
+      bool owns() => auth.currentUser?.uid == uid;
+      final desktop = !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+          ? DesktopMusicClient(DesktopSessionStore(uid), owns)
+          : null;
       final controller = MusicModeController(
-        MusicModeClient(api),
-        () => auth.currentUser?.uid == uid,
+        MusicModeClient(api, desktop: desktop),
+        owns,
         playback.clear,
         device: DeviceRecordings(uid),
         onDeviceAudioRemoved: playback.removeDeviceAudio,
       );
       ref.onDispose(() {
         controller.dispose();
+        desktop?.close();
         api.close();
       });
       return controller;
@@ -83,6 +92,68 @@ class MusicModeController extends ChangeNotifier {
               connection == null ||
               connection?.serverPending == true));
   int get revision => _revision;
+  CatalogTrack playbackTrack(String generation, MusicTrack track) =>
+      track.toPlaybackTrack(
+        deviceAudio: deviceAudio(track.id),
+        readAudio: connection?.isDesktop == true
+            ? _client.desktop!.audioReader(generation, track.id)
+            : null,
+      );
+  bool get hasDesktopSession => _client.desktop?.hasSession == true;
+  bool get supportsDesktop => _client.desktop != null;
+
+  Future<void> connectDesktop(
+    String email,
+    String password, {
+    required bool remember,
+  }) async {
+    if (!_active || busy || _client.desktop == null) {
+      throw const ApiFailure('Espera a que termine la consulta.');
+    }
+    busy = true;
+    final epoch = ++_bindingEpoch;
+    notifyListeners();
+    try {
+      final next = await _client.desktop!.login(
+        email,
+        password,
+        remember: remember,
+      );
+      if (!_active || epoch != _bindingEpoch) return;
+      transitioning = true;
+      _forgetData();
+      _files = {};
+      _fileGeneration = null;
+      await _clearPlayback();
+      if (!_active || epoch != _bindingEpoch) return;
+      connection = next;
+      wantsMusic = true;
+      _localOverride = false;
+      failed = false;
+      failureCode = null;
+    } finally {
+      busy = false;
+      transitioning = false;
+      if (_active) {
+        notifyListeners();
+        if (_refreshAgain) {
+          _refreshAgain = false;
+          unawaited(refresh());
+        }
+      }
+    }
+  }
+
+  Future<void> disconnectDesktop() async {
+    if (!_active || busy || _client.desktop == null) return;
+    await _change(() async {
+      await _client.desktop!.disconnect();
+      return _client.connection();
+    }, true);
+    if (_active && connection?.isDirect == true && device != null) {
+      await refresh();
+    }
+  }
 
   bool isCurrent(String generation) =>
       _active &&
@@ -170,6 +241,9 @@ class MusicModeController extends ChangeNotifier {
       final changed =
           connection?.generation != next.generation ||
           connection?.status != next.status;
+      if (!changed && connection?.personalization != next.personalization) {
+        _revision++;
+      }
       if (!changed && connection?.activityEpoch != next.activityEpoch) {
         _revision++;
         _pendingListens.removeWhere(
@@ -210,7 +284,8 @@ class MusicModeController extends ChangeNotifier {
       wantsMusic =
           !_localOverride &&
           (next.status == MusicLinkStatus.linked ||
-              next.status == MusicLinkStatus.expired);
+              next.status == MusicLinkStatus.expired ||
+              (next.isDesktop && next.status == MusicLinkStatus.unavailable));
     } catch (_) {
       if (_active && epoch == _bindingEpoch) failed = true;
     } finally {
@@ -321,7 +396,11 @@ class MusicModeController extends ChangeNotifier {
         if (error.code == 'MUSIC_LINK_CHANGED' ||
             error.code == 'MUSIC_RECONNECT') {
           unawaited(refresh(invalidate: true));
-        } else if (error.code == 'MYSIC_ACTIVITY_CHANGED') {
+        } else if (error.code == 'DESKTOP_EXPIRED' ||
+            error.code == 'DESKTOP_MUSIC_LINK' ||
+            (error.code == 'MUSIC_ACCESS_DENIED' &&
+                connection?.channelOnly != true) ||
+            error.code == 'MYSIC_ACTIVITY_CHANGED') {
           unawaited(refresh());
         }
       }

@@ -13,6 +13,25 @@ class PlaybackSourceFailure implements Exception {
   const PlaybackSourceFailure();
 }
 
+/// A byte range from a track, supplied directly to the native player.
+typedef TrackAudioReader =
+    Future<TrackAudioRange> Function(int? start, int? end);
+
+class TrackAudioRange {
+  const TrackAudioRange(
+    this.stream,
+    this.contentType, {
+    this.length,
+    this.total,
+    this.offset,
+    required this.acceptsRanges,
+  });
+  final Stream<List<int>> stream;
+  final String contentType;
+  final int? length, total, offset;
+  final bool acceptsRanges;
+}
+
 abstract interface class TrackAudioEngine {
   Stream<TrackAudioPhase> get states;
   Stream<Duration> get positions;
@@ -25,6 +44,7 @@ abstract interface class TrackAudioEngine {
     String token, {
     Uri? licensedAudio,
     Uri? deviceAudio,
+    TrackAudioReader? readAudio,
     bool refresh = false,
   });
   void cancelLoad();

@@ -240,7 +240,10 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
         final music = ref.read(
           musicModeControllerProvider(widget.profile.firebaseUid),
         );
-        if (music.connection?.isPreview == true) return;
+        if (music.connection?.isPreview == true ||
+            music.connection?.isDesktop == true) {
+          return;
+        }
         if (confirmed) {
           unawaited(music.useLinkedAccount());
           _router.go('/library');
