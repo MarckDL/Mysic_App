@@ -59,7 +59,7 @@ interface Access {
 export class AccountMusicService extends ChannelMusicService {
   private readonly pendingPages = new LruCache<PendingPage>(1024, 15 * 60_000);
   private readonly verifiedAccess = new LruCache<Access>(1024, 5 * 60_000);
-  private readonly transientAccess = new LruCache<Access>(1024, 15_000);
+  private readonly recentAccess = new LruCache<Access>(1024, 15_000);
   private readonly checkingAccess = new Map<string, Promise<Access>>();
   constructor(
     link: YoutubeLinkService,
@@ -73,13 +73,20 @@ export class AccountMusicService extends ChannelMusicService {
   private accessKey(uid: string, generation: string) {
     return JSON.stringify([uid, generation]);
   }
-  private async access(uid: string, generation: string): Promise<Access> {
+  private async access(
+    uid: string,
+    generation: string,
+    recheck = false,
+  ): Promise<Access> {
     const key = this.accessKey(uid, generation);
-    const cached =
-      this.verifiedAccess.get(key) ?? this.transientAccess.get(key);
-    if (cached) return cached;
     const pending = this.checkingAccess.get(key);
     if (pending) return pending;
+    // A manual refresh can revisit an older channel-only decision, but shares
+    // the same recent result as other requests for this particular binding.
+    const recent = this.recentAccess.get(key);
+    if (recent) return recent;
+    const stable = this.verifiedAccess.get(key);
+    if (stable && (!recheck || stable.status === 'verified')) return stable;
     const check = this.checkAccess(uid, generation, key);
     this.checkingAccess.set(key, check);
     try {
@@ -101,6 +108,8 @@ export class AccountMusicService extends ChannelMusicService {
       async (_channel, _binding, read): Promise<Access> => {
         try {
           const proof = await read((ctx) => this.catalog.verify(ctx));
+          if (proof === 'personalHome')
+            return this.availableCollections(read, ['home']);
           if (proof === 'privatePlaylists')
             return this.availableCollections(read, [
               'playlists',
@@ -122,10 +131,12 @@ export class AccountMusicService extends ChannelMusicService {
         }
       },
     );
-    (state.status === 'unverified' || state.status === 'partialMusic'
-      ? this.transientAccess
-      : this.verifiedAccess
-    ).set(key, state);
+    this.recentAccess.set(key, state);
+    if (state.status === 'verified' || state.status === 'channelOnly') {
+      this.verifiedAccess.set(key, state);
+    } else {
+      this.verifiedAccess.delete(key);
+    }
     return state;
   }
   private async availableCollections(
@@ -148,7 +159,8 @@ export class AccountMusicService extends ChannelMusicService {
         (!(result.reason instanceof LinkError) || result.reason.status >= 429),
     );
     const available = [...confirmed, ...granted];
-    if (granted.includes('albums')) available.push('album');
+    if (granted.includes('albums') || confirmed.includes('home'))
+      available.push('album');
     if (granted.includes('artists')) available.push('artist');
     return {
       status: available.length
@@ -159,11 +171,11 @@ export class AccountMusicService extends ChannelMusicService {
       collections: available,
     };
   }
-  override async connection(uid: string) {
+  override async connection(uid: string, recheckMusic = false) {
     const state = await super.connection(uid);
     if (state.status !== 'linked' || !state.generation)
       return { ...state, personalization: 'notLinked', capabilities: [] };
-    const access = await this.access(uid, state.generation);
+    const access = await this.access(uid, state.generation, recheckMusic);
     return {
       ...state,
       personalization: access.status,
@@ -187,12 +199,7 @@ export class AccountMusicService extends ChannelMusicService {
     video: VideoDetails | undefined,
     entryId?: string,
   ): MusicTrack[] {
-    const rows = super.mapTrack(
-      video && (video.isMusicCategory || video.isRecording)
-        ? { ...video, isRecording: true }
-        : undefined,
-      entryId,
-    );
+    const rows = super.mapTrack(video, entryId);
     return rows.map((row) => ({
       ...row,
       playback: row.audioUrl ? 'licensed' : 'native',
@@ -226,8 +233,15 @@ export class AccountMusicService extends ChannelMusicService {
       return this.readAccount(uid, generation, request, limit, cursor, signal);
     }
     const access = await this.access(uid, generation);
+    // A personalized mix or artist on Home can be opened even if the private
+    // playlists or subscriptions shelf itself wasn't granted.
+    const homeDetail =
+      access.collections.includes('home') &&
+      !access.collections.includes(request.surface) &&
+      (request.surface === 'playlist' || request.surface === 'artist');
     if (
       access.status !== 'verified' &&
+      !homeDetail &&
       !access.collections.includes(request.surface)
     ) {
       if (channelSurfaces.includes(request.surface))
@@ -249,6 +263,18 @@ export class AccountMusicService extends ChannelMusicService {
         signal,
       );
     } catch (err) {
+      if (
+        homeDetail &&
+        err instanceof LinkError &&
+        ((cursor && err.code === 'INVALID_CURSOR') ||
+          (!cursor &&
+            ['MUSIC_ACCESS_DENIED', 'MUSIC_PLAYLIST_NOT_FOUND'].includes(
+              err.code,
+            )))
+      ) {
+        // The same screen also opens Google-channel playlists and their scoped continuations.
+        return super.read(uid, generation, request, limit, cursor, signal);
+      }
       // A single inaccessible playlist does not invalidate the whole account.
       if (
         !(err instanceof LinkError) ||
@@ -258,7 +284,7 @@ export class AccountMusicService extends ChannelMusicService {
         throw err;
       const key = this.accessKey(uid, generation);
       this.verifiedAccess.delete(key);
-      this.transientAccess.delete(key);
+      this.recentAccess.delete(key);
       if (!channelSurfaces.includes(request.surface)) throw err;
       if (cursor) throw new LinkError(409, 'CURSOR_EXPIRED');
       return super.read(uid, generation, request, limit, undefined, signal);
@@ -360,11 +386,8 @@ export class AccountMusicService extends ChannelMusicService {
             continue;
           }
           const item = state.rows[0]!;
-          // Even the Music playlist shelf may contain ordinary YouTube lists. Require a real musical entry, including in a later page of a mixed playlist.
-          if (
-            item.kind === 'playlist' &&
-            (request.surface === 'playlists' || request.surface === 'home')
-          ) {
+          // The library shelf can include mixed lists. Home recommendations come directly from Music.
+          if (item.kind === 'playlist' && request.surface === 'playlists') {
             if (calls >= 6) break;
             let contents;
             try {
@@ -383,7 +406,15 @@ export class AccountMusicService extends ChannelMusicService {
                 throw err;
             }
             calls++;
-            if (!contents?.items.some((row) => row.kind === 'track')) {
+            const emptyMusicPlaylist =
+              contents?.items.length === 0 &&
+              contents.excluded === 0 &&
+              !contents.next &&
+              !state.playlistCursor;
+            if (
+              !emptyMusicPlaylist &&
+              !contents?.items.some((row) => row.kind === 'track')
+            ) {
               if (contents?.next) {
                 if (state.playlistTokens?.includes(contents.next))
                   throw new LinkError(503, 'MUSIC_CATALOG_RESPONSE');
@@ -401,7 +432,10 @@ export class AccountMusicService extends ChannelMusicService {
             state.playlistTokens = undefined;
           }
           state.rows.shift();
-          const key = item.kind + ':' + item.id;
+          const key =
+            request.surface === 'home' && item.shelfTitle
+              ? JSON.stringify([item.shelfTitle, item.kind, item.id])
+              : item.kind + ':' + item.id;
           if (!detail && page.seen.has(key)) continue;
           if (!detail) {
             page.seen.add(key);

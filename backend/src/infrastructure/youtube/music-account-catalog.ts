@@ -52,7 +52,7 @@ export interface AccountMusicPage {
   excluded: number;
 }
 export interface MusicAccountCatalog {
-  verify(ctx: ReadContext): Promise<'privatePlaylists' | void>;
+  verify(ctx: ReadContext): Promise<'privatePlaylists' | 'personalHome' | void>;
   verifyCollection?(
     ctx: ReadContext,
     surface: 'liked' | 'albums' | 'artists',
@@ -103,15 +103,17 @@ function card(
         title,
         thumbnailUrl,
       };
+    // Music shelves can send the playlist ID directly or its VL browse ID.
+    const playlistId = id.replace(/^VL/, '');
     if (
-      (type === 'MUSIC_PAGE_TYPE_PLAYLIST' ||
-        (!type && surface === 'playlists')) &&
-      id.startsWith('VL') &&
-      id.length > 2
+      playlistId &&
+      ((type === 'MUSIC_PAGE_TYPE_PLAYLIST' &&
+        (id.startsWith('VL') || /^(?:PL|RD|OLAK5uy_)[\w-]+$/.test(id))) ||
+        (!type && surface === 'playlists' && id.startsWith('VL')))
     )
       return {
         kind: 'playlist',
-        id: id.slice(2),
+        id: playlistId,
         title,
         private: false,
         thumbnailUrl,
@@ -127,7 +129,9 @@ function card(
     'musicPlayButtonRenderer',
     'playNavigationEndpoint',
   );
-  const watch = [titleEndpoint, root, overlay].map((e) => obj(e.watchEndpoint));
+  const endpoints = [titleEndpoint, root, overlay];
+  if (endpoints.some((endpoint) => endpoint.reelWatchEndpoint)) return;
+  const watch = endpoints.map((endpoint) => obj(endpoint.watchEndpoint));
   const trackId =
     str(obj(value.playlistItemData).videoId) ||
     watch.map((w) => str(w.videoId)).find(Boolean) ||
@@ -220,16 +224,16 @@ export function parseMusicAccountPage(
   const page: AccountMusicPage = { items: [], excluded: 0 };
   const detail = surface === 'playlist' || surface === 'album';
   let primary = false;
-  function visit(value: unknown): void {
+  function visit(value: unknown, shelfTitle?: string): void {
     if (Array.isArray(value)) {
-      value.forEach(visit);
+      value.forEach((item) => visit(item, shelfTitle));
       return;
     }
     const node = obj(value);
     for (const [key, child] of Object.entries(node)) {
       const r = obj(child);
       if (key === 'tabRenderer') {
-        if (r.selected !== false) visit(r.content);
+        if (r.selected !== false) visit(r.content, shelfTitle);
         continue;
       }
       if (key === 'tabs') {
@@ -237,7 +241,7 @@ export function parseMusicAccountPage(
         const selected = tabs.filter(
           (t) => at(t, 'tabRenderer').selected === true,
         );
-        visit(selected.length ? selected : tabs.slice(0, 1));
+        visit(selected.length ? selected : tabs.slice(0, 1), shelfTitle);
         continue;
       }
       if (
@@ -254,14 +258,26 @@ export function parseMusicAccountPage(
         visit(r.header);
         continue;
       }
-      if (key === 'musicCarouselShelfRenderer') {
-        // An individual home shelf has its own continuation. Only the outer feed advances Inicio.
-        if (!detail)
+      if (
+        key === 'musicCarouselShelfRenderer' ||
+        (surface === 'home' && key === 'musicShelfRenderer')
+      ) {
+        // Shelf continuations are local to the shelf. Only the outer feed advances Home.
+        if (!detail) {
+          const heading =
+            surface === 'home'
+              ? label(
+                  at(r, 'header', 'musicCarouselShelfBasicHeaderRenderer')
+                    .title ?? r.title,
+                ).trim()
+              : '';
           visit(
             list(r.contents).filter(
               (item) => !obj(item).continuationItemRenderer,
             ),
+            heading || shelfTitle,
           );
+        }
         continue;
       }
       if (
@@ -279,7 +295,7 @@ export function parseMusicAccountPage(
           (!only[surface] || item.kind === only[surface]) &&
           !(surface === 'playlists' && ['LM', 'SE'].includes(item.id))
         )
-          page.items.push(item);
+          page.items.push(shelfTitle ? { ...item, shelfTitle } : item);
         else page.excluded++;
         continue;
       }
@@ -329,7 +345,7 @@ export function parseMusicAccountPage(
         ].includes(key)
       ) {
         primary = true;
-        visit(child);
+        visit(child, shelfTitle);
       }
     }
   }
@@ -351,29 +367,41 @@ export class OAuthMusicCatalog implements MusicAccountCatalog {
     private readonly videoDetails: Pick<
       YoutubeDataLibraryProvider,
       'getVideos'
-    > = new YoutubeDataLibraryProvider(transport),
+    > = new YoutubeDataLibraryProvider(transport, { verifyMusic: true }),
   ) {}
-  // A public Home feed is also valid JSON. Require positive sign-in evidence in addition
-  // to a private collection before reporting personalized access to the mobile client.
+  // Home and the private playlists shelf can be granted independently.
   async verify(ctx: ReadContext) {
-    const library = await this.request(ctx, { surface: 'playlists' });
-    parseMusicAccountPage(library, 'playlists');
-    try {
-      const home = await this.request(ctx, { surface: 'home' });
-      parseMusicAccountPage(home, 'home');
-      if (!this.signedIn(home))
-        throw new LinkError(503, 'MUSIC_CATALOG_RESPONSE');
-    } catch (error) {
-      // A rejected or anonymous Home does not revoke successfully verified Music playlists.
-      if (
-        this.signedIn(library) &&
-        error instanceof LinkError &&
-        ['MUSIC_ACCESS_DENIED', 'MUSIC_CATALOG_RESPONSE'].includes(error.code)
-      ) {
-        return 'privatePlaylists' as const;
+    const probe = async (surface: 'playlists' | 'home') => {
+      try {
+        await this.verifyCollection(ctx, surface);
+        return 'granted';
+      } catch (error) {
+        if (!(error instanceof LinkError)) throw error;
+        if (
+          error.code === 'MUSIC_ACCESS_DENIED' ||
+          error.code === 'MUSIC_PLAYLIST_NOT_FOUND'
+        )
+          return 'denied';
+        if (error.code === 'MUSIC_CATALOG_RESPONSE') return 'unknown';
+        throw error;
       }
-      throw error;
+    };
+    const [playlists, home] = await Promise.allSettled([
+      probe('playlists'),
+      probe('home'),
+    ]);
+    const playlistAccess =
+      playlists.status === 'fulfilled' && playlists.value === 'granted';
+    const homeAccess = home.status === 'fulfilled' && home.value === 'granted';
+    if (playlistAccess && homeAccess) return;
+    if (homeAccess) return 'personalHome' as const;
+    if (playlistAccess) return 'privatePlaylists' as const;
+    if (playlists.status === 'rejected') throw playlists.reason;
+    if (home.status === 'rejected') throw home.reason;
+    if (playlists.value === 'unknown' || home.value === 'unknown') {
+      throw new LinkError(503, 'MUSIC_CATALOG_RESPONSE');
     }
+    throw new LinkError(403, 'MUSIC_ACCESS_DENIED');
   }
   private signedIn(data: unknown) {
     const context = obj(obj(data).responseContext);
@@ -388,11 +416,11 @@ export class OAuthMusicCatalog implements MusicAccountCatalog {
   }
   async verifyCollection(
     ctx: ReadContext,
-    surface: 'liked' | 'albums' | 'artists',
+    surface: 'home' | 'playlists' | 'liked' | 'albums' | 'artists',
   ) {
     const data = await this.request(ctx, { surface });
-    parseMusicAccountPage(data, surface);
-    if (!this.signedIn(data))
+    const page = parseMusicAccountPage(data, surface);
+    if (!this.signedIn(data) || (surface === 'home' && !page.items.length))
       throw new LinkError(503, 'MUSIC_CATALOG_RESPONSE');
   }
   private async request(
@@ -480,6 +508,10 @@ export class OAuthMusicCatalog implements MusicAccountCatalog {
   }
   async read(ctx: ReadContext, request: AccountSurface, continuation?: string) {
     const json = await this.request(ctx, request, continuation);
+    if (request.surface === 'home' && !continuation && !this.signedIn(json)) {
+      // Verification is cached; never serve an anonymous Home as this user's feed.
+      throw new LinkError(403, 'MUSIC_ACCESS_DENIED');
+    }
     const candidates = new Set<string>();
     const confirmed = new Set<string>();
     const first = parseMusicAccountPage(
@@ -496,7 +528,7 @@ export class OAuthMusicCatalog implements MusicAccountCatalog {
         ids.slice(start, start + 50),
       );
       for (const video of details)
-        if (video.isMusicCategory && video.availability === 'available')
+        if (video.isRecording && video.availability === 'available')
           confirmed.add(video.id);
     }
     return confirmed.size

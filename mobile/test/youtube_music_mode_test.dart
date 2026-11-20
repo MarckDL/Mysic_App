@@ -52,6 +52,7 @@ class _SessionFixture extends MusicModeClient {
   }) : super(api);
   final bool direct;
   bool channelOnly = false;
+  int explicitChecks = 0;
   final List<MusicAccount> accounts;
   MusicAccount? account;
   int links = 0;
@@ -65,7 +66,8 @@ class _SessionFixture extends MusicModeClient {
   final recorded = <String, MusicTrack>{};
 
   @override
-  Future<MusicConnection> connection() async {
+  Future<MusicConnection> connection({bool recheckMusic = false}) async {
+    if (recheckMusic) explicitChecks++;
     final pending = pendingConnection;
     if (pending != null) {
       pendingConnection = null;
@@ -299,6 +301,116 @@ class _ConsentClient extends oauth.Client {
 
 void main() {
   testWidgets(
+    'Actualizar Inicio vuelve a consultar el acceso y conserva el reproductor',
+    (tester) async {
+      final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
+      final api = AuthenticatedApiClient(auth, baseUrl: 'https://example.test');
+      addTearDown(api.close);
+      final fixture = _SessionFixture([a], api, direct: true)
+        ..account = a
+        ..channelOnly = true;
+      var clears = 0;
+      final model = MusicModeController(fixture, () => true, () async {
+        clears++;
+      });
+      addTearDown(model.dispose);
+      await model.refresh();
+      final initialClears = clears;
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: MusicModeScope(
+              controller: model,
+              child: const MusicModeSurface(surface: MusicSurface.home),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Recomendado para Cuenta A'), findsNothing);
+      fixture.channelOnly = false;
+      await tester.tap(find.byTooltip('Actualizar'));
+      await tester.pumpAndSettle();
+      expect(fixture.explicitChecks, 1);
+      expect(find.text('Recomendado para Cuenta A'), findsOneWidget);
+      expect(clears, initialClears);
+      await tester.tap(find.byTooltip('Actualizar'));
+      await tester.pumpAndSettle();
+      expect(fixture.explicitChecks, 1);
+    },
+  );
+  testWidgets('Inicio respeta el orden y los títulos de YouTube Music', (
+    tester,
+  ) async {
+    final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
+    final api = AuthenticatedApiClient(auth, baseUrl: 'https://example.test');
+    addTearDown(api.close);
+    final fixture = _SessionFixture([a], api, direct: true)..account = a;
+    final model = MusicModeController(fixture, () => true, () async {});
+    addTearDown(model.dispose);
+    await model.refresh();
+    fixture.pending = Completer<MusicPage>()
+      ..complete(
+        const MusicPage(
+          [
+            MusicAlbum(
+              'album',
+              'Disco de prueba',
+              shelfTitle: 'Vuelve a escuchar',
+            ),
+            MusicPlaylist(
+              'mix',
+              'Mix de prueba',
+              false,
+              shelfTitle: 'Vuelve a escuchar',
+            ),
+            MusicTrack(
+              'aaaaaaaaaaa',
+              'Primera canción',
+              'Artista',
+              160,
+              false,
+              null,
+              nativePlayback: true,
+              shelfTitle: 'Selecciones rápidas',
+            ),
+          ],
+          null,
+          null,
+          0,
+        ),
+      );
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: MusicModeScope(
+            controller: model,
+            child: const MusicModeSurface(surface: MusicSurface.home),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final order = [
+      'Vuelve a escuchar',
+      'Disco de prueba',
+      'Mix de prueba',
+      'Selecciones rápidas',
+      'Primera canción',
+    ];
+    double previousTop = double.negativeInfinity;
+    for (final text in order) {
+      final label = find.text(text);
+      expect(label, findsOneWidget);
+      final top = tester.getTopLeft(label).dy;
+      expect(top, greaterThan(previousTop));
+      previousTop = top;
+    }
+    expect(find.text('Recomendaciones de YouTube Music'), findsNothing);
+    expect(find.text('En repetición'), findsNothing);
+  });
+
+  testWidgets(
     'el acceso a Me gusta del reproductor abre la colección de la fuente activa',
     (tester) async {
       final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
@@ -328,6 +440,34 @@ void main() {
       expect(find.text('Me gusta de mi canal'), findsOneWidget);
       expect(find.text('Canción de Cuenta A'), findsOneWidget);
       expect(find.text('Opciones de conexión'), findsNothing);
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: MusicModeScope(
+              controller: model,
+              child: const MusicModeSurface(surface: MusicSurface.songs),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Me gusta de mi canal'), findsOneWidget);
+      expect(find.text('Canal de YouTube · Cuenta A'), findsOneWidget);
+      expect(find.textContaining('Google autorizó'), findsNothing);
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: MusicModeScope(
+              controller: model,
+              child: const MusicModeSurface(surface: MusicSurface.home),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Música que te gusta en YouTube'), findsOneWidget);
+      expect(find.text('Tus playlists musicales'), findsNothing);
+      expect(find.text('Recomendaciones de YouTube Music'), findsNothing);
     },
   );
   test(
@@ -650,7 +790,12 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Abrir cuenta'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Gestionar cuenta vinculada'));
+      expect(find.text('Borrar actividad de Mysic'), findsNothing);
+      await tester.tap(find.text('Historial de escucha'));
+      await tester.pumpAndSettle();
+      expect(find.text('Borrar actividad de Mysic'), findsOneWidget);
+      expect(find.text('Registrar escuchas en Mysic'), findsOneWidget);
+      await tester.tap(find.text('YouTube Music'));
       await tester.pumpAndSettle();
       expect(find.text('Cuenta de YouTube Music'), findsOneWidget);
       expect(find.byTooltip('Abrir YouTube Music'), findsNothing);
@@ -720,7 +865,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Cuenta A'));
     await tester.pumpAndSettle();
-    expect(find.text('Modo activo · Cuenta A'), findsOneWidget);
+    expect(find.text('Cuenta A'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.text('Canción de Cuenta A'), findsOneWidget);
@@ -738,7 +883,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Lista de Cuenta A'));
     await tester.pumpAndSettle();
-    expect(find.text('Elementos omitidos: 2'), findsOneWidget);
+    expect(find.textContaining('Elementos omitidos'), findsNothing);
     await tester.tap(find.text('Siguiente de Cuenta A'));
     await tester.pumpAndSettle();
     expect(find.text('Siguiente de Cuenta A').hitTestable(), findsOneWidget);

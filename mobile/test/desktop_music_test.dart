@@ -136,6 +136,10 @@ class _DesktopService {
             case '/api/youtube/library':
               reply({
                 'likedSongs': [_song],
+                'playlists': [
+                  if (query['fresh'] == '1')
+                    {'id': 'VLPLnew', 'title': 'Recién creada'},
+                ],
               });
               return;
             case '/api/youtube/library/albums':
@@ -146,6 +150,10 @@ class _DesktopService {
               });
               return;
             case '/api/youtube/library/playlists':
+              if (legacy) {
+                reply({}, status: 404);
+                return;
+              }
               reply({
                 'items': [
                   {'id': 'VLPL123', 'title': 'Playlist musical'},
@@ -306,6 +314,12 @@ void main() {
       expect(liked.items.single.title, 'Again');
       expect(liked.nextCursor, isNull);
       expect(server.requests.last.uri.path, '/api/youtube/library');
+      final lists = await client.page(
+        connection.generation!,
+        MusicSurface.playlists,
+      );
+      expect(lists.items.single.title, 'Recién creada');
+      expect(server.requests.last.uri.queryParameters, {'fresh': '1'});
     },
   );
   test(
@@ -416,6 +430,43 @@ void main() {
         (await anonymous.publicSongs('again', null)).items.single.title,
         'Again',
       );
+    },
+  );
+  test(
+    'el Inicio mantiene las secciones de escritorio y las repeticiones entre ellas',
+    () {
+      final page = OriginalMusicCatalog.homePage({
+        'personalized': true,
+        'shelves': [
+          {
+            'title': 'Tus mixes',
+            'items': [
+              {'id': 'VLRD01', 'title': 'Mix 1', 'kind': 'playlist'},
+              {..._song, 'kind': 'song'},
+            ],
+          },
+          {
+            'title': 'Vuelve a escuchar',
+            'items': [
+              {..._song, 'kind': 'song'},
+            ],
+          },
+        ],
+      }, first: true);
+      expect(page.items.map((item) => item.shelfTitle), [
+        'Tus mixes',
+        'Tus mixes',
+        'Vuelve a escuchar',
+      ]);
+      expect(page.items.first, isA<MusicPlaylist>());
+      expect(page.items[1].id, page.items[2].id);
+      final fromBackend = MusicItem.fromJson({
+        'kind': 'album',
+        'id': 'MPRE01',
+        'title': 'Disco',
+        'shelfTitle': 'Tus mixes',
+      });
+      expect(fromBackend.shelfTitle, 'Tus mixes');
     },
   );
   test(
@@ -530,7 +581,13 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(home: Scaffold(body: DesktopMusicAccess(model))),
       );
-      await tester.tap(find.text('Conectar Mysic de escritorio'));
+      expect(find.text('Conectar Mysic de escritorio'), findsOneWidget);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: DesktopMusicAccess(model, forHome: true)),
+        ),
+      );
+      await tester.tap(find.text('Conectar mi Inicio de YouTube Music'));
       await tester.pumpAndSettle();
       expect(find.textContaining('myslc.duckdns.org'), findsOneWidget);
       expect(

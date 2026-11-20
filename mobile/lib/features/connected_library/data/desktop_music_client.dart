@@ -475,7 +475,9 @@ class DesktopMusicClient {
             cursor != null) {
           rethrow;
         }
-        final library = await get('library');
+        final library = await get('library', {
+          if (surface == MusicSurface.playlists) 'fresh': '1',
+        });
         return MusicPage(
           OriginalMusicCatalog.rows(library[legacyField], kind),
           null,

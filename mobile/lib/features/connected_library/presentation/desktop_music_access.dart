@@ -6,7 +6,8 @@ import '../application/music_mode_controller.dart';
 import '../domain/music_mode.dart';
 
 class DesktopMusicAccess extends StatelessWidget {
-  const DesktopMusicAccess(this.controller, {super.key});
+  const DesktopMusicAccess(this.controller, {this.forHome = false, super.key});
+  final bool forHome;
   final MusicModeController controller;
 
   @override
@@ -26,15 +27,19 @@ class DesktopMusicAccess extends StatelessWidget {
                 ? 'Biblioteca de Mysic de escritorio'
                 : saved && connection?.isDesktop != true
                 ? 'Usar la biblioteca de ${controller.desktopName}'
+                : forHome
+                ? 'Conectar mi Inicio de YouTube Music'
                 : 'Conectar Mysic de escritorio',
           ),
-          subtitle: Text(
-            linked
-                ? 'Cuenta de escritorio · ${connection!.account!.name}'
-                : saved && connection?.isDesktop != true
-                ? 'Cuenta guardada de Mysic de escritorio'
-                : 'Inicio personal, Me gusta, playlists y álbumes de YouTube Music.',
-          ),
+          subtitle: linked
+              ? Text(connection!.account!.name)
+              : saved
+              ? null
+              : Text(
+                  forHome
+                      ? 'Con tu cuenta de Mysic de escritorio'
+                      : 'Biblioteca personal de YouTube Music',
+                ),
           trailing: linked ? null : const Icon(Icons.chevron_right),
           onTap: linked || controller.busy
               ? null
@@ -44,6 +49,7 @@ class DesktopMusicAccess extends StatelessWidget {
                       context,
                       controller,
                       toDesktop: true,
+                      destination: forHome ? '/' : '/library',
                     );
                     return;
                   }
@@ -54,11 +60,12 @@ class DesktopMusicAccess extends StatelessWidget {
                   );
                   controller.cancelDesktopLink();
                   if (connected == true && context.mounted) {
-                    context.go('/library');
+                    context.go(forHome ? '/' : '/library');
                   }
                 },
         ),
-        if ((connection?.isDesktop == true || controller.hasDesktopSession) &&
+        if (!forHome &&
+            (connection?.isDesktop == true || controller.hasDesktopSession) &&
             !controller.busy)
           TextButton(
             onPressed: controller.disconnectDesktop,
@@ -73,10 +80,11 @@ Future<void> switchMusicSource(
   BuildContext context,
   MusicModeController controller, {
   required bool toDesktop,
+  String destination = '/library',
 }) async {
   try {
     await controller.switchSource(toDesktop: toDesktop);
-    if (context.mounted) context.go('/library');
+    if (context.mounted) context.go(destination);
   } on Object catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
