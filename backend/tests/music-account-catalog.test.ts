@@ -218,6 +218,42 @@ describe('catálogo de la cuenta de Music', () => {
     ]);
     expect(page.excluded).toBe(1);
   });
+  it('solo valida Music con identidad positiva, biblioteca privada e Inicio accesibles', async () => {
+    const ctx = {
+      access: 'test-account',
+      signal: new AbortController().signal,
+    };
+    const page = (auth?: boolean) =>
+      Response.json({
+        responseContext: {
+          mainAppWebResponseContext:
+            auth === undefined ? {} : { loggedOut: !auth },
+        },
+        contents: { sectionListRenderer: { contents: [] } },
+      });
+    const wire = vi.fn<typeof fetch>();
+    const catalog = new OAuthMusicCatalog(wire);
+    wire.mockResolvedValueOnce(page(true)).mockResolvedValueOnce(page(true));
+    await expect(catalog.verify(ctx)).resolves.toBeUndefined();
+    wire.mockResolvedValueOnce(page(true)).mockResolvedValueOnce(page(false));
+    await expect(catalog.verify(ctx)).rejects.toMatchObject({
+      code: 'MUSIC_ACCESS_DENIED',
+    });
+    wire.mockResolvedValueOnce(page()).mockResolvedValueOnce(page());
+    await expect(catalog.verify(ctx)).rejects.toMatchObject({
+      code: 'MUSIC_CATALOG_RESPONSE',
+    });
+    wire.mockResolvedValueOnce(
+      Response.json(
+        { error: { errors: [{ reason: 'quotaExceeded' }] } },
+        { status: 403 },
+      ),
+    );
+    await expect(catalog.verify(ctx)).rejects.toMatchObject({
+      status: 429,
+      code: 'YOUTUBE_QUOTA',
+    });
+  });
   it('envía la autorización del usuario solo a Music y usa la colección correspondiente a cada vista', async () => {
     const wire = vi
       .fn<typeof fetch>()
