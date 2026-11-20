@@ -59,12 +59,6 @@ class LibraryScreen extends ConsumerWidget {
                 title: const Text('YouTube Music'),
                 onTap: () => context.push('/account'),
               ),
-            ListTile(
-              leading: Icon(Icons.playlist_add_rounded, color: colors.primary),
-              title: const Text('Importar de YouTube Music'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => context.push('/imports/youtube-music'),
-            ),
             const Divider(height: 1),
             const ListTile(
               leading: Icon(Icons.download_outlined),

@@ -668,21 +668,6 @@ El listado de playlists incluye `thumbnailUrl` opcional, derivada de la primera
 pista según su posición. El backend consulta solo esa pista y el conteo para
 cada resumen. Las playlists vacías usan un icono de respaldo.
 
-## Importación desde Google Takeout — Sprint 14
-
-Flutter abre ZIP o CSV con el selector del sistema y procesa su contenido en
-un isolate. Solo envía nombres de playlists e identificadores YouTube al
-módulo Express `imports`. La aplicación de importación usa CatalogService y
-MusicProvider para revisar metadatos con dos pistas por lote y un máximo de
-dos lotes concurrentes por proceso. Las pantallas presentan la revisión y
-permiten confirmar las listas revisadas que tienen canciones reconocidas.
-
-PrismaImportRepository persiste borradores privados y serializa la confirmación
-por fila. El archivo y las cookies de Google permanecen fuera de la API.
-La importación se integra con el modelo de playlists y el reproductor existentes.
-Los contratos, límites y aceptación figuran en
-[el seguimiento del Sprint 14](18-sprint-14-importacion-youtube-music.md).
-
 ### Vinculación privada de YouTube
 
 Firebase identifica al propietario de Mysic. El módulo de integración autoriza por separado al canal de YouTube mediante OAuth web. Sus credenciales pertenecen al backend. Catálogo y reproducción conservan MusicProvider.

@@ -53,8 +53,9 @@ class _PlaybackProgressState extends State<PlaybackProgress> {
           child: SliderTheme(
             data: SliderTheme.of(context).copyWith(
               activeTrackColor: theme.colorScheme.primary,
-              inactiveTrackColor: const Color(0xFF5E596B),
-              disabledInactiveTrackColor: const Color(0xFF44414D),
+              inactiveTrackColor: theme.colorScheme.outlineVariant,
+              disabledInactiveTrackColor:
+                  theme.colorScheme.surfaceContainerHighest,
               trackHeight: 3,
               trackShape: const RoundedRectSliderTrackShape(),
               thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),

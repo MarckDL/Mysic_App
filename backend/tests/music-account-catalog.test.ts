@@ -239,6 +239,18 @@ describe('catálogo de la cuenta de Music', () => {
     await expect(catalog.verify(ctx)).rejects.toMatchObject({
       code: 'MUSIC_ACCESS_DENIED',
     });
+    wire.mockResolvedValueOnce(page(true)).mockResolvedValueOnce(page());
+    await expect(catalog.verify(ctx)).rejects.toMatchObject({
+      code: 'MUSIC_CATALOG_RESPONSE',
+    });
+    wire.mockResolvedValueOnce(page(true));
+    await expect(
+      catalog.verifyCollection(ctx, 'liked'),
+    ).resolves.toBeUndefined();
+    wire.mockResolvedValueOnce(page(false));
+    await expect(catalog.verifyCollection(ctx, 'albums')).rejects.toMatchObject(
+      { code: 'MUSIC_ACCESS_DENIED' },
+    );
     wire.mockResolvedValueOnce(page()).mockResolvedValueOnce(page());
     await expect(catalog.verify(ctx)).rejects.toMatchObject({
       code: 'MUSIC_CATALOG_RESPONSE',

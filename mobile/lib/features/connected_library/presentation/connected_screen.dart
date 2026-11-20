@@ -125,8 +125,21 @@ class ConnectedScreen extends StatelessWidget {
                                 'Canal vinculado'),
                     ),
                     trailing: TextButton(
-                      onPressed: () => context.go('/library'),
-                      child: const Text('Biblioteca'),
+                      onPressed: () {
+                        final music = MusicModeScope.of(context);
+                        if (music != null &&
+                            music.connection?.isDesktop == true) {
+                          switchMusicSource(context, music, toDesktop: false);
+                        } else {
+                          context.go('/library');
+                        }
+                      },
+                      child: Text(
+                        MusicModeScope.of(context)?.connection?.isDesktop ==
+                                true
+                            ? 'Usar este canal'
+                            : 'Biblioteca',
+                      ),
                     ),
                   ),
                   if (MusicModeScope.of(context) case final music?)

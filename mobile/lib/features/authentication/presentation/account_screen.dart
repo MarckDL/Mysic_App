@@ -1,3 +1,4 @@
+import '../../../app/mysic_theme.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -48,19 +49,33 @@ class AccountScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: CircleAvatar(
-                radius: 28,
-                child: Icon(Icons.person_outline, size: 30),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  children: [
+                    const MysicBrandMark(size: 48),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            currentProfile.preferredName,
+                            style: Theme.of(context).textTheme.headlineSmall,
+                          ),
+                          if (profile.email case final email?)
+                            Text(
+                              email,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              currentProfile.preferredName,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            if (profile.email case final email?) Text(email),
             const SizedBox(height: 16),
             ListTile(
               leading: const Icon(Icons.edit_outlined),
@@ -78,12 +93,6 @@ class AccountScreen extends ConsumerWidget {
             ),
             const MusicModeSettings(),
             if (localMode && music == null) const ConnectedTile(account: true),
-            if (localMode)
-              ListTile(
-                leading: const Icon(Icons.playlist_add_rounded),
-                title: const Text('Importar de YouTube Music'),
-                onTap: () => context.push('/imports/youtube-music'),
-              ),
             if (profile.canModerateComments)
               ListTile(
                 leading: const Icon(Icons.flag_outlined),

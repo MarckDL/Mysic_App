@@ -13,6 +13,7 @@ class DesktopMusicAccess extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!controller.supportsDesktop) return const SizedBox.shrink();
     final connection = controller.connection;
+    final saved = controller.hasDesktopSession;
     final linked =
         connection?.isDesktop == true &&
         connection?.status == MusicLinkStatus.linked;
@@ -23,22 +24,35 @@ class DesktopMusicAccess extends StatelessWidget {
           title: Text(
             linked
                 ? 'Biblioteca de Mysic de escritorio'
+                : saved && connection?.isDesktop != true
+                ? 'Usar la biblioteca de ${controller.desktopName}'
                 : 'Conectar Mysic de escritorio',
           ),
           subtitle: Text(
             linked
                 ? 'Cuenta de escritorio · ${connection!.account!.name}'
-                : 'Usa los Me gusta, las playlists y el Inicio de tu cuenta de escritorio.',
+                : saved && connection?.isDesktop != true
+                ? 'Cuenta guardada de Mysic de escritorio'
+                : 'Inicio personal, Me gusta, playlists y álbumes de YouTube Music.',
           ),
           trailing: linked ? null : const Icon(Icons.chevron_right),
           onTap: linked || controller.busy
               ? null
               : () async {
+                  if (saved && connection?.isDesktop != true) {
+                    await switchMusicSource(
+                      context,
+                      controller,
+                      toDesktop: true,
+                    );
+                    return;
+                  }
                   final connected = await showDialog<bool>(
                     context: context,
                     barrierDismissible: false,
                     builder: (_) => _DesktopLogin(controller),
                   );
+                  controller.cancelDesktopLink();
                   if (connected == true && context.mounted) {
                     context.go('/library');
                   }
@@ -52,6 +66,29 @@ class DesktopMusicAccess extends StatelessWidget {
           ),
       ],
     );
+  }
+}
+
+Future<void> switchMusicSource(
+  BuildContext context,
+  MusicModeController controller, {
+  required bool toDesktop,
+}) async {
+  try {
+    await controller.switchSource(toDesktop: toDesktop);
+    if (context.mounted) context.go('/library');
+  } on Object catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error is ApiFailure
+                ? error.message
+                : 'No se pudo cambiar de biblioteca. Vuelve a intentarlo.',
+          ),
+        ),
+      );
+    }
   }
 }
 
@@ -75,7 +112,8 @@ class _DesktopLoginState extends State<_DesktopLogin> {
 
   Future<void> _submit() async {
     if (_busy) return;
-    if (_email.text.trim().isEmpty || _password.text.isEmpty) {
+    if (!widget.controller.pendingDesktopLink &&
+        (_email.text.trim().isEmpty || _password.text.isEmpty)) {
       setState(
         () => _error = 'Escribe tu correo y contraseña de Mysic de escritorio.',
       );
@@ -87,17 +125,25 @@ class _DesktopLoginState extends State<_DesktopLogin> {
       _error = null;
     });
     try {
-      await widget.controller.connectDesktop(
-        _email.text,
-        _password.text,
-        remember: _remember,
-      );
+      if (widget.controller.pendingDesktopLink) {
+        await widget.controller.finishDesktopLink();
+      } else {
+        await widget.controller.connectDesktop(
+          _email.text,
+          _password.text,
+          remember: _remember,
+        );
+      }
       if (mounted) Navigator.pop(context, true);
     } catch (error) {
       if (mounted) {
+        if (widget.controller.pendingDesktopLink) _password.clear();
         setState(() {
           _error = error is ApiFailure
-              ? error.message
+              ? (error.code == 'DESKTOP_MUSIC_LINK' &&
+                        widget.controller.pendingDesktopLink
+                    ? 'La biblioteca personal sigue pendiente.'
+                    : error.message)
               : 'No se pudo completar la conexión. Reintenta.';
           _busy = false;
         });
@@ -115,41 +161,49 @@ class _DesktopLoginState extends State<_DesktopLogin> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Entra con el correo y la contraseña que usas en Mysic de escritorio. Se envían directamente a myslc.duckdns.org.',
-            ),
-            TextField(
-              controller: _email,
-              enabled: !_busy,
-              keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.next,
-              autocorrect: false,
-              decoration: const InputDecoration(labelText: 'Correo de Mysic'),
-            ),
-            TextField(
-              controller: _password,
-              enabled: !_busy,
-              obscureText: true,
-              autocorrect: false,
-              enableSuggestions: false,
-              onSubmitted: (_) => _submit(),
-              decoration: const InputDecoration(
-                labelText: 'Contraseña de Mysic',
+            if (widget.controller.pendingDesktopLink) ...[
+              const Icon(Icons.library_music_rounded, size: 36),
+              const SizedBox(height: 12),
+              const Text(
+                'Abre Mysic de escritorio con esta misma cuenta y completa la vinculación de YouTube Music. Cuando veas tu Inicio personal, vuelve aquí.',
               ),
-            ),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Recordar la sesión en este dispositivo'),
-              value: _remember,
-              onChanged: _busy
-                  ? null
-                  : (v) => setState(() => _remember = v == true),
-            ),
+            ] else ...[
+              const Text(
+                'Entra con el correo y la contraseña que usas en Mysic de escritorio. Se envían directamente a myslc.duckdns.org.',
+              ),
+              TextField(
+                controller: _email,
+                enabled: !_busy,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                autocorrect: false,
+                decoration: const InputDecoration(labelText: 'Correo de Mysic'),
+              ),
+              TextField(
+                controller: _password,
+                enabled: !_busy,
+                obscureText: true,
+                autocorrect: false,
+                enableSuggestions: false,
+                onSubmitted: (_) => _submit(),
+                decoration: const InputDecoration(
+                  labelText: 'Contraseña de Mysic',
+                ),
+              ),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Recordar la sesión en este dispositivo'),
+                value: _remember,
+                onChanged: _busy
+                    ? null
+                    : (v) => setState(() => _remember = v == true),
+              ),
+            ],
             if (_busy)
               const LinearProgressIndicator(
                 semanticsLabel: 'Verificando el Inicio musical',
               ),
-            if (_error != null)
+            if (_error != null && _error!.isNotEmpty)
               Text(
                 _error!,
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
@@ -164,7 +218,13 @@ class _DesktopLoginState extends State<_DesktopLogin> {
         ),
         FilledButton(
           onPressed: _busy ? null : _submit,
-          child: Text(_busy ? 'Comprobando…' : 'Conectar'),
+          child: Text(
+            _busy
+                ? 'Comprobando…'
+                : widget.controller.pendingDesktopLink
+                ? 'Comprobar biblioteca'
+                : 'Conectar',
+          ),
         ),
       ],
     ),

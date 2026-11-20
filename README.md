@@ -13,12 +13,7 @@ La autenticación se realiza mediante Google Sign-In y Firebase Authentication.
 > 79 pruebas Flutter, 186 backend y aceptación con dos cuentas Google en Android.
 > Ver [evidencia](docs/17-plan-sprint-11.md).
 >
-> La importación desde YouTube Music está implementada como adelanto del
-> Sprint 14. Biblioteca → Importar de YouTube Music permite revisar un ZIP o CSV
-> de Google Takeout y guardar playlists privadas. El backend está desplegado y
-> la migración aplicada en Supabase. La versión 0.11.1 está instalada en Android.
-> La aceptación con una exportación real y dos cuentas sigue pendiente.
-> Ver [implementación y aceptación](docs/18-sprint-14-importacion-youtube-music.md).
+> Android 4028 conecta bibliotecas en vivo. La cuenta de escritorio y el canal de Google se pueden seleccionar desde Cuenta. [Fuentes musicales](docs/youtube-music-mode.md)
 >
 > La matriz específica con red móvil del operador y las optimizaciones de latencia
 > no anticipada continúan como trabajo del Sprint 13.

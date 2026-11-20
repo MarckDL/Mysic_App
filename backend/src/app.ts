@@ -22,10 +22,6 @@ import { createYoutubeService } from './infrastructure/youtube/service.js';
 import { root as youtubeRoot } from './modules/integrations/youtube/domain.js';
 import { youtubeRouter } from './modules/integrations/youtube/routes.js';
 import type { YoutubeLinkService } from './modules/integrations/youtube/link-service.js';
-import { createImportRouter } from './modules/imports/presentation/import.routes.js';
-import { ImportService } from './modules/imports/application/import-service.js';
-import { PrismaImportRepository } from './infrastructure/database/prisma-import-repository.js';
-import type { ImportRepository } from './modules/imports/domain/music-import.js';
 import { createHistoryRouter } from './modules/history/presentation/history.routes.js';
 import { HistoryService } from './modules/history/application/history-service.js';
 import { PrismaHistoryRepository } from './infrastructure/database/prisma-history-repository.js';
@@ -83,7 +79,6 @@ export function createApp(
     channelMusicProvider?: ChannelMusicProvider;
     musicAccountCatalog?: MusicAccountCatalog;
     youtubeMusicProvider?: YouTubeMusicProvider | null;
-    importRepository?: ImportRepository;
     userRepository?: UserRepository;
     musicProvider?: MusicProvider;
     catalogService?: CatalogService;
@@ -136,12 +131,15 @@ export function createApp(
     youtubeMusicRouter(verifier, new YouTubeMusicService(preview), direct),
   );
 
+  const music = options.musicProvider ?? new YoutubeProvider();
+  const catalog = options.catalogService ?? new CatalogService(music);
   const accountMusic = youtubeLink
     ? new AccountMusicService(
         youtubeLink,
         options.channelMusicProvider ?? data,
         licensedRecordings(process.env.MYSIC_LICENSED_AUDIO_JSON),
         options.musicAccountCatalog ?? new OAuthMusicCatalog(),
+        catalog,
       )
     : undefined;
   app.use(
@@ -165,18 +163,6 @@ export function createApp(
   );
   app.use('/api/v1/auth', createAuthRouter(verifier, users));
   app.use('/api/v1/users', createUsersRouter(verifier, users));
-  const music = options.musicProvider ?? new YoutubeProvider();
-  const catalog = options.catalogService ?? new CatalogService(music);
-  app.use(
-    '/api/v1/imports/youtube-music',
-    createImportRouter(
-      verifier,
-      new ImportService(
-        options.importRepository ?? new PrismaImportRepository(),
-        catalog,
-      ),
-    ),
-  );
   app.use(
     '/api/v1/playback',
     createPlaybackRouter(

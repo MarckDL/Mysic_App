@@ -14,6 +14,10 @@ class MusicModeClient {
   Future<MusicConnection> connection() async {
     final restored = await desktop?.connection();
     if (restored != null) return restored;
+    return channelConnection();
+  }
+
+  Future<MusicConnection> channelConnection() async {
     try {
       return MusicConnection.fromJson(await _api.get('$_root/connection'));
     } on ApiFailure catch (error) {

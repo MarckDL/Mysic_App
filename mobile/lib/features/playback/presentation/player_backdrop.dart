@@ -3,9 +3,6 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
-const _graphite = Color(0xFF13131B);
-const _violet = Color(0xFFB582ED);
-
 class PlayerBackdrop extends StatefulWidget {
   const PlayerBackdrop({
     super.key,
@@ -146,27 +143,14 @@ class _PlayerBackdropState extends State<PlayerBackdrop> {
   @override
   Widget build(BuildContext context) {
     final coverColor = _coverColor;
-    final accent = coverColor == null
-        ? _violet
-        : Color.lerp(
-            _violet,
-            HSLColor.fromColor(coverColor).withLightness(.73).toColor(),
-            .77,
-          )!;
-    final tint = Color.lerp(_graphite, coverColor ?? _violet, .21)!;
+    final theme = Theme.of(context);
+    final paper = theme.colorScheme.surface;
+    final tint = Color.lerp(
+      paper,
+      coverColor ?? theme.colorScheme.primary,
+      .20,
+    )!;
     final artwork = _available;
-    final scheme = ColorScheme.dark(
-      primary: accent,
-      onPrimary: const Color(0xFF170B23),
-      surface: _graphite,
-      surfaceContainer: Color.lerp(_graphite, tint, .55)!,
-      onSurface: const Color(0xFFF8F4FF),
-      onSurfaceVariant: const Color(0xFFC4BDCF),
-      secondaryContainer: Color.lerp(const Color(0xFF262530), tint, .43)!,
-    );
-    final theme = ThemeData.dark(
-      useMaterial3: true,
-    ).copyWith(colorScheme: scheme, scaffoldBackgroundColor: _graphite);
     final backdrop = IgnorePointer(
       child: ClipRect(
         child: Stack(
@@ -191,9 +175,9 @@ class _PlayerBackdropState extends State<PlayerBackdrop> {
                   end: Alignment.bottomCenter,
                   stops: const [0, .43, .86],
                   colors: [
-                    Color.lerp(tint, _graphite, .34)!.withValues(alpha: .84),
-                    Color.lerp(tint, _graphite, .64)!.withValues(alpha: .92),
-                    _graphite,
+                    tint.withValues(alpha: .93),
+                    Color.lerp(tint, paper, .72)!.withValues(alpha: .97),
+                    paper,
                   ],
                 ),
               ),
@@ -202,11 +186,6 @@ class _PlayerBackdropState extends State<PlayerBackdrop> {
         ),
       ),
     );
-    return Theme(
-      data: theme,
-      child: Builder(
-        builder: (context) => widget.builder(context, theme, backdrop),
-      ),
-    );
+    return widget.builder(context, theme, backdrop);
   }
 }

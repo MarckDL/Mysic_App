@@ -17,6 +17,9 @@ export class LruCache<T> {
     this.entries.set(key, entry);
     return entry.value;
   }
+  delete(key: string): void {
+    this.entries.delete(key);
+  }
   set(key: string, value: T): void {
     this.entries.delete(key);
     this.entries.set(key, { value, expiresAt: this.now() + this.ttlMs });

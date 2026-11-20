@@ -7,7 +7,7 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:label="mysic"
+        android:label="Mysic"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

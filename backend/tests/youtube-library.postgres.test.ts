@@ -266,14 +266,26 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       expect(provider.listLikedVideos).not.toHaveBeenCalled();
       expect(provider.listPlaylists).not.toHaveBeenCalled();
     });
-    it('4027 mantiene el canal, filtra sus playlists y busca música cuando Music deniega el acceso personal', async () => {
+    it('identifica la música del canal y busca exclusivamente canciones cuando el Inicio personal está denegado', async () => {
       const catalog = {
         verify: vi
           .fn<MusicAccountCatalog['verify']>()
           .mockRejectedValue(new LinkError(403, 'MUSIC_ACCESS_DENIED')),
         read: vi.fn<MusicAccountCatalog['read']>(),
       };
+      const search = vi.fn().mockResolvedValue([
+        {
+          id: 'youtube:' + video,
+          source: 'youtube',
+          sourceId: video,
+          title: 'Again',
+          artistName: 'YUI',
+          durationSeconds: 247,
+          thumbnailUrl: null,
+        },
+      ]);
       const v2 = createApp({
+        musicProvider: { search, getTrack: vi.fn(), resolvePlayback: vi.fn() },
         youtubeLinkService: link,
         channelMusicProvider: provider,
         tokenVerifier: verifier,
@@ -289,7 +301,12 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
         personalization: 'channelOnly',
       });
       expect(state.capabilities).toEqual(
-        expect.arrayContaining(['playlists', 'search', 'playback']),
+        expect.arrayContaining([
+          'playlists',
+          'search',
+          'channelLiked',
+          'playback',
+        ]),
       );
       for (const cap of ['home', 'liked', 'songs', 'albums'])
         expect(state.capabilities).not.toContain(cap);
@@ -297,21 +314,27 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       for (const surface of ['home', 'liked', 'albums'])
         await view(path + surface).expect(403);
       expect(provider.listLikedVideos).not.toHaveBeenCalled();
-      provider.searchMusic.mockResolvedValue({
+      provider.listLikedVideos.mockResolvedValue({
         items: [
-          { ...recording, isRecording: false, isMusicCategory: true },
+          recording,
           {
             ...recording,
             id: 'ccccccccccc',
-            title: 'Clase',
             isRecording: false,
             isMusicCategory: false,
           },
         ],
       });
+      expect(
+        (await view(path + 'channelLiked').expect(200)).body.items,
+      ).toMatchObject([{ id: video }]);
       const music = (await view(path + 'search?q=again').expect(200)).body
         .items;
-      expect(music).toMatchObject([{ id: video, playback: 'native' }]);
+      expect(music).toMatchObject([
+        { id: video, artist: 'YUI', playback: 'native' },
+      ]);
+      expect(search).toHaveBeenCalledWith('again', expect.any(AbortSignal));
+      expect(provider.searchMusic).not.toHaveBeenCalled();
       provider.listPlaylists.mockResolvedValue({
         items: [
           {
@@ -340,6 +363,36 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       await view('connection').expect(200);
       expect(catalog.verify).toHaveBeenCalledTimes(1);
       expect(catalog.read).not.toHaveBeenCalled();
+    });
+
+    it('mantiene Me gusta de Music cuando la misma cuenta carece de Inicio y álbumes', async () => {
+      const denied = new LinkError(403, 'MUSIC_ACCESS_DENIED');
+      const musicAccountCatalog: MusicAccountCatalog = {
+        verify: vi.fn().mockRejectedValue(denied),
+        async verifyCollection(_, surface) {
+          if (surface !== 'liked') throw denied;
+        },
+        read: vi.fn().mockResolvedValue({ items: [], excluded: 0 }),
+      };
+      const app = createApp({
+        youtubeLinkService: link,
+        channelMusicProvider: provider,
+        tokenVerifier: verifier,
+        musicAccountCatalog,
+      });
+      const read = (path: string) =>
+        request(app)
+          .get('/api/v2/integrations/youtube-music/' + path)
+          .set('Authorization', 'Bearer ' + uidA);
+      const { body: state } = await read('connection').expect(200);
+      expect(state.personalization).toBe('partialMusic');
+      expect(state.capabilities).toContain('liked');
+      for (const cap of ['home', 'albums', 'channelLiked'])
+        expect(state.capabilities).not.toContain(cap);
+      const path = 'connections/' + state.generation + '/pages/';
+      await read(path + 'liked').expect(200);
+      await read(path + 'home').expect(403);
+      expect(provider.listLikedVideos).not.toHaveBeenCalled();
     });
     it('usa el vínculo OAuth de cada UID sin una sesión web y anuncia solo las funciones disponibles', async () => {
       await request(app).get(connection).expect(401);

@@ -43,7 +43,8 @@ class _DesktopSession {
     return _DesktopSession(id, name.trim(), value, generation);
   }
 
-  String encode() => jsonEncode({
+  String encode({bool useChannel = false}) => jsonEncode({
+    if (useChannel) 'useChannel': true,
     'id': id,
     'name': name,
     'session': value,
@@ -95,6 +96,11 @@ class DesktopMusicClient {
   final Dio _dio;
   _DesktopSession? _session;
   MusicPage? _firstHome;
+  ({_DesktopSession session, bool remember})? _pending;
+  bool _remembered = false, _useChannel = false;
+  bool get hasPendingLink => _pending != null;
+  String? get accountName => _session?.name;
+  void cancelPending() => _pending = null;
   CancelToken _audioRequests = CancelToken();
   DateTime? _verified;
   bool _restored = false, _closed = false;
@@ -211,12 +217,6 @@ class DesktopMusicClient {
       await _get(session, 'home'),
       first: true,
     );
-    if (home.items.isEmpty) {
-      throw const ApiFailure(
-        'Mysic de escritorio todavía no devolvió recomendaciones personales. Reintenta la conexión.',
-        code: 'DESKTOP_HOME',
-      );
-    }
     return home;
   }
 
@@ -225,6 +225,7 @@ class DesktopMusicClient {
     String password, {
     required bool remember,
   }) async {
+    _pending = null;
     final response = await _request(
       'auth/login',
       data: {'email': email.trim(), 'password': password, 'remember': remember},
@@ -265,7 +266,29 @@ class DesktopMusicClient {
         code: 'DESKTOP_SESSION',
       );
     }
-    final home = await _verify(session);
+    _pending = (session: session, remember: remember);
+    return finishLink();
+  }
+
+  Future<MusicConnection> finishLink() async {
+    final pending = _pending;
+    if (pending == null) {
+      throw const ApiFailure('Vuelve a iniciar la vinculación.');
+    }
+    final (:session, :remember) = pending;
+    late final MusicPage home;
+    try {
+      home = await _verify(session);
+    } on ApiFailure catch (error) {
+      if (error.code == 'DESKTOP_EXPIRED' &&
+          identical(_pending?.session, session)) {
+        cancelPending();
+      }
+      rethrow;
+    }
+    if (!identical(_pending?.session, session)) {
+      throw const ApiFailure('Cambió la vinculación.');
+    }
     _checkOwner();
     try {
       await _store.write(remember ? session.encode() : null);
@@ -277,20 +300,37 @@ class DesktopMusicClient {
     _checkOwner();
     _cancelAudio();
     _session = session;
+    _pending = null;
+    _remembered = remember;
+    _useChannel = false;
     _firstHome = home;
     _restored = true;
     _verified = DateTime.now();
     return session.connection();
   }
 
-  Future<MusicConnection?> connection() async {
+  Future<void> preferChannel(bool enabled) async {
+    _checkOwner();
+    final session = _session;
+    if (session == null || _useChannel == enabled) return;
+    if (_remembered) await _store.write(session.encode(useChannel: enabled));
+    _checkOwner();
+    _useChannel = enabled;
+    _cancelAudio();
+  }
+
+  Future<MusicConnection?> connection({bool includeInactive = false}) async {
     if (!_restored) {
       final stored = await _store.read();
       _checkOwner();
       if (stored != null) {
         try {
           final data = jsonDecode(stored);
-          if (data is Map) _session = _DesktopSession.from(data);
+          if (data is Map) {
+            _session = _DesktopSession.from(data);
+            _remembered = _session != null;
+            _useChannel = _remembered && data['useChannel'] == true;
+          }
         } on FormatException {
           _session = null;
         }
@@ -298,7 +338,7 @@ class DesktopMusicClient {
       _restored = true;
     }
     final session = _session;
-    if (session == null) return null;
+    if (session == null || (_useChannel && !includeInactive)) return null;
     if (_verified != null &&
         DateTime.now().difference(_verified!) < const Duration(minutes: 2)) {
       return session.connection();
@@ -326,11 +366,36 @@ class DesktopMusicClient {
   Future<void> disconnect() async {
     _checkOwner();
     await _store.write(null);
+    cancelPending();
+    _remembered = false;
+    _useChannel = false;
     _cancelAudio();
     _session = null;
     _verified = null;
     _firstHome = null;
     _restored = true;
+  }
+
+  /// Anonymous, song-only catalog. This endpoint never receives an account credential.
+  Future<MusicPage> publicSongs(String query, CancelToken? cancelToken) async {
+    final response = await _request(
+      'youtube/search',
+      query: {'q': query, 'type': 'song'},
+      cancelToken: cancelToken,
+    );
+    final data = response.data as Map<String, dynamic>;
+    if (data['type'] != 'song' || data['items'] is! List) {
+      throw const ApiFailure(
+        'El catálogo musical no está disponible.',
+        code: 'MUSIC_SEARCH_UNAVAILABLE',
+      );
+    }
+    return MusicPage(
+      OriginalMusicCatalog.rows(data['items'], 'song'),
+      null,
+      null,
+      0,
+    );
   }
 
   Future<MusicPage> page(
@@ -342,7 +407,7 @@ class DesktopMusicClient {
     CancelToken? cancelToken,
   }) async {
     final session = _session;
-    if (session == null || session.generation != generation) {
+    if (session == null || _useChannel || session.generation != generation) {
       throw const ApiFailure('Cambió la cuenta de escritorio.');
     }
     if (playlistId != null && !OriginalMusicCatalog.validId(playlistId)) {
@@ -447,6 +512,7 @@ class DesktopMusicClient {
         final session = _session;
         _checkOwner();
         if (session == null ||
+            _useChannel ||
             generation != session.generation ||
             !RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(id) ||
             (start != null && start < 0) ||
@@ -495,6 +561,7 @@ class DesktopMusicClient {
             : null;
         final length = headerLength ?? rangedLength;
         if (!_active ||
+            _useChannel ||
             !identical(_session, session) ||
             body == null ||
             (status != 200 && status != 206) ||
@@ -527,6 +594,7 @@ class DesktopMusicClient {
   void close() {
     _cancelAudio();
     _closed = true;
+    cancelPending();
     _session = null;
     _firstHome = null;
     _dio.close(force: true);
