@@ -97,7 +97,8 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Bienvenido, Ana'), findsOneWidget);
-    expect(find.text('Explorar catálogo'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Explorar catálogo'), 150);
+    expect(find.text('Explorar catálogo').hitTestable(), findsOneWidget);
     await tester.tap(find.byTooltip('Abrir cuenta'));
     await tester.pumpAndSettle();
     expect(find.text('ana@example.test'), findsOneWidget);

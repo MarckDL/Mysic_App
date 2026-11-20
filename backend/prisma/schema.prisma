@@ -259,22 +259,41 @@ model ExternalMusicLinkAttempt {
 }
 
 model ExternalMusicConnection {
-  userId       String    @id @db.Uuid
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  subject      String    @unique
-  channelId    String
-  channelTitle String
-  status       String
-  generation   String    @unique @db.Uuid
-  refreshBox   String?
-  scopes       String
-  connectedAt  DateTime  @default(now()) @db.Timestamptz(3)
-  checkedAt    DateTime  @default(now()) @db.Timestamptz(3)
-  lease        String?   @db.Uuid
-  leaseUntil   DateTime? @db.Timestamptz(3)
+  appListens         ChannelMusicListen[]
+  mysicHistoryPaused Boolean              @default(false)
+  mysicActivityEpoch Int                  @default(0)
+  mysicLibraryId     String?              @db.Uuid
+  userId             String               @id @db.Uuid
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject            String               @unique
+  channelId          String
+  channelTitle       String
+  status             String
+  generation         String               @unique @db.Uuid
+  refreshBox         String?
+  scopes             String
+  connectedAt        DateTime             @default(now()) @db.Timestamptz(3)
+  checkedAt          DateTime             @default(now()) @db.Timestamptz(3)
+  lease              String?              @db.Uuid
+  leaseUntil         DateTime?            @db.Timestamptz(3)
 
   @@index([status, checkedAt])
   @@map("external_music_connections")
+  @@schema("mysic")
+}
+
+model ChannelMusicListen {
+  userId     String                  @db.Uuid
+  generation String                  @db.Uuid
+  listenId   String                  @db.Uuid
+  videoId    String                  @db.VarChar(11)
+  listenedMs Int
+  playedAt   DateTime                @default(now()) @db.Timestamptz(3)
+  connection ExternalMusicConnection @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@id([userId, generation, listenId])
+  @@index([userId, generation, playedAt, listenId])
+  @@map("channel_music_listens")
   @@schema("mysic")
 }
 

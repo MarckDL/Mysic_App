@@ -1,3 +1,4 @@
+import type { MusicAccountCatalog } from '../src/infrastructure/youtube/music-account-catalog.js';
 import { randomBytes, randomUUID } from 'node:crypto';
 import {
   afterAll,
@@ -30,6 +31,9 @@ import type {
   ReadContext,
 } from '../src/modules/integrations/youtube/library-domain.js';
 
+import { youtubeMusicRoot } from '../src/modules/integrations/youtube-music/routes.js';
+import type { ChannelMusicProvider } from '../src/modules/integrations/youtube-music/channel-service.js';
+
 const uidA = randomUUID(),
   uidB = randomUUID();
 const box = new SecretBox('test', new Map([['test', randomBytes(32)]]));
@@ -46,6 +50,11 @@ const provider = {
   playlistOwner: vi.fn<ConnectedLibraryProvider['playlistOwner']>(),
   listPlaylistItems: vi.fn<ConnectedLibraryProvider['listPlaylistItems']>(),
   getVideos: vi.fn<ConnectedLibraryProvider['getVideos']>(),
+  subscribedMusicChannels:
+    vi.fn<ChannelMusicProvider['subscribedMusicChannels']>(),
+  playlistInfo: vi.fn<ChannelMusicProvider['playlistInfo']>(),
+  listLikedVideos: vi.fn<ChannelMusicProvider['listLikedVideos']>(),
+  searchMusic: vi.fn<ChannelMusicProvider['searchMusic']>(),
 };
 const grants = new YoutubeGrants(box, oauth);
 const link = new YoutubeLinkService(
@@ -62,6 +71,7 @@ const verifier = {
 const app = createApp({
   youtubeLinkService: link,
   youtubeLibraryProvider: provider,
+  channelMusicProvider: provider,
   tokenVerifier: verifier,
 });
 const base = root + '/playlists',
@@ -131,6 +141,11 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
         access: randomUUID(),
         expiresIn: 3600,
       }));
+      provider.playlistInfo.mockResolvedValue({
+        channelId: 'channelA',
+        title: 'Mis canciones',
+        private: true,
+      });
       provider.playlistOwner.mockResolvedValue('channelA');
       provider.getVideos.mockImplementation(async (_ctx, ids) =>
         ids
@@ -138,6 +153,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
           .map((id) => ({
             id,
             title: 'Verificado',
+            isRecording: true,
             channelTitle: 'Canal que subió el video',
             durationSeconds: 32,
             thumbnailUrl: null,
@@ -155,6 +171,473 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
         where: { id: { in: [ownerA, ownerB] } },
       });
       await disconnectDatabase();
+    });
+    const connection = youtubeMusicRoot + '/connection';
+    const musicPath = (generation: string, surface: string) =>
+      youtubeMusicRoot + '/connections/' + generation + '/pages/' + surface;
+    const recording = {
+      id: video,
+      title: 'Tema A',
+      channelTitle: 'Artista - Topic',
+      isRecording: true,
+      durationSeconds: 135,
+      thumbnailUrl: null,
+      availability: 'available' as const,
+    };
+    it('4026 lee Inicio y Me gusta con el vínculo activo; descarta cursos y sigue una playlist mixta hasta su primera canción', async () => {
+      const track = {
+        kind: 'track' as const,
+        id: video,
+        title: 'Tema del canal',
+        artist: 'Artista',
+        durationSeconds: 45,
+        playback: 'native' as const,
+      };
+      const catalog = {
+        read: vi.fn<MusicAccountCatalog['read']>(async (ctx, r, token) => {
+          expect(ctx.access).toBeTruthy();
+          if (r.surface === 'home')
+            return {
+              items: [{ ...track, title: 'Recomendación del canal' }],
+              excluded: 0,
+            };
+          if (r.surface === 'liked')
+            return {
+              items: [{ ...track, title: 'Me gusta musical' }],
+              excluded: 0,
+            };
+          if (r.surface === 'playlists')
+            return {
+              items: ['PLcurso', 'PLmix'].map((id) => ({
+                kind: 'playlist',
+                id,
+                title: id,
+                private: true,
+              })),
+              excluded: 0,
+            };
+          if (r.playlistId === 'PLcurso') return { items: [], excluded: 2 };
+          if (!token) return { items: [], next: '1', excluded: 1 };
+          const n = Number(token);
+          return n < 6
+            ? { items: [], next: String(n + 1), excluded: 1 }
+            : { items: [track], excluded: 0 };
+        }),
+      };
+      const v2 = createApp({
+        youtubeLinkService: link,
+        channelMusicProvider: provider,
+        tokenVerifier: verifier,
+        musicAccountCatalog: catalog,
+      });
+      const view = (p: string, uid = uidA) =>
+        request(v2)
+          .get('/api/v2/integrations/youtube-music/' + p)
+          .set('Authorization', 'Bearer ' + uid);
+      const state = (await view('connection').expect(200)).body;
+      expect(state.capabilities).toEqual(
+        expect.arrayContaining(['home', 'liked', 'albums', 'playback']),
+      );
+      const page = 'connections/' + state.generation + '/pages/';
+      await view(page + 'home', uidB).expect(409);
+      expect(catalog.read).not.toHaveBeenCalled();
+      expect((await view(page + 'home')).body.items[0].title).toBe(
+        'Recomendación del canal',
+      );
+      expect((await view(page + 'liked')).body.items[0].title).toBe(
+        'Me gusta musical',
+      );
+      const first = (await view(page + 'playlists').expect(200)).body;
+      expect(first.items).toEqual([]);
+      expect(first.nextCursor).toBeTruthy();
+      await view(page + 'liked')
+        .query({ cursor: first.nextCursor })
+        .expect(409);
+      const second = (
+        await view(page + 'playlists')
+          .query({ cursor: first.nextCursor })
+          .expect(200)
+      ).body;
+      expect(second.items.map((r: { id: string }) => r.id)).toEqual(['PLmix']);
+      expect(second.nextCursor).toBeNull();
+      expect(provider.listLikedVideos).not.toHaveBeenCalled();
+      expect(provider.listPlaylists).not.toHaveBeenCalled();
+    });
+    it('usa el vínculo OAuth de cada UID sin una sesión web y anuncia solo las funciones disponibles', async () => {
+      await request(app).get(connection).expect(401);
+      const a = (
+        await get(connection)
+          .expect('Cache-Control', 'private, no-store')
+          .expect(200)
+      ).body;
+      const b = (await get(connection, uidB).expect(200)).body;
+      expect(a).toMatchObject({
+        provider: 'youtubeOAuth',
+        status: 'linked',
+        account: { id: 'channelA' },
+        accounts: [],
+      });
+      expect(a.capabilities).toEqual([
+        'playlists',
+        'playlist',
+        'liked',
+        'search',
+        'artist',
+        'artists',
+        'songs',
+        'mysicRecents',
+        'onRepeat',
+        'recordInMysic',
+      ]);
+      expect(b.account.id).toBe('channelB');
+      expect(a.generation).not.toBe(b.generation);
+      expect(a).not.toHaveProperty('webLinkUrl');
+      await get(musicPath(a.generation, 'liked'), uidB).expect(409);
+      await get(musicPath(a.generation, 'history')).expect(503);
+      await get(musicPath(a.generation, 'home')).expect(503);
+      expect(provider.listLikedVideos).not.toHaveBeenCalled();
+    });
+    it('filtra los Me gusta, protege el cursor y conserva las repeticiones reales de una playlist privada', async () => {
+      const { generation } = (await get(connection)).body;
+      provider.listLikedVideos.mockResolvedValueOnce({
+        items: [
+          recording,
+          { ...recording, id: omitted, isRecording: false },
+          { ...recording, availability: 'unavailable' },
+        ],
+        nextPageToken: 'more',
+      });
+      const likes = await get(musicPath(generation, 'liked'))
+        .query({ limit: 3 })
+        .expect(200);
+      expect(likes.body).toMatchObject({
+        items: [{ id: video, artist: 'Artista', playback: 'unavailable' }],
+        excludedCount: 2,
+      });
+      expect(likes.body.items[0]).not.toHaveProperty('audioUrl');
+      await get(musicPath(generation, 'search'))
+        .query({ q: 'tema', cursor: likes.body.nextCursor })
+        .expect(409);
+      expect(provider.searchMusic).not.toHaveBeenCalled();
+      provider.searchMusic.mockResolvedValueOnce({ items: [recording] });
+      expect(
+        (
+          await get(musicPath(generation, 'search'))
+            .query({ q: 'tema' })
+            .expect(200)
+        ).body.items[0].title,
+      ).toBe('Tema A');
+      provider.listPlaylistItems.mockResolvedValueOnce({
+        items: [entry(0), entry(1, omitted), entry(2)],
+      });
+      const list = await get(musicPath(generation, 'playlist/PLown')).expect(
+        200,
+      );
+      expect(
+        list.body.items.map((v: { entryId: string }) => v.entryId),
+      ).toEqual(['entry0', 'entry2']);
+      expect(list.body.excludedCount).toBe(1);
+      expect(list.body.playlist).toMatchObject({
+        title: 'Mis canciones',
+        private: true,
+      });
+      provider.playlistInfo.mockResolvedValueOnce({
+        channelId: 'channelB',
+        title: 'Ajena',
+        private: true,
+      });
+      await get(musicPath(generation, 'playlist/PLforeign')).expect(404);
+    });
+    it('entrega audio únicamente cuando hay una fuente autorizada para la grabación', async () => {
+      const url = 'https://media.example.test/tema.mp3';
+      vi.stubEnv('MYSIC_LICENSED_AUDIO_JSON', JSON.stringify({ [video]: url }));
+      try {
+        const licensed = createApp({
+          youtubeLinkService: link,
+          channelMusicProvider: provider,
+          tokenVerifier: verifier,
+        });
+        const read = (path: string) =>
+          request(licensed)
+            .get(path)
+            .set('Authorization', 'Bearer ' + uidA);
+        const state = await read(connection).expect(200);
+        expect(state.body.capabilities).toContain('playback');
+        provider.listLikedVideos.mockResolvedValueOnce({
+          items: [recording, { ...recording, id: omitted }],
+        });
+        const tracks = (
+          await read(musicPath(state.body.generation, 'liked')).expect(200)
+        ).body.items;
+        expect(tracks[0]).toMatchObject({
+          id: video,
+          playback: 'licensed',
+          audioUrl: url,
+        });
+        expect(tracks[1].playback).toBe('unavailable');
+        expect(tracks[1]).not.toHaveProperty('audioUrl');
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+    it('reanuda una playlist mixta con la primera canción en la cuarta página', async () => {
+      const { generation } = (await get(connection)).body;
+      provider.listPlaylists.mockResolvedValue({
+        items: [{ ...playlist('PLmix', 'channelA'), itemCount: 151 }],
+      });
+      provider.listPlaylistItems.mockImplementation(async (_ctx, _id, page) => {
+        const start = Number(page.pageToken ?? '0');
+        return {
+          items:
+            start < 150
+              ? Array.from({ length: 50 }, (_, i) => entry(start + i, omitted))
+              : [entry(150)],
+          nextPageToken: start < 150 ? String(start + 50) : undefined,
+        };
+      });
+      const first = await get(musicPath(generation, 'playlists')).expect(200);
+      expect(first.body.items).toEqual([]);
+      expect(first.body.nextCursor).toBeTruthy();
+      expect(provider.listPlaylistItems).toHaveBeenCalledTimes(3);
+      expect(provider.listPlaylists).toHaveBeenCalledTimes(1);
+      const next = await get(musicPath(generation, 'playlists'))
+        .query({ cursor: first.body.nextCursor })
+        .expect(200);
+      expect(next.body).toMatchObject({
+        items: [{ kind: 'playlist', id: 'PLmix', private: true }],
+        nextCursor: null,
+      });
+      expect(provider.listPlaylistItems).toHaveBeenCalledTimes(4);
+    });
+    it('descarta Me gusta en vuelo y un intento de desvinculación tardío al cambiar de canal', async () => {
+      const { generation } = (await get(connection)).body;
+      let enter!: () => void, proceed!: () => void;
+      const entered = new Promise<void>((resolve) => (enter = resolve));
+      const gate = new Promise<void>((resolve) => (proceed = resolve));
+      provider.listLikedVideos.mockImplementationOnce(async () => {
+        enter();
+        await gate;
+        return { items: [recording] };
+      });
+      const reading = get(musicPath(generation, 'liked')).then(
+        (response) => response,
+      );
+      await entered;
+      await insertLink(ownerA, 'replacement');
+      proceed();
+      const stale = await reading;
+      expect(stale.status).toBe(409);
+      expect(stale.body).not.toHaveProperty('items');
+      await request(app)
+        .delete(youtubeMusicRoot + '/connections/' + generation)
+        .set('Authorization', 'Bearer ' + uidA)
+        .expect(409);
+      await request(app)
+        .delete(root + '/connection')
+        .query({ generation })
+        .set('Authorization', 'Bearer ' + uidA)
+        .expect(409);
+      expect((await get(connection)).body.account.id).toBe('replacement');
+    });
+    it('reúne las canciones de varias listas propias, deduplica y conserva las posiciones en el detalle', async () => {
+      const { generation } = (await get(connection)).body;
+      provider.listPlaylists.mockImplementation(async (_ctx, page) =>
+        page.pageToken
+          ? { items: [{ ...playlist('PLb', 'channelA'), itemCount: 2 }] }
+          : {
+              items: [{ ...playlist('PLa', 'channelA'), itemCount: 1 }],
+              nextPageToken: 'b',
+            },
+      );
+      provider.getVideos.mockImplementation(async (_ctx, ids) =>
+        ids.map((id) => ({ ...recording, id })),
+      );
+      provider.listPlaylistItems.mockImplementation(async (_ctx, id, page) =>
+        id === 'PLa'
+          ? { items: [entry(0, video)] }
+          : page.pageToken
+            ? { items: [entry(1, omitted)] }
+            : { items: [entry(0, video)], nextPageToken: 'next-song' },
+      );
+      const first = await get(musicPath(generation, 'songs'))
+        .query({ limit: 1 })
+        .expect(200);
+      expect(first.body.items.map((r: { id: string }) => r.id)).toEqual([
+        video,
+      ]);
+      const next = await get(musicPath(generation, 'songs'))
+        .query({ cursor: first.body.nextCursor })
+        .expect(200);
+      expect(next.body.items).toEqual([]);
+      const last = await get(musicPath(generation, 'songs'))
+        .query({ cursor: next.body.nextCursor })
+        .expect(200);
+      expect(last.body.items.map((r: { id: string }) => r.id)).toEqual([
+        omitted,
+      ]);
+    });
+    it('separa los canales musicales seguidos de la búsqueda de grabaciones de un canal', async () => {
+      const { generation } = (await get(connection)).body;
+      const artistId = 'UC' + 'a'.repeat(22);
+      provider.subscribedMusicChannels.mockResolvedValue({
+        items: [{ kind: 'artist', id: artistId, title: 'Grupo' }],
+        nextPageToken: 'more',
+      });
+      const list = await get(musicPath(generation, 'artists')).expect(200);
+      expect(list.body.items).toEqual([
+        { kind: 'artist', id: artistId, title: 'Grupo' },
+      ]);
+      provider.searchMusic.mockResolvedValue({
+        items: [
+          { ...recording, artistId },
+          { ...recording, id: omitted, artistId: 'UC' + 'b'.repeat(22) },
+        ],
+      });
+      const detail = await get(
+        musicPath(generation, 'artist/' + artistId),
+      ).expect(200);
+      expect(detail.body.items[0].artistId).toBe(artistId);
+      expect(detail.body.items).toHaveLength(1);
+      expect(provider.searchMusic.mock.calls[0]![3]).toBe(artistId);
+      await get(musicPath(generation, 'artist/invalid')).expect(400);
+      await get(musicPath(generation, 'artist/' + artistId))
+        .query({ cursor: list.body.nextCursor })
+        .expect(409);
+      await get(musicPath(generation, 'artists'), uidB).expect(409);
+    });
+    it('registra una escucha de Mysic una sola vez entre dispositivos y exige vínculo y tiempo efectivo', async () => {
+      const { generation, activityEpoch } = (await get(connection)).body;
+      const id = randomUUID(),
+        path =
+          youtubeMusicRoot + '/connections/' + generation + '/listens/' + id;
+      const body = { trackId: video, listenedMs: 32000, activityEpoch };
+      const put = (data: unknown, owner = uidA) =>
+        request(app)
+          .put(path)
+          .set('Authorization', 'Bearer ' + owner)
+          .send(data as object);
+      await put({ ...body, listenedMs: 300 }).expect(400);
+      await put(body, uidB).expect(409);
+      await Promise.all([put(body).expect(204), put(body).expect(204)]);
+      const rows = await getDatabase().channelMusicListen.count({
+        where: { userId: ownerA, generation },
+      });
+      expect(rows).toBe(1);
+      const [table] = await getDatabase().$queryRaw<
+        { relrowsecurity: boolean }[]
+      >`SELECT relrowsecurity FROM pg_class WHERE oid = 'mysic.channel_music_listens'::regclass`;
+      expect(table?.relrowsecurity).toBe(true);
+      await put({ ...body, trackId: omitted }).expect(409);
+      expect((await get(path).expect(200)).body.listen).toEqual({
+        trackId: video,
+        listenedMs: 32000,
+      });
+      expect(
+        (await get(musicPath(generation, 'mysicRecents')).expect(200)).body
+          .items[0].id,
+      ).toBe(video);
+      expect(
+        (await get(musicPath(generation, 'onRepeat')).expect(200)).body.items,
+      ).toEqual([]);
+      await get(musicPath(generation, 'history')).expect(503);
+    });
+    it('descarta la página en vuelo y el cursor anterior si otro dispositivo borra la actividad', async () => {
+      const { generation } = (await get(connection)).body;
+      await getDatabase().channelMusicListen.createMany({
+        data: [1500, 90000].map((age) => ({
+          userId: ownerA,
+          generation,
+          videoId: video,
+          listenId: randomUUID(),
+          listenedMs: 32000,
+          playedAt: new Date(Date.now() - age),
+        })),
+      });
+      const path = musicPath(generation, 'mysicRecents');
+      const first = await get(path).query({ limit: 1 }).expect(200);
+      expect(first.body.nextCursor).toBeTruthy();
+      let enter!: () => void, resume!: () => void;
+      const entered = new Promise<void>((resolve) => (enter = resolve));
+      const gate = new Promise<void>((resolve) => (resume = resolve));
+      provider.getVideos.mockImplementationOnce(async () => {
+        enter();
+        await gate;
+        return [recording];
+      });
+      const inFlight = get(path).then((response) => response);
+      await entered;
+      try {
+        await request(app)
+          .delete(youtubeMusicRoot + '/connections/' + generation + '/activity')
+          .set('Authorization', 'Bearer ' + uidA)
+          .expect(204);
+      } finally {
+        resume();
+      }
+      const stale = await inFlight;
+      expect(stale.status).toBe(409);
+      expect(stale.body.error.code).toBe('MYSIC_ACTIVITY_CHANGED');
+      expect(stale.body).not.toHaveProperty('items');
+      await get(path).query({ cursor: first.body.nextCursor }).expect(409);
+      expect((await get(path).expect(200)).body.items).toEqual([]);
+    });
+    it('calcula En repetición en 30 días, ignora repeticiones inmediatas y respeta pausas y borrado', async () => {
+      const { generation, activityEpoch } = (await get(connection)).body;
+      const now = Date.now();
+      const activity =
+        youtubeMusicRoot + '/connections/' + generation + '/activity';
+      const write = (id: string, epoch: number) =>
+        request(app)
+          .put(
+            youtubeMusicRoot + '/connections/' + generation + '/listens/' + id,
+          )
+          .set('Authorization', 'Bearer ' + uidA)
+          .send({ trackId: video, listenedMs: 32000, activityEpoch: epoch });
+      const pause = (paused: boolean, uid = uidA) =>
+        request(app)
+          .put(activity)
+          .set('Authorization', 'Bearer ' + uid)
+          .send({ paused });
+      await getDatabase().channelMusicListen.createMany({
+        data: [5000, 10000, 90000, 32 * 86400000].map((age) => ({
+          userId: ownerA,
+          generation,
+          listenId: randomUUID(),
+          videoId: video,
+          listenedMs: 32000,
+          playedAt: new Date(now - age),
+        })),
+      });
+      const ranking = await get(musicPath(generation, 'onRepeat')).expect(200);
+      expect(ranking.body.items).toHaveLength(1);
+      expect(ranking.body.items[0]).toMatchObject({ id: video, playCount: 2 });
+      await pause(true, uidB).expect(409);
+      await pause(true).expect(204);
+      const paused = (await get(connection)).body;
+      expect(paused.account.historyPaused).toBe(true);
+      await pause(true).expect(204);
+      expect((await get(connection)).body.activityEpoch).toBe(
+        paused.activityEpoch,
+      );
+      await write(randomUUID(), paused.activityEpoch).expect(409);
+      await pause(false).expect(204);
+      await request(app)
+        .delete(activity)
+        .set('Authorization', 'Bearer ' + uidA)
+        .expect(204);
+      const current = (await get(connection)).body;
+      await write(randomUUID(), activityEpoch).expect(409);
+      expect(
+        (await get(musicPath(generation, 'mysicRecents')).expect(200)).body
+          .items,
+      ).toEqual([]);
+      await write(randomUUID(), current.activityEpoch).expect(204);
+      await link.unlink(ownerA, generation);
+      expect(
+        await getDatabase().channelMusicListen.count({
+          where: { userId: ownerA },
+        }),
+      ).toBe(0);
     });
     it('exige Firebase, perfil y vínculo; filtra por canal y conserva listas privadas vacías', async () => {
       await request(app).get(base).expect(401);
@@ -277,6 +760,19 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
         youtubeLibraryProvider: provider,
         tokenVerifier: verifier,
       });
+      const music = await request(disabled)
+        .get(connection)
+        .set('Authorization', 'Bearer ' + uidA)
+        .expect(200);
+      expect(music.body).toMatchObject({
+        status: 'unavailable',
+        account: { id: 'channelA' },
+        capabilities: [],
+      });
+      await request(disabled)
+        .get(musicPath(music.body.generation, 'liked'))
+        .set('Authorization', 'Bearer ' + uidA)
+        .expect(503);
       await request(disabled)
         .get(path)
         .set('Authorization', 'Bearer ' + uidA)

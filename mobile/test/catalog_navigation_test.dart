@@ -63,6 +63,10 @@ void main() {
         ),
       ];
     });
+    await tester.scrollUntilVisible(
+      find.text('No se pudieron cargar tus escuchas recientes.'),
+      150,
+    );
     expect(
       find.text('No se pudieron cargar tus escuchas recientes.'),
       findsOneWidget,
@@ -73,8 +77,10 @@ void main() {
     await tester.tap(find.text('Inicio'));
     await tester.pumpAndSettle();
     offline = false;
+    await tester.scrollUntilVisible(find.text('Reintentar'), 150);
     await tester.tap(find.text('Reintentar'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Actividad de Ana'));
     expect(find.text('Actividad de Ana'), findsOneWidget);
     expect(find.byIcon(Icons.music_note), findsOneWidget);
 
@@ -86,7 +92,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Bienvenido, Luis'), findsOneWidget);
     expect(find.text('Actividad de Ana', skipOffstage: false), findsNothing);
-    expect(find.text('Explorar catálogo'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Explorar catálogo'), 150);
+    expect(find.text('Explorar catálogo').hitTestable(), findsOneWidget);
 
     final router = GoRouter.of(tester.element(find.byType(HomeScreen)));
     router.push('/moderation/comments');

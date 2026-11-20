@@ -20,6 +20,43 @@ const thumbnails = z
     default: z.unknown().optional(),
   })
   .optional();
+// Canonical music topics. Use topicCategories, plus curated IDs when a response includes them.
+const musicTopics = new Set([
+  'Music',
+  'Christian_music',
+  'Classical_music',
+  'Country_music',
+  'Electronic_music',
+  'Hip_hop_music',
+  'Independent_music',
+  'Jazz',
+  'Music_of_Asia',
+  'Music_of_Latin_America',
+  'Pop_music',
+  'Reggae',
+  'Rhythm_and_blues',
+  'Rock_music',
+  'Soul_music',
+]);
+const musicTopicIds = new Set([
+  '/m/04rlf',
+  '/m/02mscn',
+  '/m/0ggq0m',
+  '/m/01lyv',
+  '/m/02lkt',
+  '/m/0glt670',
+  '/m/05rwpb',
+  '/m/03_d0',
+  '/m/028sqc',
+  '/m/0g293',
+  '/m/064t9',
+  '/m/06cqb',
+  '/m/06j6l',
+  '/m/06by7',
+  '/m/0gywn',
+]);
+const channelIdFormat = /^UC[A-Za-z0-9_-]{22}$/;
+
 const channel = z.object({
   id: identifier,
   snippet: z.object({ title: z.string() }),
@@ -47,7 +84,14 @@ const entry = z.object({
 const video = z.object({
   id: identifier,
   snippet: z
-    .object({ title: optionalText, channelTitle: optionalText, thumbnails })
+    .object({
+      title: optionalText,
+      channelTitle: optionalText,
+      channelId: optionalText,
+      categoryId: optionalText,
+      description: optionalText,
+      thumbnails,
+    })
     .optional(),
   contentDetails: z
     .object({
@@ -114,7 +158,13 @@ function retrySeconds(value: string | null) {
 export class YoutubeDataLibraryProvider implements ConnectedLibraryProvider {
   constructor(private readonly transport: typeof fetch = fetch) {}
   private async list<T>(
-    resource: 'channels' | 'playlists' | 'playlistItems' | 'videos',
+    resource:
+      | 'channels'
+      | 'playlists'
+      | 'playlistItems'
+      | 'videos'
+      | 'search'
+      | 'subscriptions',
     query: Record<string, string>,
     schema: z.ZodType<T>,
     context: ReadContext,
@@ -214,6 +264,101 @@ export class YoutubeDataLibraryProvider implements ConnectedLibraryProvider {
       })),
     };
   }
+  async subscribedMusicChannels(context: ReadContext, page: PageRequest) {
+    const subscriptions = await this.list(
+      'subscriptions',
+      {
+        part: 'snippet',
+        mine: 'true',
+        order: 'alphabetical',
+        ...args(page),
+        fields: 'nextPageToken,items(snippet/resourceId/channelId)',
+      },
+      z.object({
+        snippet: z.object({ resourceId: z.object({ channelId: z.string() }) }),
+      }),
+      context,
+    );
+    const ids = [
+      ...new Set(
+        subscriptions.items
+          .map((s) => s.snippet.resourceId.channelId)
+          .filter((id) => channelIdFormat.test(id)),
+      ),
+    ];
+    if (!ids.length)
+      return { items: [], nextPageToken: subscriptions.nextPageToken };
+    const details = await this.list(
+      'channels',
+      {
+        part: 'snippet,topicDetails',
+        id: ids.join(','),
+        maxResults: String(ids.length),
+        fields:
+          'items(id,snippet(title,' +
+          thumbnailFields +
+          '),topicDetails(topicCategories,topicIds))',
+      },
+      z.object({
+        id: z.string(),
+        snippet: z.object({ title: z.string(), thumbnails }),
+        topicDetails: z
+          .object({
+            topicCategories: z.array(z.string()).optional(),
+            topicIds: z.array(z.string()).optional(),
+          })
+          .optional(),
+      }),
+      context,
+    );
+    const music = new Map(
+      details.items
+        .filter(
+          (c) =>
+            c.topicDetails?.topicIds?.some((id) => musicTopicIds.has(id)) ||
+            c.topicDetails?.topicCategories?.some(
+              (url) =>
+                url.startsWith('https://en.wikipedia.org/wiki/') &&
+                musicTopics.has(
+                  url.slice('https://en.wikipedia.org/wiki/'.length),
+                ),
+            ),
+        )
+        .map((c) => [
+          c.id,
+          {
+            kind: 'artist' as const,
+            id: c.id,
+            title: c.snippet.title,
+            thumbnailUrl: thumb(c.snippet.thumbnails) ?? undefined,
+          },
+        ]),
+    );
+    return {
+      items: ids.flatMap((id) => music.get(id) ?? []),
+      nextPageToken: subscriptions.nextPageToken,
+    };
+  }
+  async playlistInfo(context: ReadContext, id: string) {
+    const result = await this.list(
+      'playlists',
+      {
+        id,
+        part: 'snippet,status',
+        fields: 'items(id,snippet(channelId,title),status/privacyStatus)',
+      },
+      playlist,
+      context,
+    );
+    const item = result.items.find((item) => item.id === id);
+    return item
+      ? {
+          channelId: item.snippet.channelId,
+          title: item.snippet.title,
+          private: item.status?.privacyStatus === 'private',
+        }
+      : null;
+  }
   async playlistOwner(context: ReadContext, id: string) {
     const result = await this.list(
       'playlists',
@@ -258,26 +403,80 @@ export class YoutubeDataLibraryProvider implements ConnectedLibraryProvider {
   async getVideos(context: ReadContext, ids: string[]) {
     if (!ids.length) return [];
     if (ids.length > 50) throw new RangeError('Too many video IDs');
+    return (await this.videosPage(context, { id: ids.join(',') })).items;
+  }
+  listLikedVideos(context: ReadContext, page: PageRequest) {
+    return this.videosPage(context, { myRating: 'like', ...args(page) });
+  }
+  async searchMusic(
+    context: ReadContext,
+    query: string,
+    page: PageRequest,
+    channelId?: string,
+  ) {
+    const result = await this.list(
+      'search',
+      {
+        part: 'id',
+        type: 'video',
+        ...(query && { q: query }),
+        ...(channelId && { channelId }),
+        videoCategoryId: '10',
+        fields: 'nextPageToken,items(id/videoId)',
+        ...args(page),
+      },
+      z.object({
+        id: z.object({ videoId: z.string().regex(youtubeSourceIdPattern) }),
+      }),
+      context,
+    );
+    const ids = result.items.map((item) => item.id.videoId);
+    const videos = new Map(
+      (await this.getVideos(context, ids)).map((v) => [v.id, v]),
+    );
+    return {
+      items: ids.flatMap((id) => (videos.has(id) ? [videos.get(id)!] : [])),
+      nextPageToken: result.nextPageToken,
+    };
+  }
+  private async videosPage(
+    context: ReadContext,
+    query: Record<string, string>,
+  ) {
     const result = await this.list(
       'videos',
       {
         part: 'snippet,contentDetails,status',
-        id: ids.join(','),
+        ...query,
         fields:
-          'items(id,snippet(title,channelTitle,' +
+          'nextPageToken,items(id,snippet(title,channelTitle,channelId,categoryId,description,' +
           thumbnailFields +
           '),contentDetails(duration,regionRestriction),status(uploadStatus,privacyStatus))',
       },
       video,
       context,
     );
-    return result.items.map((x) => ({
-      id: x.id,
-      title: x.snippet?.title ?? null,
-      channelTitle: x.snippet?.channelTitle ?? null,
-      durationSeconds: seconds(x.contentDetails?.duration),
-      thumbnailUrl: thumb(x.snippet?.thumbnails),
-      availability: availability(x),
-    }));
+    return {
+      nextPageToken: result.nextPageToken,
+      items: result.items.map((x) => ({
+        id: x.id,
+        title: x.snippet?.title ?? null,
+        channelTitle: x.snippet?.channelTitle ?? null,
+        artistId: /^UC[A-Za-z0-9_-]{22}$/.test(x.snippet?.channelId ?? '')
+          ? x.snippet!.channelId
+          : undefined,
+        durationSeconds: seconds(x.contentDetails?.duration),
+        thumbnailUrl: thumb(x.snippet?.thumbnails),
+        availability: availability(x),
+        // The public API has no song flag. Require the two attribution lines of an autogenerated recording.
+        isMusicCategory: x.snippet?.categoryId === '10',
+        isRecording:
+          x.snippet?.categoryId === '10' &&
+          /^Provided to YouTube by .+/im.test(x.snippet.description ?? '') &&
+          /^Auto-generated by YouTube\.\s*$/im.test(
+            x.snippet.description ?? '',
+          ),
+      })),
+    };
   }
 }

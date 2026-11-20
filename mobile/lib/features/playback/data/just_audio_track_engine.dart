@@ -1,15 +1,27 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+
+import '../domain/playback_resolution.dart';
+
 import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
+
 import '../domain/playback_source_resolver.dart';
 import '../domain/track_audio_engine.dart';
 
 class JustAudioTrackEngine implements TrackAudioEngine {
-  JustAudioTrackEngine(String baseUrl, {PlaybackSourceResolver? sourceResolver})
-    : _sourceResolver = sourceResolver ?? createPlaybackSourceResolver(baseUrl);
+  JustAudioTrackEngine(
+    String baseUrl, {
+    PlaybackSourceResolver? sourceResolver,
+    AudioPlayer? player,
+  }) : _sourceResolver =
+           sourceResolver ?? createPlaybackSourceResolver(baseUrl),
+       _instance = player;
   final PlaybackSourceResolver _sourceResolver;
   Future<void>? _configuration;
+  Future<void>? _resolverWarmUp;
   AudioPlayer? _instance;
   AudioPlayer get _player => _instance ??= AudioPlayer(
     useProxyForRequestHeaders: false,
@@ -31,6 +43,9 @@ class JustAudioTrackEngine implements TrackAudioEngine {
   final _subscriptions = <StreamSubscription<dynamic>>[];
   bool _configured = false;
   bool _disposed = false;
+  int _loadGeneration = 0;
+  bool _currentLoad(int generation) =>
+      !_disposed && generation == _loadGeneration;
   Stopwatch? _audibleTimer;
   bool _firstProgressArmed = false;
   @override
@@ -113,7 +128,14 @@ class JustAudioTrackEngine implements TrackAudioEngine {
     _player;
     await (_configuration ??= _configure());
     if (_disposed) return;
-    await _sourceResolver.warmUp();
+    // A second selection must reach the native resolver even while it is busy.
+    final warming = _resolverWarmUp ??= _sourceResolver.warmUp();
+    try {
+      await warming;
+    } catch (_) {
+      if (identical(_resolverWarmUp, warming)) _resolverWarmUp = null;
+      rethrow;
+    }
   }
 
   @override
@@ -123,29 +145,89 @@ class JustAudioTrackEngine implements TrackAudioEngine {
   }
 
   @override
-  Future<void> load(String sourceId, String token) async {
-    if (!RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(sourceId) || token.isEmpty) {
+  Future<void> load(
+    String sourceId,
+    String token, {
+    Uri? licensedAudio,
+    Uri? deviceAudio,
+    bool refresh = false,
+  }) async {
+    final demo = sourceId == PlaybackResolution.demoId;
+    if ((!demo && !RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(sourceId)) ||
+        token.isEmpty) {
       throw StateError('Fuente inválida');
     }
-    await warmUp();
-    if (_disposed) return;
-    final resolutionTimer = Stopwatch()..start();
-    final source = await _sourceResolver.resolve(sourceId, token);
-    debugPrint(
-      'audio_source_resolution durationMs=${resolutionTimer.elapsedMilliseconds}',
-    );
-    if (_disposed) return;
-    final preparationTimer = Stopwatch()..start();
-    await _player
-        .setAudioSource(
-          AudioSource.uri(source.uri, headers: source.headers),
-          preload: true,
-        )
-        .timeout(const Duration(seconds: 40));
-    _firstProgressArmed = true;
-    debugPrint(
-      'audio_player_preparation durationMs=${preparationTimer.elapsedMilliseconds}',
-    );
+    cancelLoad();
+    final generation = _loadGeneration;
+    try {
+      if (demo || licensedAudio != null || deviceAudio != null) {
+        await (_configuration ??= _configure());
+      } else {
+        await warmUp();
+      }
+      if (!_currentLoad(generation)) return;
+      final resolutionTimer = Stopwatch()..start();
+      final AudioSource audio;
+      if (deviceAudio != null) {
+        if (deviceAudio.scheme != 'file' ||
+            deviceAudio.host.isNotEmpty ||
+            deviceAudio.hasQuery ||
+            deviceAudio.hasFragment ||
+            !deviceAudio.path.startsWith('/')) {
+          throw StateError('Archivo de audio inválido');
+        }
+        audio = AudioSource.file(deviceAudio.toFilePath());
+      } else if (licensedAudio != null) {
+        if (licensedAudio.scheme != 'https' ||
+            licensedAudio.host.isEmpty ||
+            licensedAudio.userInfo.isNotEmpty ||
+            licensedAudio.hasQuery ||
+            licensedAudio.hasFragment) {
+          throw StateError('Fuente de audio inválida');
+        }
+        audio = AudioSource.uri(licensedAudio);
+      } else if (demo) {
+        audio = AudioSource.asset(PlaybackResolution.demoAsset);
+      } else {
+        final source = await _sourceResolver.resolve(
+          sourceId,
+          token,
+          refresh: refresh,
+        );
+        audio = AudioSource.uri(source.uri, headers: source.headers);
+      }
+      if (!_currentLoad(generation)) return;
+      debugPrint(
+        'audio_source_resolution durationMs=${resolutionTimer.elapsedMilliseconds}',
+      );
+      final preparationTimer = Stopwatch()..start();
+      await _player
+          .setAudioSource(audio, preload: true)
+          .timeout(const Duration(seconds: 40));
+      if (!_currentLoad(generation)) return;
+      _firstProgressArmed = true;
+      debugPrint(
+        'audio_player_preparation durationMs=${preparationTimer.elapsedMilliseconds}',
+      );
+    } on TimeoutException {
+      if (_currentLoad(generation)) throw const PlaybackSourceFailure();
+    } on PlayerException {
+      if (_currentLoad(generation)) throw const PlaybackSourceFailure();
+    } on PlatformException catch (error) {
+      if (!_currentLoad(generation)) return;
+      if (error.code == 'RESOLUTION_FAILED') {
+        throw const PlaybackSourceFailure();
+      }
+      rethrow;
+    } catch (_) {
+      if (_currentLoad(generation)) rethrow;
+    }
+  }
+
+  @override
+  void cancelLoad() {
+    _loadGeneration++;
+    _firstProgressArmed = false;
   }
 
   @override
@@ -167,8 +249,11 @@ class JustAudioTrackEngine implements TrackAudioEngine {
   @override
   Future<void> play() async {
     if (!_disposed) {
+      final generation = _loadGeneration;
       unawaited(
-        _player.play().catchError((Object _) => _emit(TrackAudioPhase.error)),
+        _player.play().catchError((Object _) {
+          if (_currentLoad(generation)) _emit(TrackAudioPhase.error);
+        }),
       );
     }
   }
@@ -176,10 +261,11 @@ class JustAudioTrackEngine implements TrackAudioEngine {
   @override
   Future<void> pause() async {
     if (!_disposed) {
+      final generation = _loadGeneration;
       try {
         await _player.pause();
       } catch (_) {
-        _emit(TrackAudioPhase.error);
+        if (_currentLoad(generation)) _emit(TrackAudioPhase.error);
       }
     }
   }
@@ -193,7 +279,7 @@ class JustAudioTrackEngine implements TrackAudioEngine {
 
   @override
   Future<void> stop() async {
-    _firstProgressArmed = false;
+    cancelLoad();
     if (!_disposed) await _instance?.stop();
   }
 

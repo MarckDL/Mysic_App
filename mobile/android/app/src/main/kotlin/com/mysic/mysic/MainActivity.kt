@@ -24,7 +24,21 @@ class MainActivity : AudioServiceActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        youtubeLink.attach(flutterEngine.dartExecutor.binaryMessenger)
+        val messenger = flutterEngine.dartExecutor.binaryMessenger
+        youtubeLink.attach(messenger)
+        MethodChannel(messenger, "com.mysic/audio_output").setMethodCallHandler { call, result ->
+            if (call.method != "open") {
+                result.notImplemented()
+            } else {
+                val action = if (android.os.Build.VERSION.SDK_INT >= 29) {
+                    android.provider.Settings.Panel.ACTION_VOLUME
+                } else {
+                    android.provider.Settings.ACTION_SOUND_SETTINGS
+                }
+                startActivity(android.content.Intent(action))
+                result.success(null)
+            }
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.mysic/history").setMethodCallHandler { call, result ->
             val uid = call.argument<String>("uid")
             if (uid == null || uid.length > 128) {
@@ -53,6 +67,8 @@ class MainActivity : AudioServiceActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             DevicePlaybackResolver.CHANNEL,
         ).setMethodCallHandler(null)
+        val messenger = flutterEngine.dartExecutor.binaryMessenger
+        MethodChannel(messenger, "com.mysic/audio_output").setMethodCallHandler(null)
         youtubeLink.detach()
         playbackResolver.close()
         super.cleanUpFlutterEngine(flutterEngine)

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <exclude domain="file" path="connected_audio/"/>
+    <exclude domain="root" path="app_webview/"/>
+    <exclude domain="sharedpref" path="youtube_music_session.xml"/>
+</full-backup-content>

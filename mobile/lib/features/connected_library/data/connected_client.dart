@@ -5,6 +5,11 @@ import '../../../core/network/authenticated_api_client.dart';
 typedef Json = Map<String, dynamic>;
 const youtubeRoot = '/api/v1/integrations/youtube';
 const returnPath = '/library/youtube/return';
+final _playlistIdPattern = RegExp(r'^[A-Za-z0-9_-]{1,150}$');
+
+Uri? youtubeMusicPlaylistUri(String id) => _playlistIdPattern.hasMatch(id)
+    ? Uri.https('music.youtube.com', '/playlist', {'list': id})
+    : null;
 final uuidPattern = RegExp(
   r'^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$',
 );
@@ -57,6 +62,18 @@ class LibraryRow {
   final String id, title;
   final String? subtitle, thumbnail;
   final Uri? open;
+
+  // Only the canonical watch URL previously validated by item() can supply
+  // the video ID. The caller supplies the currently authorized playlist.
+  Uri? musicUri(String playlistId) {
+    final video = open?.queryParameters['v'];
+    if (video == null || !_playlistIdPattern.hasMatch(playlistId)) return null;
+    return Uri.https('music.youtube.com', '/watch', {
+      'v': video,
+      'list': playlistId,
+    });
+  }
+
   factory LibraryRow.playlist(Json row) {
     final count = row['itemCount'] as int?;
     final privacy = switch (row['visibility']) {
@@ -143,8 +160,12 @@ class ConnectedClient {
         '$youtubeRoot/link-attempts/${Uri.encodeComponent(id)}',
         cancelToken: cancel,
       );
-  Future<void> unlink(CancelToken cancel) async =>
-      _api.delete('$youtubeRoot/connection', cancelToken: cancel);
+  Future<void> unlink(CancelToken cancel, {String? generation}) async =>
+      _api.delete(
+        '$youtubeRoot/connection',
+        query: {if (generation != null) 'generation': generation},
+        cancelToken: cancel,
+      );
   Future<LibraryPage> page(
     String? playlist,
     String? cursor,

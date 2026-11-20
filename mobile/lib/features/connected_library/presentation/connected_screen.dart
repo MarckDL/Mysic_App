@@ -1,13 +1,11 @@
 import 'dart:async';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/network/authenticated_api_client.dart';
 import '../application/connected_controller.dart';
 import '../application/connected_host.dart';
-import '../data/connected_client.dart';
+import 'music_mode_host.dart';
 
 class ConnectedTile extends StatelessWidget {
   const ConnectedTile({super.key, this.account = false});
@@ -20,12 +18,21 @@ class ConnectedTile extends StatelessWidget {
     final initial = connection?.status == 'unlinked' && model.pending == null;
     return ListTile(
       leading: const Icon(Icons.subscriptions_outlined),
-      title: Text(initial ? 'Vincular YouTube' : 'Biblioteca de YouTube'),
+      title: Text(
+        account
+            ? 'YouTube Music'
+            : initial
+            ? 'Vincular YouTube'
+            : 'Biblioteca de YouTube',
+      ),
       subtitle: Text(
-        connection?.channel?.title ??
-            (model.pending != null
-                ? 'Vinculación en curso'
-                : 'Playlists de tu canal'),
+        model.pending != null
+            ? 'Vinculación en curso'
+            : connection?.linked == true
+            ? 'Playlists de ${connection!.channel!.title}'
+            : account
+            ? 'Vincula tu canal para abrir sus playlists'
+            : 'Playlists de tu canal',
       ),
       trailing: const Icon(Icons.chevron_right_rounded),
       onTap: () {
@@ -37,8 +44,7 @@ class ConnectedTile extends StatelessWidget {
 }
 
 class ConnectedScreen extends StatelessWidget {
-  const ConnectedScreen({super.key, this.playlistId, this.title});
-  final String? playlistId, title;
+  const ConnectedScreen({super.key});
   @override
   Widget build(BuildContext context) {
     final model = ConnectedScope.of(context);
@@ -47,13 +53,9 @@ class ConnectedScreen extends StatelessWidget {
         model != null && connection?.linked == true && model.pending == null;
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          playlistId == null
-              ? 'Biblioteca de YouTube'
-              : title ?? 'Playlist de YouTube',
-        ),
+        title: const Text('Cuenta de YouTube Music'),
         actions: [
-          if (listing && playlistId == null)
+          if (listing)
             PopupMenuButton<String>(
               tooltip: 'Opciones del vínculo',
               enabled: !model.busy,
@@ -81,7 +83,12 @@ class ConnectedScreen extends StatelessWidget {
                     ],
                   ),
                 );
-                if (confirmed == true && model.alive) await model.unlink();
+                if (confirmed == true && model.alive) {
+                  if (context.mounted) {
+                    MusicModeScope.of(context)?.useLocal(disconnecting: true);
+                  }
+                  await model.unlink();
+                }
               },
               itemBuilder: (context) => const [
                 PopupMenuItem(
@@ -100,10 +107,14 @@ class ConnectedScreen extends StatelessWidget {
         child: model == null
             ? const Center(child: Text('El piloto está desactivado.'))
             : listing
-            ? _LibraryList(
-                key: ValueKey((model.uid, connection!.generation, playlistId)),
-                model: model,
-                playlistId: playlistId,
+            ? ListTile(
+                leading: const Icon(Icons.account_circle_outlined),
+                title: Text(connection!.channel!.title),
+                subtitle: const Text('Canal vinculado'),
+                trailing: TextButton(
+                  onPressed: () => context.go('/library'),
+                  child: const Text('Biblioteca'),
+                ),
               )
             : _LinkPanel(model: model),
       ),
@@ -125,7 +136,14 @@ class _LinkPanel extends StatelessWidget {
       children: [
         if (busy)
           const LinearProgressIndicator(semanticsLabel: 'Consultando YouTube'),
-        if (channel != null) ...[
+        if (model.needsUnlinkRetry) ...[
+          const Text('Desvinculando YouTube'),
+          if (!busy)
+            FilledButton(
+              onPressed: model.unlink,
+              child: const Text('Reintentar desvinculación'),
+            ),
+        ] else if (channel != null) ...[
           Text(
             model.replaceRequired
                 ? '¿Reemplazar el canal vinculado?'
@@ -170,11 +188,11 @@ class _LinkPanel extends StatelessWidget {
           Text(
             connection.status == 'reauthorization_required'
                 ? 'Vuelve a autorizar tu canal'
-                : 'Tus playlists de YouTube',
+                : 'Tu cuenta de YouTube Music',
             style: Theme.of(context).textTheme.titleLarge,
           ),
-          const Text(
-            'Elige la cuenta de YouTube cuyas playlists quieres consultar. Puede ser distinta de tu cuenta de Mysic.',
+          Text(
+            'Elige en Google el canal de YouTube Music que quieres usar en Mysic.',
           ),
           FilledButton.icon(
             onPressed: busy ? null : () => model.start(),
@@ -187,7 +205,7 @@ class _LinkPanel extends StatelessWidget {
           const Text(
             'El acceso desde Mysic ya se retiró. La revocación en Google está pendiente.',
           ),
-        if (pending != null)
+        if (pending != null && !model.needsUnlinkRetry)
           TextButton(
             onPressed: busy ? null : model.cancel,
             child: const Text('Cancelar vinculación'),
@@ -198,6 +216,7 @@ class _LinkPanel extends StatelessWidget {
             child: Text(model.message!, semanticsLabel: model.message),
           ),
         if (!busy &&
+            !model.needsUnlinkRetry &&
             pending == null &&
             (connection == null || revoked || model.message != null))
           OutlinedButton(
@@ -205,214 +224,6 @@ class _LinkPanel extends StatelessWidget {
             child: const Text('Reintentar'),
           ),
       ],
-    );
-  }
-}
-
-class _LibraryList extends StatefulWidget {
-  const _LibraryList({
-    super.key,
-    required this.model,
-    required this.playlistId,
-  });
-  final ConnectedController model;
-  final String? playlistId;
-  @override
-  State<_LibraryList> createState() => _LibraryListState();
-}
-
-class _LibraryListState extends State<_LibraryList> {
-  final _rows = <LibraryRow>[], _ids = <String>{};
-  CancelToken? _request;
-  String? _cursor, _error;
-  bool _loading = true, _started = false, _restart = false;
-  Timer? _cooldown;
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_load(reset: true));
-  }
-
-  @override
-  void dispose() {
-    _request?.cancel();
-    _cooldown?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _load({bool reset = false}) async {
-    if (_cooldown?.isActive == true ||
-        (!reset && (_loading || _cursor == null))) {
-      return;
-    }
-    _request?.cancel();
-    final request = CancelToken();
-    _request = request;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final page = await widget.model.client.page(
-        widget.playlistId,
-        reset ? null : _cursor,
-        request,
-      );
-      if (!mounted || request.isCancelled) return;
-      setState(() {
-        if (reset) {
-          _rows.clear();
-          _ids.clear();
-        }
-        _started = true;
-        _restart = false;
-        _rows.addAll(page.items.where((row) => _ids.add(row.id)));
-        _cursor = page.next;
-      });
-    } catch (e) {
-      if (!mounted || request.isCancelled) return;
-      final code = e is ApiFailure ? e.code : null;
-      if (code == 'REAUTHORIZE_YOUTUBE' || code == 'YOUTUBE_LINK_CHANGED') {
-        setState(() {
-          _rows.clear();
-          _ids.clear();
-          _cursor = null;
-        });
-        unawaited(widget.model.sync());
-      }
-      setState(() {
-        _error = libraryError(e);
-        _restart =
-            reset ||
-            [
-              'INVALID_CURSOR',
-              'CURSOR_EXPIRED',
-              'YOUTUBE_LINK_CHANGED',
-            ].contains(code);
-        if (_restart && !reset) {
-          _rows.clear();
-          _ids.clear();
-          _cursor = null;
-        }
-      });
-      if (e is ApiFailure && e.retryAfter != null) {
-        _cooldown = Timer(e.retryAfter!, () {
-          if (mounted) setState(() {});
-        });
-      }
-    } finally {
-      if (mounted && !request.isCancelled) setState(() => _loading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final detail = widget.playlistId != null;
-    return RefreshIndicator(
-      onRefresh: () => _load(reset: true),
-      child: ListView.builder(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        itemCount: _rows.length + 2,
-        itemBuilder: (context, i) {
-          if (i == 0) {
-            return ListTile(
-              contentPadding: EdgeInsets.zero,
-              subtitle: widget.model.message == null
-                  ? null
-                  : Text(widget.model.message!),
-              title: Text(
-                detail
-                    ? 'Videos'
-                    : 'Playlists de ${widget.model.connection?.channel?.title ?? 'YouTube'}',
-              ),
-              trailing: IconButton(
-                tooltip: 'Actualizar',
-                onPressed: _loading || _cooldown?.isActive == true
-                    ? null
-                    : () => _load(reset: true),
-                icon: const Icon(Icons.refresh),
-              ),
-            );
-          }
-          if (i == _rows.length + 1) {
-            return Column(
-              children: [
-                if (_loading)
-                  const LinearProgressIndicator(
-                    semanticsLabel: 'Cargando biblioteca',
-                  ),
-                if (_error != null) ...[
-                  Text(_error!),
-                  TextButton(
-                    onPressed: _cooldown?.isActive == true
-                        ? null
-                        : () => _load(reset: _restart || !_started),
-                    child: const Text('Reintentar'),
-                  ),
-                ] else if (!_loading && _cursor != null)
-                  OutlinedButton(
-                    onPressed: () => _load(),
-                    child: const Text('Cargar más'),
-                  )
-                else if (!_loading && _rows.isEmpty)
-                  Text(
-                    detail
-                        ? 'Esta playlist está vacía.'
-                        : 'YouTube no devolvió playlists propias para este canal.',
-                  ),
-              ],
-            );
-          }
-          final row = _rows[i - 1], image = row.thumbnail;
-          final icon = Icon(
-            detail ? Icons.play_circle_outline : Icons.queue_music,
-          );
-          return ListTile(
-            key: ValueKey(row.id),
-            leading: image == null
-                ? icon
-                : Image.network(
-                    image,
-                    width: 48,
-                    height: 48,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => icon,
-                  ),
-            title: Text(row.title),
-            subtitle: row.subtitle?.isNotEmpty == true
-                ? Text(row.subtitle!)
-                : null,
-            trailing: detail
-                ? (row.open == null ? null : const Icon(Icons.open_in_new))
-                : const Icon(Icons.chevron_right),
-            onTap: detail && row.open == null
-                ? null
-                : () async {
-                    if (!detail) {
-                      context.push(
-                        '/library/youtube/playlist/${Uri.encodeComponent(row.id)}',
-                        extra: row.title,
-                      );
-                      return;
-                    }
-                    var opened = false;
-                    try {
-                      opened = await widget.model.platform.open(row.open!);
-                    } catch (_) {}
-                    if (!opened && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'No se pudo abrir el video en YouTube.',
-                          ),
-                        ),
-                      );
-                    }
-                  },
-          );
-        },
-      ),
     );
   }
 }

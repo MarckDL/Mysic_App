@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../authentication/application/auth_providers.dart';
 import '../../authentication/domain/mysic_profile.dart';
 import '../../history/data/history_client.dart';
+import '../../favorites/application/favorite_providers.dart';
+import '../../playlists/application/playlist_providers.dart';
 import '../../playback/presentation/open_player.dart';
 import '../../search/presentation/catalog_widgets.dart';
 
@@ -53,14 +55,30 @@ class HomeScreen extends ConsumerWidget {
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 4),
+            Text(
+              '¿Qué escuchamos hoy?',
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 20),
             const _DiscoverCard(),
+            const SizedBox(height: 24),
+            Text(
+              'Acceso rápido',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const _QuickLinks(),
             const SizedBox(height: 20),
             Row(
               children: [
                 Expanded(
                   child: Text(
-                    'Recientes',
+                    'Volver a escuchar',
                     style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -104,41 +122,136 @@ class HomeScreen extends ConsumerWidget {
                           ),
                         ]
                       : [
-                          for (final item in items)
+                          SizedBox(
+                            height:
+                                200 +
+                                MediaQuery.textScalerOf(context).scale(32),
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: items.length,
+                              separatorBuilder: (_, _) =>
+                                  const SizedBox(width: 12),
+                              itemBuilder: (context, index) {
+                                final track = items[index].track;
+                                return SizedBox(
+                                  width: 124,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(14),
+                                    onTap: () =>
+                                        playAndOpenPlayer(context, ref, track),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Stack(
+                                          children: [
+                                            TrackArtwork(
+                                              url: track.thumbnailUrl,
+                                              size: 124,
+                                              borderRadius: 14,
+                                            ),
+                                            const Positioned(
+                                              right: 8,
+                                              bottom: 8,
+                                              child: CircleAvatar(
+                                                radius: 14,
+                                                backgroundColor: Colors.white,
+                                                child: Icon(
+                                                  Icons.play_arrow,
+                                                  size: 20,
+                                                  color: Color(0xFF745096),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          track.title,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        Text(
+                                          track.artistName,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                ),
+            ...ref
+                .watch(favoritesProvider)
+                .maybeWhen(
+                  data: (items) => items.isEmpty
+                      ? <Widget>[]
+                      : [
+                          const SizedBox(height: 16),
+                          Text(
+                            'Tus favoritos',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          for (final item in items.take(3))
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               leading: TrackArtwork(
                                 url: item.track.thumbnailUrl,
-                                size: 52,
-                                borderRadius: 10,
+                                size: 48,
                               ),
                               title: Text(
                                 item.track.title,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                ),
                               ),
-                              subtitle: Text(
-                                [
-                                  item.track.artistName,
-                                  ?item.track.durationLabel,
-                                ].join(' · '),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              trailing: IconButton(
-                                tooltip: 'Detalles de la canción',
-                                icon: const Icon(Icons.more_horiz),
-                                onPressed: () => context.push(
-                                  '/tracks/${Uri.encodeComponent(item.track.id)}',
-                                ),
-                              ),
+                              subtitle: Text(item.track.artistName),
+                              trailing: Text(item.track.durationLabel ?? ''),
                               onTap: () =>
                                   playAndOpenPlayer(context, ref, item.track),
                             ),
                         ],
+                  orElse: () => <Widget>[],
+                ),
+            ...ref
+                .watch(playlistsProvider)
+                .maybeWhen(
+                  data: (items) => items.isEmpty
+                      ? <Widget>[]
+                      : [
+                          const SizedBox(height: 20),
+                          Text(
+                            'Tus playlists',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          for (final playlist in items.take(3))
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: TrackArtwork(
+                                url: playlist.thumbnailUrl,
+                                size: 56,
+                                fallbackIcon: Icons.queue_music,
+                              ),
+                              title: Text(playlist.name),
+                              subtitle: Text(
+                                '${playlist.trackCount} canciones',
+                              ),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () =>
+                                  context.push('/playlists/${playlist.id}'),
+                            ),
+                        ],
+                  orElse: () => <Widget>[],
                 ),
           ],
         ),
@@ -211,4 +324,65 @@ class _DiscoverCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _QuickLinks extends StatelessWidget {
+  const _QuickLinks();
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => Wrap(
+      spacing: 6,
+      runSpacing: 8,
+      children: [
+        for (final (label, icon, path) in [
+          ('Favoritos', Icons.favorite_border, '/favorites'),
+          ('Playlists', Icons.queue_music, '/playlists'),
+          ('Descargas', Icons.download_outlined, ''),
+          ('Historial', Icons.history, '/history'),
+        ])
+          SizedBox(
+            width:
+                (constraints.maxWidth - 18) /
+                (MediaQuery.textScalerOf(context).scale(1) > 1.5 ? 2 : 4),
+            child: Material(
+              color: Theme.of(context).colorScheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(14),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: path.isEmpty ? null : () => context.push(path),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 12,
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        icon,
+                        color: path.isEmpty
+                            ? Theme.of(context).disabledColor
+                            : Theme.of(context).colorScheme.primary,
+                        size: 28,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        label,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.labelMedium,
+                      ),
+                      if (path.isEmpty)
+                        Text(
+                          'Próximamente',
+                          style: Theme.of(context).textTheme.labelSmall,
+                          textAlign: TextAlign.center,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
 }

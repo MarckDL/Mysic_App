@@ -35,6 +35,91 @@ void main() {
     controller = TrackPlaybackController(auth, engine, 'a');
   });
   tearDown(() => controller.dispose());
+  final localFile = Uri.file('/privado/a.media');
+  final owned = CatalogTrack(
+    id: a.id,
+    title: a.title,
+    artistName: a.artistName,
+    deviceAudio: localFile,
+  );
+  final licensed = CatalogTrack(
+    id: b.id,
+    title: b.title,
+    artistName: b.artistName,
+    licensedAudio: Uri.https('media.example.test', '/b.mp3'),
+  );
+  final third = CatalogTrack(
+    id: c.id,
+    title: c.title,
+    artistName: c.artistName,
+    licensedAudio: Uri.https('media.example.test', '/c.mp3'),
+  );
+
+  test(
+    'una playlist con posiciones repetidas respeta el máximo de 100 al añadir una tanda',
+    () async {
+      await controller.playQueue(List.filled(100, owned));
+      expect(
+        controller.queueConnected([licensed, third, owned], next: true),
+        isFalse,
+      );
+      expect(controller.queue, hasLength(100));
+      controller.remove(99);
+      expect(controller.queueConnected([licensed, third], next: true), isTrue);
+      expect(controller.queue, hasLength(100));
+      expect(controller.queue[1], licensed);
+      expect(controller.current, owned);
+    },
+  );
+  test(
+    'la cola conectada respeta siguiente y final sin duplicar ni interrumpir el audio',
+    () async {
+      expect(controller.queueConnected([owned], next: false), isTrue);
+      expect(controller.queueConnected([licensed], next: true), isTrue);
+      expect(controller.queue, [owned, licensed]);
+      expect(engine.plays, 0);
+      await controller.jump(0);
+      expect(engine.lastDeviceAudio, localFile);
+      expect(
+        controller.queueConnected([third, owned, third], next: true),
+        isTrue,
+      );
+      expect(controller.queueConnected([owned], next: true), isFalse);
+      expect(controller.queue, [owned, third, licensed]);
+      expect(controller.queueConnected([third], next: false), isTrue);
+      expect(controller.queue, [owned, licensed, third]);
+      expect(engine.plays, 1);
+      await controller.next();
+      expect(engine.lastDeviceAudio, isNull);
+      expect(engine.lastLicensedAudio, licensed.licensedAudio);
+      expect(engine.prefetched, isEmpty);
+    },
+  );
+
+  test(
+    'aleatorio puede restaurar el orden y retirar un archivo solo afecta sus posiciones',
+    () async {
+      await controller.playQueue([owned, licensed, third], shuffled: true);
+      expect(controller.shuffleEnabled, isTrue);
+      expect(controller.queue.toSet(), {owned, licensed, third});
+      controller.toggleShuffle();
+      expect(controller.queue, [owned, licensed, third]);
+      await controller.jump(1);
+      final before = engine.plays;
+      await controller.removeDeviceAudio(Uri.file('/otro/archivo'));
+      await controller.removeDeviceAudio(localFile);
+      expect(controller.queue, [licensed, third]);
+      expect(controller.current, licensed);
+      expect(controller.phase, TrackAudioPhase.playing);
+      expect(engine.plays, before);
+      controller.queueConnected([owned], next: true);
+      await controller.next();
+      await controller.removeDeviceAudio(localFile);
+      expect(controller.queue, [licensed, third]);
+      expect(controller.current, isNull);
+      expect(controller.phase, TrackAudioPhase.idle);
+    },
+  );
   test('calienta una sola instancia del motor al crear la sesión', () async {
     await Future<void>.delayed(Duration.zero);
     expect(engine.warmUps, 1);

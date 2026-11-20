@@ -12,6 +12,9 @@ export interface PlaylistEntry {
   title: string | null;
 }
 export interface VideoDetails {
+  isRecording?: boolean;
+  isMusicCategory?: boolean;
+  artistId?: string;
   id: string;
   title: string | null;
   channelTitle: string | null;

@@ -213,7 +213,11 @@ void main() {
       await tester.pumpAndSettle();
       final results = find.descendant(
         of: find.byType(ListView),
-        matching: find.byType(Scrollable),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Scrollable &&
+              widget.axisDirection == AxisDirection.down,
+        ),
       );
       await tester.drag(results, const Offset(0, -440));
       await tester.pumpAndSettle();
@@ -259,8 +263,9 @@ void main() {
       await tester.tap(find.byTooltip('Abrir reproductor'));
       await tester.pumpAndSettle();
       expect(find.text('Reproductor'), findsOneWidget);
-      final queue = find.text('Cola (1/100)');
-      await tester.scrollUntilVisible(queue, 160);
+      final queue = find.widgetWithText(TextButton, 'Cola');
+      await tester.scrollUntilVisible(queue.hitTestable(), 160);
+      await tester.pumpAndSettle();
       await tester.tap(queue);
       await tester.pumpAndSettle();
       expect(find.byType(BottomSheet), findsOneWidget);

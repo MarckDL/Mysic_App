@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +10,10 @@ import '../../features/authentication/presentation/account_screen.dart';
 import '../../features/comments/presentation/moderation_screen.dart';
 import '../../features/connected_library/application/connected_host.dart';
 import '../../features/connected_library/presentation/connected_screen.dart';
+import '../../features/connected_library/application/music_mode_controller.dart';
+import '../../features/connected_library/domain/music_mode.dart';
+import '../../features/connected_library/presentation/music_mode_host.dart';
+import '../../features/connected_library/presentation/music_mode_screen.dart';
 import '../../features/favorites/presentation/favorites_screen.dart';
 import '../../features/history/data/history_client.dart';
 import '../../features/history/presentation/history_screen.dart';
@@ -50,9 +56,12 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
             routes: [
               GoRoute(
                 path: '/',
-                builder: (context, state) => HomeScreen(
-                  profile: widget.profile,
-                  accountAction: const AccountAction(),
+                builder: (context, state) => MusicModeSurface(
+                  surface: MusicSurface.home,
+                  local: HomeScreen(
+                    profile: widget.profile,
+                    accountAction: const AccountAction(),
+                  ),
                 ),
               ),
             ],
@@ -61,8 +70,10 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
             routes: [
               GoRoute(
                 path: '/search',
-                builder: (context, state) =>
-                    const SearchScreen(accountAction: AccountAction()),
+                builder: (context, state) => const MusicModeSurface(
+                  surface: MusicSurface.search,
+                  local: SearchScreen(accountAction: AccountAction()),
+                ),
               ),
             ],
           ),
@@ -70,8 +81,10 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
             routes: [
               GoRoute(
                 path: '/library',
-                builder: (context, state) =>
-                    const LibraryScreen(accountAction: AccountAction()),
+                builder: (context, state) => const MusicModeSurface(
+                  surface: MusicSurface.songs,
+                  local: LibraryScreen(accountAction: AccountAction()),
+                ),
                 routes: [
                   GoRoute(
                     path: 'youtube',
@@ -81,10 +94,8 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
                       GoRoute(
                         path: 'playlist/:id',
                         parentNavigatorKey: _rootKey,
-                        builder: (context, state) => ConnectedScreen(
-                          playlistId: state.pathParameters['id'],
-                          title: state.extra as String?,
-                        ),
+                        redirect: (context, state) =>
+                            '/music/playlist/${Uri.encodeComponent(state.pathParameters['id']!)}',
                       ),
                     ],
                   ),
@@ -96,11 +107,50 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
       ),
       GoRoute(
         path: '/imports/youtube-music',
-        builder: (context, state) => const ImportScreen(),
+        builder: (context, state) => const _MysicOnly(child: ImportScreen()),
       ),
       GoRoute(
         path: '/history',
-        builder: (context, state) => const HistoryScreen(),
+        builder: (context, state) => const MusicModeSurface(
+          surface: MusicSurface.history,
+          local: HistoryScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/music/playlist/:id',
+        builder: (context, state) => MusicModeSurface(
+          surface: MusicSurface.playlist,
+          playlistId: state.pathParameters['id'],
+        ),
+      ),
+      GoRoute(
+        path: '/music/album/:id',
+        builder: (context, state) => MusicModeSurface(
+          surface: MusicSurface.album,
+          playlistId: state.pathParameters['id'],
+        ),
+      ),
+      GoRoute(
+        path: '/music/liked',
+        builder: (context, state) =>
+            const MusicModeSurface(surface: MusicSurface.liked),
+      ),
+      GoRoute(
+        path: '/music/repeat',
+        builder: (context, state) =>
+            const MusicModeSurface(surface: MusicSurface.onRepeat),
+      ),
+      GoRoute(
+        path: '/music/artists',
+        builder: (context, state) =>
+            const MusicModeSurface(surface: MusicSurface.artists),
+      ),
+      GoRoute(
+        path: '/music/artist/:id',
+        builder: (context, state) => MusicModeSurface(
+          surface: MusicSurface.artist,
+          playlistId: state.pathParameters['id'],
+        ),
       ),
       GoRoute(
         path: '/player',
@@ -113,25 +163,31 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
       if (kDebugMode) ...[
         GoRoute(
           path: '/youtube-audio-test',
-          builder: (context, state) => const YoutubeAudioTestScreen(),
+          builder: (context, state) =>
+              const _MysicOnly(child: YoutubeAudioTestScreen()),
         ),
         GoRoute(
           path: '/audio-test',
-          builder: (context, state) => const DemoAudioScreen(),
+          builder: (context, state) =>
+              const _MysicOnly(child: DemoAudioScreen()),
         ),
       ],
       GoRoute(
         path: '/playlists',
-        builder: (context, state) => const PlaylistsScreen(),
+        builder: (context, state) => const _MysicOnly(child: PlaylistsScreen()),
       ),
       GoRoute(
         path: '/playlists/:id',
-        builder: (context, state) =>
-            PlaylistDetailScreen(id: state.pathParameters['id']!),
+        builder: (context, state) => _MysicOnly(
+          child: PlaylistDetailScreen(id: state.pathParameters['id']!),
+        ),
       ),
       GoRoute(
         path: '/favorites',
-        builder: (context, state) => const FavoritesScreen(),
+        builder: (context, state) => const MusicModeSurface(
+          surface: MusicSurface.liked,
+          local: FavoritesScreen(),
+        ),
       ),
       GoRoute(
         path: '/moderation/comments',
@@ -141,8 +197,9 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
       ),
       GoRoute(
         path: '/tracks/:id',
-        builder: (context, state) =>
-            TrackDetailScreen(id: state.pathParameters['id']!),
+        builder: (context, state) => _MysicOnly(
+          child: TrackDetailScreen(id: state.pathParameters['id']!),
+        ),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(
@@ -164,13 +221,44 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
 
   @override
   Widget build(BuildContext context) {
-    final router = Router.withConfig(config: _router);
+    Widget router = Router.withConfig(config: _router);
+    if (ref.watch(youtubeMusicModeEnabledProvider)) {
+      router = MusicModeHost(
+        controller: ref.watch(
+          musicModeControllerProvider(widget.profile.firebaseUid),
+        ),
+        child: router,
+      );
+    }
     if (!ref.watch(youtubePilotProvider)) return router;
     return ConnectedHost(
       controller: ref.watch(
         connectedControllerProvider(widget.profile.firebaseUid),
       ),
+      onBindingChanged: (confirmed) {
+        if (!ref.read(youtubeMusicModeEnabledProvider)) return;
+        final music = ref.read(
+          musicModeControllerProvider(widget.profile.firebaseUid),
+        );
+        if (music.connection?.isPreview == true) return;
+        if (confirmed) {
+          unawaited(music.useLinkedAccount());
+          _router.go('/library');
+        } else {
+          unawaited(music.refresh(invalidate: true));
+        }
+      },
       onReturn: () {
+        if (ref.read(youtubeMusicModeEnabledProvider) &&
+            ref
+                    .read(
+                      musicModeControllerProvider(widget.profile.firebaseUid),
+                    )
+                    .connection
+                    ?.isPreview ==
+                true) {
+          return;
+        }
         const path = '/library/youtube';
         if (_router.routerDelegate.currentConfiguration.isEmpty ||
             _router.state.matchedLocation != path) {
@@ -191,6 +279,7 @@ class _CatalogShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.watch(trackPlaybackControllerProvider);
+    final music = MusicModeScope.of(context);
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return Scaffold(
       body: shell,
@@ -208,22 +297,24 @@ class _CatalogShell extends ConsumerWidget {
                   labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
                   onDestinationSelected: (index) {
                     FocusManager.instance.primaryFocus?.unfocus();
-                    if (index == 0 && shell.currentIndex != 0) {
+                    if (music?.showMusic != true &&
+                        index == 0 &&
+                        shell.currentIndex != 0) {
                       ref.invalidate(recentListeningProvider(firebaseUid));
                     }
                     shell.goBranch(index);
                   },
-                  destinations: const [
-                    NavigationDestination(
+                  destinations: [
+                    const NavigationDestination(
                       icon: Icon(Icons.home_outlined),
                       selectedIcon: Icon(Icons.home),
                       label: 'Inicio',
                     ),
                     NavigationDestination(
-                      icon: Icon(Icons.search),
-                      label: 'Explorar',
+                      icon: const Icon(Icons.search),
+                      label: music?.wantsMusic == true ? 'Buscar' : 'Explorar',
                     ),
-                    NavigationDestination(
+                    const NavigationDestination(
                       icon: Icon(Icons.library_music_outlined),
                       selectedIcon: Icon(Icons.library_music),
                       label: 'Biblioteca',
@@ -232,6 +323,26 @@ class _CatalogShell extends ConsumerWidget {
                 ),
               ],
             ),
+    );
+  }
+}
+
+class _MysicOnly extends StatelessWidget {
+  const _MysicOnly({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (MusicModeScope.of(context)?.showMusic != true) return child;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Mysic')),
+      body: Center(
+        child: TextButton(
+          onPressed: () => context.go('/'),
+          child: const Text('Volver a Inicio'),
+        ),
+      ),
     );
   }
 }

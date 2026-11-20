@@ -328,6 +328,48 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       ).toBe(0);
       expect((await svc.connection(a)).status).toBe('linked');
     });
+    it('renovar el mismo canal conserva sus escuchas y archivos; reemplazarlo inicia una biblioteca nueva', async () => {
+      await link(a);
+      const first = await svc.connection(a);
+      await getDatabase().externalMusicConnection.update({
+        where: { userId: a },
+        data: { mysicHistoryPaused: true },
+      });
+      await getDatabase().channelMusicListen.create({
+        data: {
+          userId: a,
+          generation: first.generation!,
+          listenId: randomUUID(),
+          videoId: 'ABCDEFGHIJK',
+          listenedMs: 30000,
+        },
+      });
+      await link(a);
+      const renewed = await svc.connection(a);
+      expect(renewed.generation).not.toBe(first.generation);
+      expect(renewed.mysicLibraryId).toBe(first.mysicLibraryId);
+      expect(renewed.mysicHistoryPaused).toBe(true);
+      expect(
+        await getDatabase().channelMusicListen.findFirstOrThrow({
+          where: { userId: a },
+        }),
+      ).toMatchObject({ generation: renewed.generation });
+      provider.channel.mockResolvedValueOnce({
+        id: 'otro-canal',
+        title: 'Otro',
+      });
+      const candidateChannel = await candidate(a);
+      await svc.confirm(a, candidateChannel.id, {
+        channelId: 'otro-canal',
+        replace: true,
+      });
+      const replaced = await svc.connection(a);
+      expect(replaced.mysicLibraryId).not.toBe(first.mysicLibraryId);
+      expect(replaced.mysicHistoryPaused).toBe(false);
+      expect(
+        await getDatabase().channelMusicListen.count({ where: { userId: a } }),
+      ).toBe(0);
+    });
     it('protege sujeto entre cuentas y exige confirmación explícita al reemplazar o volver manualmente', async () => {
       await link(a);
       const other = await candidate(b);

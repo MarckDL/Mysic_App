@@ -39,15 +39,22 @@ Future<void> editPlaylist(
   }
 }
 
-class PlaylistsScreen extends ConsumerWidget {
+class PlaylistsScreen extends ConsumerStatefulWidget {
   const PlaylistsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PlaylistsScreen> createState() => _PlaylistsScreenState();
+}
+
+class _PlaylistsScreenState extends ConsumerState<PlaylistsScreen> {
+  String _query = '';
+  @override
+  Widget build(BuildContext context) {
     final action = ref.watch(playlistActionsProvider);
     final playlists = ref.watch(playlistsProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Playlists')),
+
       floatingActionButton: FloatingActionButton.extended(
         onPressed: action.isLoading
             ? null
@@ -96,55 +103,88 @@ class PlaylistsScreen extends ConsumerWidget {
               ],
             ),
           ),
-          data: (items) => items.isEmpty
-              ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Text(
-                      'Todavía no tienes playlists. Crea una para guardar canciones.',
-                      textAlign: TextAlign.center,
+          data: (allItems) {
+            final items = allItems
+                .where(
+                  (item) =>
+                      item.name.toLowerCase().contains(_query.toLowerCase()),
+                )
+                .toList();
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                  child: TextField(
+                    onChanged: (value) => setState(() => _query = value),
+                    decoration: InputDecoration(
+                      hintText: 'Buscar playlist',
+                      prefixIcon: const Icon(Icons.search),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
                   ),
-                )
-              : RefreshIndicator(
-                  onRefresh: () => ref.refresh(playlistsProvider.future),
-                  child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 96),
-                    itemCount: items.length,
-                    separatorBuilder: (context, index) =>
-                        const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final item = items[index];
-                      return ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: TrackArtwork(
-                          url: item.thumbnailUrl,
-                          size: 64,
-                          borderRadius: 12,
-                          fallbackIcon: Icons.queue_music_rounded,
-                        ),
-                        title: Text(item.name),
-                        subtitle: Text(
-                          '${item.trackCount} ${item.trackCount == 1 ? 'canción' : 'canciones'} · '
-                          '${item.visibility == PlaylistVisibility.private ? 'Privada' : 'Pública'}',
-                        ),
-                        trailing: PopupMenuButton<String>(
-                          tooltip: 'Opciones de playlist',
-                          icon: const Icon(Icons.more_horiz),
-                          enabled: !action.isLoading,
-                          onSelected: (_) => editPlaylist(context, ref, item),
-                          itemBuilder: (context) => const [
-                            PopupMenuItem(
-                              value: 'edit',
-                              child: Text('Editar playlist'),
-                            ),
-                          ],
-                        ),
-                        onTap: () => context.push('/playlists/${item.id}'),
-                      );
-                    },
-                  ),
                 ),
+                Expanded(
+                  child: items.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(32),
+                            child: Text(
+                              allItems.isEmpty
+                                  ? 'Todavía no tienes playlists. Crea una para guardar canciones.'
+                                  : 'No se encontraron playlists.',
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: () =>
+                              ref.refresh(playlistsProvider.future),
+                          child: ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(20, 12, 20, 96),
+                            itemCount: items.length,
+                            separatorBuilder: (context, index) =>
+                                const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final item = items[index];
+                              return ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: TrackArtwork(
+                                  url: item.thumbnailUrl,
+                                  size: 76,
+                                  borderRadius: 12,
+                                  fallbackIcon: Icons.queue_music_rounded,
+                                ),
+                                title: Text(item.name),
+                                subtitle: Text(
+                                  '${item.trackCount} ${item.trackCount == 1 ? 'canción' : 'canciones'} · '
+                                  '${item.visibility == PlaylistVisibility.private ? 'Privada' : 'Pública'}',
+                                ),
+                                trailing: PopupMenuButton<String>(
+                                  tooltip: 'Opciones de playlist',
+                                  icon: const Icon(Icons.more_horiz),
+                                  enabled: !action.isLoading,
+                                  onSelected: (_) =>
+                                      editPlaylist(context, ref, item),
+                                  itemBuilder: (context) => const [
+                                    PopupMenuItem(
+                                      value: 'edit',
+                                      child: Text('Editar playlist'),
+                                    ),
+                                  ],
+                                ),
+                                onTap: () =>
+                                    context.push('/playlists/${item.id}'),
+                              );
+                            },
+                          ),
+                        ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

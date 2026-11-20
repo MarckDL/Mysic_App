@@ -17,10 +17,8 @@ import java.io.Closeable
 import java.net.URI
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
-import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
 
 internal class DevicePlaybackResolver : MethodChannel.MethodCallHandler, Closeable {
     private data class StageTimings(
@@ -41,24 +39,26 @@ internal class DevicePlaybackResolver : MethodChannel.MethodCallHandler, Closeab
 
     private val initialized = AtomicBoolean(false)
     private val closed = AtomicBoolean(false)
-    private val generation = AtomicInteger()
     private val executor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val downloader = ExtractorDownloader()
     private val validationClient = OkHttpClient.Builder()
+        .callTimeout(VALIDATION_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
         .connectTimeout(VALIDATION_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
         .readTimeout(VALIDATION_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
+    // The flights lock also protects cached results and active work.
     private val cache = object : LinkedHashMap<String, CachedSource>(CACHE_LIMIT, 0.75f, true) {
         override fun removeEldestEntry(
             eldest: MutableMap.MutableEntry<String, CachedSource>?,
         ): Boolean = size > CACHE_LIMIT
     }
     private val flights = mutableMapOf<String, CompletableFuture<CachedSource>>()
+    private var activeFlight: CompletableFuture<CachedSource>? = null
     private var prefetchSourceId: String? = null
-    private var prefetchTask: Future<*>? = null
+    private var prefetchTask: CompletableFuture<CachedSource>? = null
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
@@ -76,8 +76,6 @@ internal class DevicePlaybackResolver : MethodChannel.MethodCallHandler, Closeab
             }
             "clear" -> {
                 cancelAll()
-                synchronized(cache) { cache.clear() }
-                synchronized(flights) { flights.clear() }
                 result.success(null)
             }
             else -> result.notImplemented()
@@ -90,9 +88,22 @@ internal class DevicePlaybackResolver : MethodChannel.MethodCallHandler, Closeab
             result.error("INVALID_SOURCE", "Invalid source id", null)
             return
         }
-        if (prefetchSourceId != sourceId) cancelPrefetch()
+        val id = sourceId!!
+        val refresh = call.argument<Boolean>("refresh") == true
+        if (prefetchSourceId == id && !refresh) {
+            // The foreground request takes ownership of the prefetched flight.
+            prefetchSourceId = null
+            prefetchTask = null
+        } else {
+            cancelPrefetch()
+        }
+        synchronized(flights) {
+            val obsolete = flights.keys.filter { it != id || refresh }
+            for (obsoleteId in obsolete) cancelFlight(obsoleteId, flights.getValue(obsoleteId))
+            if (refresh) cache.remove(id)
+        }
         val startedAt = SystemClock.elapsedRealtime()
-        resolveSingleFlight(sourceId!!).whenComplete { source, error ->
+        resolveSingleFlight(id).whenComplete { source, error ->
             val duration = SystemClock.elapsedRealtime() - startedAt
             if (error == null && source != null) {
                 Log.i(
@@ -139,34 +150,49 @@ internal class DevicePlaybackResolver : MethodChannel.MethodCallHandler, Closeab
             return
         }
         cancelPrefetch()
-        prefetchSourceId = sourceId
-        val completion = resolveSingleFlight(sourceId!!)
-        prefetchTask = completion.whenComplete { _, _ ->
-            if (prefetchSourceId == sourceId) {
-                prefetchSourceId = null
-                prefetchTask = null
+        val id = sourceId!!
+        if (synchronized(flights) { flights.containsKey(id) }) {
+            // Prefetch must not take ownership of a foreground resolution.
+            result.success(null)
+            return
+        }
+        prefetchSourceId = id
+        val completion = resolveSingleFlight(id)
+        prefetchTask = completion
+        completion.whenComplete { _, _ ->
+            mainHandler.post {
+                if (prefetchTask === completion) {
+                    prefetchSourceId = null
+                    prefetchTask = null
+                }
+                result.success(null)
             }
-            mainHandler.post { result.success(null) }
         }
     }
 
     private fun resolveSingleFlight(sourceId: String): CompletableFuture<CachedSource> {
-        cached(sourceId)?.let { return CompletableFuture.completedFuture(it) }
         synchronized(flights) {
+            cached(sourceId)?.let { return CompletableFuture.completedFuture(it) }
             flights[sourceId]?.let { return it }
             val queuedAt = SystemClock.elapsedRealtime()
-            val requestedGeneration = generation.get()
             val future = CompletableFuture<CachedSource>()
             flights[sourceId] = future
             executor.execute {
                 try {
+                    synchronized(flights) {
+                        if (flights[sourceId] !== future) return@execute
+                        activeFlight = future
+                    }
                     future.complete(
-                        resolveUncached(sourceId, queuedAt, requestedGeneration),
+                        resolveUncached(sourceId, queuedAt, future),
                     )
                 } catch (error: Throwable) {
                     future.completeExceptionally(error)
                 } finally {
-                    synchronized(flights) { flights.remove(sourceId, future) }
+                    synchronized(flights) {
+                        if (activeFlight === future) activeFlight = null
+                        flights.remove(sourceId, future)
+                    }
                 }
             }
             return future
@@ -175,22 +201,25 @@ internal class DevicePlaybackResolver : MethodChannel.MethodCallHandler, Closeab
 
     private fun cached(sourceId: String): CachedSource? {
         val now = System.currentTimeMillis()
-        synchronized(cache) {
-            val source = cache[sourceId]
-            if (source != null && source.expiresAtMillis > now + EXPIRY_MARGIN_MS) {
-                return source.copy(cacheHit = true, timings = null)
-            }
-            cache.remove(sourceId)
+        val source = cache[sourceId]
+        if (source != null && source.expiresAtMillis > now + EXPIRY_MARGIN_MS) {
+            return source.copy(cacheHit = true, timings = null)
         }
+        cache.remove(sourceId)
         return null
     }
 
     private fun resolveUncached(
         sourceId: String,
         queuedAt: Long,
-        requestedGeneration: Int,
+        flight: CompletableFuture<CachedSource>,
     ): CachedSource {
-        check(!closed.get())
+        fun checkCurrent() {
+            check(!closed.get() && !flight.isCancelled) {
+                "Resolution cancelled"
+            }
+        }
+        checkCurrent()
         val startedAt = SystemClock.elapsedRealtime()
         initializeExtractor()
         val extractorStarted = SystemClock.elapsedRealtime()
@@ -198,6 +227,7 @@ internal class DevicePlaybackResolver : MethodChannel.MethodCallHandler, Closeab
             "https://www.youtube.com/watch?v=$sourceId",
         )
         extractor.fetchPage()
+        checkCurrent()
         val extractorMs = SystemClock.elapsedRealtime() - extractorStarted
         val formatsStarted = SystemClock.elapsedRealtime()
         val candidates = extractor.audioStreams
@@ -213,13 +243,15 @@ internal class DevicePlaybackResolver : MethodChannel.MethodCallHandler, Closeab
             .toList()
         val formatsMs = SystemClock.elapsedRealtime() - formatsStarted
         val validationStarted = SystemClock.elapsedRealtime()
-        val selected = candidates.firstOrNull { validateTail(it) }
+        val selected = candidates.firstOrNull {
+            checkCurrent()
+            validateTail(it)
+        }
             ?: error("No complete audio stream")
         val validationMs = SystemClock.elapsedRealtime() - validationStarted
         val now = System.currentTimeMillis()
         val expiresAt = calculateExpiry(selected.content, now)
         check(expiresAt > now + EXPIRY_MARGIN_MS)
-        check(generation.get() == requestedGeneration) { "Resolution cancelled" }
         val source = CachedSource(
             url = selected.content,
             mimeType = selected.format?.mimeType ?: "audio/mp4",
@@ -232,7 +264,11 @@ internal class DevicePlaybackResolver : MethodChannel.MethodCallHandler, Closeab
                 totalMs = SystemClock.elapsedRealtime() - queuedAt,
             ),
         )
-        synchronized(cache) { cache[sourceId] = source }
+        synchronized(flights) {
+            checkCurrent()
+            check(flights[sourceId] === flight) { "Resolution superseded" }
+            cache[sourceId] = source
+        }
         return source
     }
 
@@ -283,20 +319,31 @@ internal class DevicePlaybackResolver : MethodChannel.MethodCallHandler, Closeab
     }
 
     private fun cancelPrefetch() {
-        if (prefetchSourceId == null) return
-        generation.incrementAndGet()
-        prefetchTask?.cancel(true)
+        val id = prefetchSourceId
+        val flight = prefetchTask
         prefetchTask = null
         prefetchSourceId = null
-        downloader.cancelActive()
+        if (id == null || flight == null) return
+        synchronized(flights) { cancelFlight(id, flight) }
+    }
+
+    // Called with the flights lock held; only cancel HTTP for the active flight.
+    private fun cancelFlight(sourceId: String, flight: CompletableFuture<CachedSource>) {
+        if (!flights.remove(sourceId, flight)) return
+        flight.cancel(false)
+        if (activeFlight === flight) {
+            downloader.cancelActive()
+            validationClient.dispatcher.cancelAll()
+        }
     }
 
     private fun cancelAll() {
-        generation.incrementAndGet()
-        prefetchTask?.cancel(true)
         prefetchTask = null
         prefetchSourceId = null
-        downloader.cancelActive()
+        synchronized(flights) {
+            for ((id, flight) in flights.toMap()) cancelFlight(id, flight)
+            cache.clear()
+        }
     }
 
     private fun timingsMap(value: StageTimings) = mapOf(
@@ -319,8 +366,6 @@ internal class DevicePlaybackResolver : MethodChannel.MethodCallHandler, Closeab
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         cancelAll()
-        synchronized(cache) { cache.clear() }
-        synchronized(flights) { flights.clear() }
         downloader.close()
         validationClient.dispatcher.executorService.shutdownNow()
         validationClient.connectionPool.evictAll()

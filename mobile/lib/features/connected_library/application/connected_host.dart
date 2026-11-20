@@ -11,7 +11,9 @@ import '../data/link_platform.dart';
 import 'connected_controller.dart';
 
 final youtubePilotProvider = Provider<bool>(
-  (ref) => const bool.fromEnvironment('YOUTUBE_LIBRARY_ENABLED'),
+  (ref) =>
+      const bool.fromEnvironment('YOUTUBE_LIBRARY_ENABLED') ||
+      const bool.fromEnvironment('YOUTUBE_MUSIC_MODE_ENABLED'),
 );
 final connectedControllerProvider = Provider.autoDispose
     .family<ConnectedController, String>((ref, uid) {
@@ -48,10 +50,12 @@ class ConnectedHost extends StatefulWidget {
     super.key,
     required this.controller,
     required this.onReturn,
+    this.onBindingChanged,
     required this.child,
   });
   final ConnectedController controller;
   final VoidCallback onReturn;
+  final void Function(bool confirmed)? onBindingChanged;
   final Widget child;
   @override
   State<ConnectedHost> createState() => _ConnectedHostState();
@@ -63,6 +67,9 @@ class _ConnectedHostState extends State<ConnectedHost>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    widget.controller.onBindingChanged = (confirmed) {
+      if (mounted) widget.onBindingChanged?.call(confirmed);
+    };
     widget.controller.platform.onReturn(_resume);
     _resume();
   }
@@ -83,6 +90,7 @@ class _ConnectedHostState extends State<ConnectedHost>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    widget.controller.onBindingChanged = null;
     widget.controller.platform.onReturn(null);
     super.dispose();
   }

@@ -3,6 +3,7 @@ import '../../playback/application/track_playback_controller.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../playback/presentation/open_player.dart';
 import '../application/catalog_providers.dart';
 import '../domain/catalog_track.dart';
@@ -22,16 +23,26 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   Timer? _debounce;
   Timer? _prefetchDebounce;
   String? _query;
+  String _filter = 'Todo';
   String? _prefetchedId;
   void _changed(String value) {
     _debounce?.cancel();
     _cancelPrefetch();
-    setState(() => _query = null);
+    setState(() {
+      _query = null;
+      _filter = 'Todo';
+    });
     final query = value.trim().replaceAll(RegExp(r'\s+'), ' ');
     if (query.length < 2) return;
     _debounce = Timer(const Duration(milliseconds: 400), () {
       if (mounted) setState(() => _query = query);
     });
+  }
+
+  void _clear() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    _input.clear();
+    _changed('');
   }
 
   void _schedulePrefetch(List<CatalogTrack> tracks) {
@@ -72,6 +83,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         : ref.watch(searchResultsProvider(query));
     return Scaffold(
       appBar: AppBar(
+        leading: _input.text.isEmpty
+            ? null
+            : IconButton(
+                tooltip: 'Volver a explorar',
+                onPressed: _clear,
+                icon: const Icon(Icons.arrow_back),
+              ),
         title: const Text('Explorar'),
         actions: [?widget.accountAction],
       ),
@@ -84,17 +102,44 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 controller: _input,
                 maxLength: 120,
                 onChanged: _changed,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Canción o artista',
                   counterText: '',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _input.text.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Borrar búsqueda',
+                          onPressed: _clear,
+                          icon: const Icon(Icons.close),
+                        ),
+                  border: const OutlineInputBorder(
                     borderRadius: BorderRadius.all(Radius.circular(28)),
                     borderSide: BorderSide.none,
                   ),
                 ),
               ),
             ),
+            if (query != null)
+              SizedBox(
+                height: 52,
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    for (final filter in ['Todo', 'Canciones', 'Artistas'])
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(filter),
+                          selected: _filter == filter,
+                          showCheckmark: false,
+                          onSelected: (_) => setState(() => _filter = filter),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             Expanded(
               child: query == null
                   ? _ExploreCategories(
@@ -120,80 +165,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                   'No encontramos canciones. Prueba otra búsqueda.',
                                 ),
                               )
-                            : ListView.separated(
-                                key: PageStorageKey(query),
-                                keyboardDismissBehavior:
-                                    ScrollViewKeyboardDismissBehavior.onDrag,
-                                itemCount: tracks.length + 1,
-                                separatorBuilder: (context, index) =>
-                                    const Divider(height: 1),
-                                itemBuilder: (context, index) {
-                                  if (index == 0) {
-                                    return TextButton.icon(
-                                      onPressed: () => playTracksAndOpenPlayer(
-                                        context,
-                                        ref,
-                                        tracks,
-                                      ),
-                                      icon: const Icon(Icons.playlist_play),
-                                      label: const Text(
-                                        'Reproducir resultados',
-                                      ),
-                                    );
-                                  }
-                                  final track = tracks[index - 1];
-                                  return ListTile(
-                                    leading: TrackArtwork(
-                                      url: track.thumbnailUrl,
-                                    ),
-                                    title: Text(
-                                      track.title,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    subtitle: Text(
-                                      track.artistName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    trailing: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          tooltip: 'Reproducir canción',
-                                          icon: const Icon(Icons.play_arrow),
-                                          onPressed: () => playAndOpenPlayer(
-                                            context,
-                                            ref,
-                                            track,
-                                          ),
-                                        ),
-                                        IconButton(
-                                          tooltip: 'Añadir a la cola',
-                                          icon: const Icon(Icons.queue_music),
-                                          onPressed: () {
-                                            ref
-                                                .read(
-                                                  trackPlaybackControllerProvider,
-                                                )
-                                                .enqueue(track);
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              const SnackBar(
-                                                content: Text(
-                                                  'Cola actualizada',
-                                                ),
-                                                duration: Duration(seconds: 1),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                    onTap: () =>
-                                        playAndOpenPlayer(context, ref, track),
-                                  );
+                            : _SearchResults(
+                                key: ValueKey((query, _filter)),
+                                query: query,
+                                filter: _filter,
+                                tracks: tracks,
+                                selectFilter: (value) =>
+                                    setState(() => _filter = value),
+                                searchArtist: (artist) {
+                                  FocusManager.instance.primaryFocus?.unfocus();
+                                  _input.text = artist;
+                                  _changed(artist);
                                 },
                               );
                       },
@@ -204,6 +186,212 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       ),
     );
   }
+}
+
+class _SearchResults extends ConsumerWidget {
+  const _SearchResults({
+    super.key,
+    required this.query,
+    required this.filter,
+    required this.tracks,
+    required this.selectFilter,
+    required this.searchArtist,
+  });
+  final String query;
+  final String filter;
+  final List<CatalogTrack> tracks;
+  final ValueChanged<String> selectFilter;
+  final ValueChanged<String> searchArtist;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final artists = tracks.map((track) => track.artistName).toSet().toList();
+    final shown = filter == 'Todo' ? tracks.skip(1).take(3).toList() : tracks;
+    return ListView(
+      key: PageStorageKey((query, filter)),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+      children: [
+        if (filter == 'Todo') ...[
+          Text(
+            'Mejor coincidencia',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Material(
+            color: theme.colorScheme.secondaryContainer,
+            borderRadius: BorderRadius.circular(18),
+            child: ListTile(
+              contentPadding: const EdgeInsets.all(12),
+              leading: TrackArtwork(
+                url: tracks.first.thumbnailUrl,
+                size: 72,
+                borderRadius: 12,
+              ),
+              title: Text(
+                tracks.first.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: Text(
+                'Canción · ${tracks.first.artistName}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: IconButton.filled(
+                tooltip: 'Reproducir mejor coincidencia',
+                onPressed: () => playAndOpenPlayer(context, ref, tracks.first),
+                icon: const Icon(Icons.play_arrow_rounded),
+              ),
+              onTap: () => playAndOpenPlayer(context, ref, tracks.first),
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+        if (filter != 'Artistas') ...[
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Canciones',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              if (filter == 'Todo')
+                TextButton(
+                  onPressed: () => selectFilter('Canciones'),
+                  child: const Text('Ver todo'),
+                ),
+            ],
+          ),
+          for (final track in shown) ...[
+            _ResultRow(track: track),
+            const Divider(height: 1),
+          ],
+        ],
+        if (filter != 'Canciones') ...[
+          const SizedBox(height: 20),
+          Text(
+            'Artistas en estos resultados',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 16,
+            children: [
+              for (final artist in artists)
+                SizedBox(
+                  width: 92,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: () => searchArtist(artist),
+                    child: Column(
+                      children: [
+                        CircleAvatar(
+                          radius: 32,
+                          backgroundColor: theme.colorScheme.secondaryContainer,
+                          child: Text(
+                            artist.isEmpty
+                                ? '?'
+                                : String.fromCharCode(
+                                    artist.runes.first,
+                                  ).toUpperCase(),
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          artist,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ResultRow extends ConsumerWidget {
+  const _ResultRow({required this.track});
+  final CatalogTrack track;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => ListTile(
+    contentPadding: const EdgeInsets.symmetric(vertical: 4),
+    leading: TrackArtwork(url: track.thumbnailUrl, size: 48),
+    title: Text(
+      track.title,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(fontWeight: FontWeight.w600),
+    ),
+    subtitle: Text(
+      track.artistName,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    ),
+    onTap: () => playAndOpenPlayer(context, ref, track),
+    trailing: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (track.durationLabel != null)
+          Text(
+            track.durationLabel!,
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
+        PopupMenuButton<String>(
+          tooltip: 'Opciones de la canción',
+          icon: const Icon(Icons.more_horiz),
+          onSelected: (action) {
+            if (action == 'details') {
+              context.push('/tracks/${Uri.encodeComponent(track.id)}');
+            } else {
+              final controller = ref.read(trackPlaybackControllerProvider);
+              final canAdd =
+                  controller.queue.length < 100 &&
+                  !controller.queue.any((item) => item.id == track.id);
+              if (canAdd) controller.enqueue(track);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    canAdd
+                        ? 'Cola actualizada'
+                        : 'La canción ya está en la cola o la cola está llena.',
+                  ),
+                ),
+              );
+            }
+          },
+          itemBuilder: (context) => const [
+            PopupMenuItem(value: 'queue', child: Text('Añadir a la cola')),
+            PopupMenuItem(
+              value: 'details',
+              child: Text('Detalles de la canción'),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
 }
 
 class _ExploreCategories extends StatelessWidget {
