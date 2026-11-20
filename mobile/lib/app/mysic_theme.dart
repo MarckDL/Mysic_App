@@ -84,6 +84,7 @@ ThemeData mysicLightTheme() {
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       titleTextStyle: TextStyle(
+        fontFamily: 'Roboto',
         color: ink,
         fontSize: 24,
         fontWeight: FontWeight.w700,

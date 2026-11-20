@@ -236,13 +236,9 @@ describe('catálogo de la cuenta de Music', () => {
     wire.mockResolvedValueOnce(page(true)).mockResolvedValueOnce(page(true));
     await expect(catalog.verify(ctx)).resolves.toBeUndefined();
     wire.mockResolvedValueOnce(page(true)).mockResolvedValueOnce(page(false));
-    await expect(catalog.verify(ctx)).rejects.toMatchObject({
-      code: 'MUSIC_ACCESS_DENIED',
-    });
+    await expect(catalog.verify(ctx)).resolves.toBe('privatePlaylists');
     wire.mockResolvedValueOnce(page(true)).mockResolvedValueOnce(page());
-    await expect(catalog.verify(ctx)).rejects.toMatchObject({
-      code: 'MUSIC_CATALOG_RESPONSE',
-    });
+    await expect(catalog.verify(ctx)).resolves.toBe('privatePlaylists');
     wire.mockResolvedValueOnce(page(true));
     await expect(
       catalog.verifyCollection(ctx, 'liked'),

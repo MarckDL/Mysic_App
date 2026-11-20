@@ -394,6 +394,33 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       await read(path + 'home').expect(403);
       expect(provider.listLikedVideos).not.toHaveBeenCalled();
     });
+    it('conserva las playlists privadas de Music aunque se deniegue el Inicio y las demás colecciones', async () => {
+      const catalog: MusicAccountCatalog = {
+        verify: vi.fn().mockResolvedValue('privatePlaylists'),
+        verifyCollection: vi
+          .fn()
+          .mockRejectedValue(new LinkError(403, 'MUSIC_ACCESS_DENIED')),
+        read: vi.fn().mockResolvedValue({ items: [], excluded: 0 }),
+      };
+      const api = createApp({
+        youtubeLinkService: link,
+        channelMusicProvider: provider,
+        tokenVerifier: verifier,
+        musicAccountCatalog: catalog,
+      });
+      const read = (path: string) =>
+        request(api)
+          .get('/api/v2/integrations/youtube-music/' + path)
+          .set('Authorization', 'Bearer ' + uidA);
+      const { body: state } = await read('connection').expect(200);
+      expect(state.personalization).toBe('partialMusic');
+      expect(new Set(state.capabilities).size).toBe(state.capabilities.length);
+      const path = 'connections/' + state.generation + '/pages/';
+      await read(path + 'playlists').expect(200);
+      await read(path + 'home').expect(403);
+      expect(catalog.read).toHaveBeenCalledTimes(1);
+      expect(provider.listPlaylists).not.toHaveBeenCalled();
+    });
     it('usa el vínculo OAuth de cada UID sin una sesión web y anuncia solo las funciones disponibles', async () => {
       await request(app).get(connection).expect(401);
       const a = (

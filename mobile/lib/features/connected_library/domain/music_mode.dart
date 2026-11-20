@@ -88,6 +88,11 @@ class MusicConnection {
   final MusicAccount? account;
   final String? generation;
   final Set<String> capabilities;
+  bool get usesChannelLikes =>
+      !capabilities.contains('liked') && capabilities.contains('channelLiked');
+  String get likesActionLabel => usesChannelLikes
+      ? 'Ver los Me gusta de mi canal'
+      : 'Ver mis Me gusta de YouTube Music';
   bool get serverPending => provider == 'serverPending';
   bool get isPreview => provider == 'preview';
   bool get isDirect => provider == 'youtubeOAuth';
