@@ -87,7 +87,15 @@ class _SessionFixture extends MusicModeClient {
       libraryId: direct && account != null ? 'library-${account!.id}' : null,
       activityEpoch: epoch,
       capabilities: channelOnly
-          ? {'playlists', 'playlist', 'search', 'playback', 'artists', 'artist'}
+          ? {
+              'channelLiked',
+              'playlists',
+              'playlist',
+              'search',
+              'playback',
+              'artists',
+              'artist',
+            }
           : direct
           ? {
               'home',
@@ -185,6 +193,7 @@ class _SessionFixture extends MusicModeClient {
                 code: 'MUSIC_PLAYLIST_NOT_FOUND',
               ),
       MusicSurface.songs ||
+      MusicSurface.channelLiked ||
       MusicSurface.liked => MusicPage([one, two], null, null, 0),
       MusicSurface.search => MusicPage(
         [one, playlist].where((item) => item.title.contains(query!)).toList(),

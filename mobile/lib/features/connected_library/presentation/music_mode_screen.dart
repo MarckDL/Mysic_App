@@ -1,3 +1,4 @@
+import '../../../app/mysic_theme.dart';
 import 'dart:async';
 
 import 'package:dio/dio.dart';
@@ -221,34 +222,35 @@ class MusicModeSettings extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         DesktopMusicAccess(controller),
-        ListTile(
-          leading: const Icon(Icons.headphones),
-          title: Text(
-            connection?.isPreview == true
-                ? 'YouTube Music · simulación'
-                : 'YouTube Music',
+        if (connection?.isDesktop != true)
+          ListTile(
+            leading: const Icon(Icons.headphones),
+            title: Text(
+              connection?.isPreview == true
+                  ? 'YouTube Music · simulación'
+                  : 'YouTube Music',
+            ),
+            subtitle: Text(switch (connection?.status) {
+              MusicLinkStatus.linked when controller.wantsMusic =>
+                connection!.channelOnly
+                    ? 'Canal de YouTube · ${account!.name}'
+                    : 'Modo activo · ${account!.name}',
+              MusicLinkStatus.expired => 'Sesión caducada · ${account!.name}',
+              MusicLinkStatus.unavailable => 'Conexión musical no disponible',
+              MusicLinkStatus.unlinked ||
+              MusicLinkStatus.linked => 'Modo activo · Mysic',
+              null =>
+                controller.failed
+                    ? 'Conexión sin verificar'
+                    : 'Comprobando conexión…',
+            }),
+            trailing: controller.busy
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : null,
           ),
-          subtitle: Text(switch (connection?.status) {
-            MusicLinkStatus.linked when controller.wantsMusic =>
-              connection!.channelOnly
-                  ? 'Canal de YouTube · ${account!.name}'
-                  : 'Modo activo · ${account!.name}',
-            MusicLinkStatus.expired => 'Sesión caducada · ${account!.name}',
-            MusicLinkStatus.unavailable => 'Conexión musical no disponible',
-            MusicLinkStatus.unlinked ||
-            MusicLinkStatus.linked => 'Modo activo · Mysic',
-            null =>
-              controller.failed
-                  ? 'Conexión sin verificar'
-                  : 'Comprobando conexión…',
-          }),
-          trailing: controller.busy
-              ? const SizedBox.square(
-                  dimension: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : null,
-        ),
         if (controller.failed)
           ListTile(
             title: const Text('Revisar conexión'),
@@ -259,6 +261,16 @@ class MusicModeSettings extends StatelessWidget {
             onTap: controller.busy
                 ? null
                 : () => unawaited(controller.refresh()),
+          ),
+        if (connection?.isDesktop == true && ConnectedScope.of(context) != null)
+          ListTile(
+            leading: const Icon(Icons.switch_account_outlined),
+            title: const Text('Elegir un canal de Google'),
+            subtitle: const Text('Cambiar la fuente de la biblioteca'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: controller.busy
+                ? null
+                : () => context.push('/library/youtube'),
           ),
         if (connection?.isDirect == true &&
             (connection?.status != MusicLinkStatus.unavailable ||
@@ -377,17 +389,25 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
   String? _error;
   bool _loading = false;
   int _excluded = 0;
-  late MusicSurface _surface =
-      (widget.surface == MusicSurface.songs ||
-              (widget.surface == MusicSurface.home &&
-                  !widget.connection.capabilities.contains('home'))) &&
-          widget.connection.nativeCatalog
-      ? MusicSurface.playlists
-      : widget.surface == MusicSurface.history &&
-            widget.connection.nativeCatalog &&
-            widget.connection.capabilities.contains('mysicRecents')
-      ? MusicSurface.mysicRecents
-      : widget.surface;
+  late MusicSurface _surface = _initialSurface();
+  MusicSurface _initialSurface() {
+    final caps = widget.connection.capabilities;
+    if (widget.connection.nativeCatalog &&
+        (widget.surface == MusicSurface.songs ||
+            (widget.surface == MusicSurface.home && !caps.contains('home')))) {
+      if (widget.connection.personalization == 'partialMusic' &&
+          caps.contains('liked')) {
+        return MusicSurface.liked;
+      }
+      if (caps.contains('channelLiked')) return MusicSurface.channelLiked;
+      return MusicSurface.playlists;
+    }
+    if (widget.surface == MusicSurface.history &&
+        caps.contains('mysicRecents')) {
+      return MusicSurface.mysicRecents;
+    }
+    return widget.surface;
+  }
 
   @override
   void initState() {
@@ -418,7 +438,7 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
       }
     });
     try {
-      final page = await widget.controller.page(
+      var page = await widget.controller.page(
         generation,
         _surface,
         playlistId: widget.playlistId,
@@ -426,6 +446,26 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
         cursor: _cursor,
         cancelToken: request,
       );
+      var excluded = page.excludedCount;
+      final followed = <String>{};
+      while (widget.connection.channelOnly &&
+          page.items.isEmpty &&
+          page.nextCursor != null &&
+          followed.length < 3 &&
+          followed.add(page.nextCursor!) &&
+          mounted &&
+          request == _request &&
+          widget.controller.isCurrent(generation)) {
+        page = await widget.controller.page(
+          generation,
+          _surface,
+          playlistId: widget.playlistId,
+          query: _query,
+          cursor: page.nextCursor,
+          cancelToken: request,
+        );
+        excluded += page.excludedCount;
+      }
       if (!mounted ||
           request != _request ||
           !widget.controller.isCurrent(generation)) {
@@ -435,7 +475,7 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
         _cursor = page.nextCursor;
         _items.addAll(page.items);
         _playlistTitle = page.title ?? page.playlist?.title ?? _playlistTitle;
-        _excluded += page.excludedCount;
+        _excluded += excluded;
       });
     } on ApiFailure catch (error) {
       if (mounted && request == _request) {
@@ -638,6 +678,7 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
     MusicSurface.home => 'Inicio',
     MusicSurface.songs => 'Biblioteca',
     MusicSurface.liked => 'Me gusta de YouTube Music',
+    MusicSurface.channelLiked => 'Me gusta de mi canal',
     MusicSurface.albums => 'Álbumes',
     MusicSurface.album => _playlistTitle ?? 'Álbum',
     MusicSurface.playlist => _playlistTitle ?? 'Playlist',
@@ -660,7 +701,15 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
         .firstOrNull;
     return Scaffold(
       appBar: AppBar(
-        title: Text(_title),
+        title: widget.surface == MusicSurface.home
+            ? Row(
+                children: [
+                  const MysicBrandMark(),
+                  const SizedBox(width: 10),
+                  Flexible(child: Text(_title)),
+                ],
+              )
+            : Text(_title),
         actions: [
           if ((widget.connection.capabilities.contains('history') ||
                   widget.connection.capabilities.contains('mysicRecents')) &&
@@ -685,17 +734,35 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
           children: [
-            Text(
-              widget.connection.isPreview
-                  ? 'Simulación de YouTube Music · ${account.name}'
-                  : widget.connection.channelOnly
-                  ? 'Canal de YouTube · ${account.name}'
-                  : widget.connection.isDesktop
-                  ? 'YouTube Music · ${account.name} (escritorio)'
-                  : 'YouTube Music · ${account.name}',
-              style: Theme.of(context).textTheme.labelLarge,
+            Row(
+              children: [
+                Icon(
+                  widget.connection.isDesktop
+                      ? Icons.computer_rounded
+                      : Icons.headphones_rounded,
+                  size: 17,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.connection.isPreview
+                        ? 'Simulación de YouTube Music · ${account.name}'
+                        : widget.connection.channelOnly
+                        ? 'Canal de YouTube · ${account.name}'
+                        : widget.connection.isDesktop
+                        ? 'YouTube Music · ${account.name} (escritorio)'
+                        : 'YouTube Music · ${account.name}',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            if (widget.connection.channelOnly &&
+            const SizedBox(height: 12),
+            if ((widget.connection.channelOnly ||
+                    widget.connection.personalization == 'partialMusic') &&
                 {
                   MusicSurface.home,
                   MusicSurface.songs,
@@ -704,7 +771,8 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 child: Text(widget.connection.accessDescription),
               ),
-            if (widget.connection.channelOnly &&
+            if (widget.connection.isDirect &&
+                !widget.connection.capabilities.contains('home') &&
                 widget.surface == MusicSurface.home)
               DesktopMusicAccess(widget.controller),
             if (widget.surface == MusicSurface.home &&
@@ -723,6 +791,10 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
                 title: Text(
                   widget.connection.capabilities.contains('home')
                       ? 'Recomendaciones de YouTube Music'
+                      : _surface == MusicSurface.liked
+                      ? 'Me gusta de YouTube Music'
+                      : _surface == MusicSurface.channelLiked
+                      ? 'Música que te gusta en YouTube'
                       : 'Tus playlists musicales',
                 ),
               ),
@@ -740,6 +812,7 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Wrap(
                   spacing: 8,
+                  runSpacing: 6,
                   children: [
                     for (final section in {
                       if (widget.connection.capabilities.contains('songs'))
@@ -748,6 +821,10 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
                         MusicSurface.liked: widget.connection.nativeCatalog
                             ? 'Me gusta de YouTube Music'
                             : 'Me gusta',
+                      if (widget.connection.capabilities.contains(
+                        'channelLiked',
+                      ))
+                        MusicSurface.channelLiked: 'Me gusta de mi canal',
                       MusicSurface.playlists: 'Playlists',
                       if (widget.connection.capabilities.contains('albums'))
                         MusicSurface.albums: 'Álbumes',
@@ -775,6 +852,7 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
                 const {
                   MusicSurface.songs,
                   MusicSurface.liked,
+                  MusicSurface.channelLiked,
                   MusicSurface.playlist,
                   MusicSurface.album,
                   MusicSurface.artist,
@@ -859,79 +937,88 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
                   'Incluye videos ajenos a la biblioteca musical y pistas no disponibles.',
                 ),
               ),
+            if (widget.surface == MusicSurface.home && firstPlayable != null)
+              _FeaturedTrack(
+                track: firstPlayable,
+                onTap: () => _play(firstPlayable),
+                actions: _actions(firstPlayable),
+              ),
             for (final item in _items)
-              switch (item) {
-                MusicAlbum() => ListTile(
-                  leading: TrackArtwork(
-                    url: item.thumbnailUrl,
-                    size: 44,
-                    fallbackIcon: Icons.album,
+              if (widget.surface != MusicSurface.home ||
+                  !identical(item, firstPlayable))
+                switch (item) {
+                  MusicAlbum() => ListTile(
+                    leading: TrackArtwork(
+                      url: item.thumbnailUrl,
+                      size: 52,
+                      fallbackIcon: Icons.album,
+                    ),
+                    title: Text(item.title),
+                    subtitle: const Text('Álbum'),
+                    onTap: () => context.push(
+                      '/music/album/${Uri.encodeComponent(item.id)}',
+                    ),
                   ),
-                  title: Text(item.title),
-                  subtitle: const Text('Álbum'),
-                  onTap: () => context.push(
-                    '/music/album/${Uri.encodeComponent(item.id)}',
+                  MusicArtist() => ListTile(
+                    leading: TrackArtwork(
+                      url: item.thumbnailUrl,
+                      size: 52,
+                      borderRadius: 26,
+                      fallbackIcon: Icons.person_outline,
+                    ),
+                    title: Text(item.title),
+                    trailing: _actions(item),
+                    onTap: () => context.push(
+                      '/music/artist/${Uri.encodeComponent(item.id)}',
+                    ),
                   ),
-                ),
-                MusicArtist() => ListTile(
-                  leading: TrackArtwork(
-                    url: item.thumbnailUrl,
-                    size: 44,
-                    borderRadius: 22,
-                    fallbackIcon: Icons.person_outline,
+                  MusicPlaylist() => ListTile(
+                    leading: TrackArtwork(
+                      url: item.thumbnailUrl,
+                      size: 52,
+                      fallbackIcon: Icons.queue_music,
+                    ),
+                    title: Text(item.title),
+                    subtitle: item.isPrivate ? const Text('Privada') : null,
+                    trailing: widget.connection.nativeCatalog
+                        ? _actions(item)
+                        : const Icon(Icons.chevron_right),
+                    onTap: () => context.push(
+                      '/music/playlist/${Uri.encodeComponent(item.id)}',
+                    ),
                   ),
-                  title: Text(item.title),
-                  trailing: _actions(item),
-                  onTap: () => context.push(
-                    '/music/artist/${Uri.encodeComponent(item.id)}',
+                  MusicTrack() => ListTile(
+                    leading: TrackArtwork(
+                      url: item.thumbnailUrl,
+                      size: 52,
+                      fallbackIcon: _canPlayTrack(item)
+                          ? Icons.play_circle_outline
+                          : Icons.music_note,
+                    ),
+                    title: Text(item.title),
+                    trailing: widget.connection.nativeCatalog
+                        ? _actions(item)
+                        : null,
+                    subtitle: Text(
+                      [
+                        item.artist,
+                        if (item.playCount != null)
+                          '${item.playCount} escuchas',
+                        if (item.listenedAt != null && item.playCount == null)
+                          MaterialLocalizations.of(
+                            context,
+                          ).formatShortDate(item.listenedAt!.toLocal()),
+                        if (widget.connection.nativeCatalog &&
+                            widget.controller.deviceAudio(item.id) != null)
+                          'En este dispositivo'
+                        else if (widget.connection.nativeCatalog &&
+                            !_canPlayTrack(item))
+                          'Solo biblioteca',
+                      ].join(' · '),
+                    ),
+                    onTap: _canPlayTrack(item) ? () => _play(item) : null,
                   ),
-                ),
-                MusicPlaylist() => ListTile(
-                  leading: TrackArtwork(
-                    url: item.thumbnailUrl,
-                    size: 44,
-                    fallbackIcon: Icons.queue_music,
-                  ),
-                  title: Text(item.title),
-                  subtitle: item.isPrivate ? const Text('Privada') : null,
-                  trailing: widget.connection.nativeCatalog
-                      ? _actions(item)
-                      : const Icon(Icons.chevron_right),
-                  onTap: () => context.push(
-                    '/music/playlist/${Uri.encodeComponent(item.id)}',
-                  ),
-                ),
-                MusicTrack() => ListTile(
-                  leading: TrackArtwork(
-                    url: item.thumbnailUrl,
-                    size: 44,
-                    fallbackIcon: _canPlayTrack(item)
-                        ? Icons.play_circle_outline
-                        : Icons.music_note,
-                  ),
-                  title: Text(item.title),
-                  trailing: widget.connection.nativeCatalog
-                      ? _actions(item)
-                      : null,
-                  subtitle: Text(
-                    [
-                      item.artist,
-                      if (item.playCount != null) '${item.playCount} escuchas',
-                      if (item.listenedAt != null && item.playCount == null)
-                        MaterialLocalizations.of(
-                          context,
-                        ).formatShortDate(item.listenedAt!.toLocal()),
-                      if (widget.connection.nativeCatalog &&
-                          widget.controller.deviceAudio(item.id) != null)
-                        'En este dispositivo'
-                      else if (widget.connection.nativeCatalog &&
-                          !_canPlayTrack(item))
-                        'Solo biblioteca',
-                    ].join(' · '),
-                  ),
-                  onTap: _canPlayTrack(item) ? () => _play(item) : null,
-                ),
-              },
+                },
             if (_loading)
               const Center(
                 child: Padding(
@@ -965,6 +1052,11 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
                       : _surface == MusicSurface.history ||
                             _surface == MusicSurface.mysicRecents
                       ? 'Aún no hay escuchas.'
+                      : _surface == MusicSurface.channelLiked
+                      ? 'Este canal todavía no tiene Me gusta musicales disponibles.'
+                      : _surface == MusicSurface.playlists &&
+                            widget.connection.channelOnly
+                      ? 'No encontramos playlists con música en este canal.'
                       : 'No hay resultados.',
                 ),
               ),
@@ -984,5 +1076,79 @@ class _MusicPageState extends ConsumerState<_MusicPage> {
     _request?.cancel();
     _search.dispose();
     super.dispose();
+  }
+}
+
+class _FeaturedTrack extends StatelessWidget {
+  const _FeaturedTrack({
+    required this.track,
+    required this.onTap,
+    required this.actions,
+  });
+  final MusicTrack track;
+  final VoidCallback onTap;
+  final Widget actions;
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context), colors = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: colors.primaryContainer,
+        borderRadius: BorderRadius.circular(22),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 16, 4, 16),
+            child: Row(
+              children: [
+                Stack(
+                  alignment: Alignment.bottomRight,
+                  children: [
+                    TrackArtwork(
+                      url: track.thumbnailUrl,
+                      size: 74,
+                      borderRadius: 14,
+                    ),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: colors.primary,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(
+                          Icons.play_arrow_rounded,
+                          size: 20,
+                          color: colors.onPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        track.title,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(track.artist, style: theme.textTheme.bodyMedium),
+                    ],
+                  ),
+                ),
+                actions,
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

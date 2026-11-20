@@ -1,3 +1,4 @@
+import '../../../app/mysic_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -45,11 +46,7 @@ class LoginScreen extends ConsumerWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(
-                                Icons.graphic_eq_rounded,
-                                size: 40,
-                                color: colors.onPrimaryContainer,
-                              ),
+                              const MysicBrandMark(size: 56),
                               const SizedBox(height: 20),
                               Text(
                                 'Mysic',

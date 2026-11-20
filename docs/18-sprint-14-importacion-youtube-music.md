@@ -1,5 +1,8 @@
 # Sprint 14 — Importación desde YouTube Music
 
+**Archivo histórico.** El APK 4028 retiró esta función y sus rutas de escritura. Las playlists creadas anteriormente conservan su propietario y contenido.
+
+
 ## Estado
 
 Implementación adelantada el 18 de noviembre de 2026 por solicitud del propietario.

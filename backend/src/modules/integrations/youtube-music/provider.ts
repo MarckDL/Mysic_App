@@ -2,6 +2,7 @@ export const musicSurfaces = [
   'home',
   'songs',
   'liked',
+  'channelLiked',
   'albums',
   'album',
   'playlists',

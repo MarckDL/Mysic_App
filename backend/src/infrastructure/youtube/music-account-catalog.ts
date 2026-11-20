@@ -53,6 +53,10 @@ export interface AccountMusicPage {
 }
 export interface MusicAccountCatalog {
   verify(ctx: ReadContext): Promise<void>;
+  verifyCollection?(
+    ctx: ReadContext,
+    surface: 'liked' | 'albums',
+  ): Promise<void>;
   read(
     ctx: ReadContext,
     request: AccountSurface,
@@ -356,18 +360,25 @@ export class OAuthMusicCatalog implements MusicAccountCatalog {
     parseMusicAccountPage(library, 'playlists');
     const home = await this.request(ctx, { surface: 'home' });
     parseMusicAccountPage(home, 'home');
-    const signedIn = [library, home].some((data) => {
-      const context = obj(obj(data).responseContext);
-      return (
-        at(context, 'mainAppWebResponseContext').loggedOut === false ||
-        list(context.serviceTrackingParams).some((g) =>
-          list(obj(g).params).some(
-            (p) => obj(p).key === 'logged_in' && obj(p).value === '1',
-          ),
-        )
-      );
-    });
-    if (!signedIn) throw new LinkError(503, 'MUSIC_CATALOG_RESPONSE');
+    if (!this.signedIn(home))
+      throw new LinkError(503, 'MUSIC_CATALOG_RESPONSE');
+  }
+  private signedIn(data: unknown) {
+    const context = obj(obj(data).responseContext);
+    return (
+      at(context, 'mainAppWebResponseContext').loggedOut === false ||
+      list(context.serviceTrackingParams).some((g) =>
+        list(obj(g).params).some(
+          (p) => obj(p).key === 'logged_in' && obj(p).value === '1',
+        ),
+      )
+    );
+  }
+  async verifyCollection(ctx: ReadContext, surface: 'liked' | 'albums') {
+    const data = await this.request(ctx, { surface });
+    parseMusicAccountPage(data, surface);
+    if (!this.signedIn(data))
+      throw new LinkError(503, 'MUSIC_CATALOG_RESPONSE');
   }
   private async request(
     ctx: ReadContext,

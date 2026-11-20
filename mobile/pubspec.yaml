@@ -1,7 +1,7 @@
 name: mysic
 description: Aplicación móvil académica de exploración musical.
 publish_to: none
-version: 0.11.2-rc.10+4027
+version: 0.11.2-rc.11+4028
 
 environment:
   sdk: '>=3.12.0 <4.0.0'
@@ -18,8 +18,6 @@ dependencies:
   just_audio: ^0.10.6
   audio_session: ^0.2.4
   audio_service: ^0.18.19
-  archive: ^4.7.1
-  csv: ^8.0.0
   crypto: ^3.0.7
   path_provider: ^2.1.6
   file_picker: ^13.4.0
@@ -37,3 +35,4 @@ flutter:
   assets:
     - assets/audio/mysic-demo.wav
     - assets/images/discover-mountains.webp
+    - assets/images/mysic.png

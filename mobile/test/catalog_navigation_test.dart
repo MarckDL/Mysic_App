@@ -104,41 +104,42 @@ void main() {
   });
 
   for (final brightness in Brightness.values) {
-    testWidgets('navega con texto al 200 % en modo ${brightness.name}', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(320, 640);
-      tester.view.devicePixelRatio = 1;
-      tester.platformDispatcher.textScaleFactorTestValue = 2;
-      tester.platformDispatcher.platformBrightnessTestValue = brightness;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-      addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+    testWidgets(
+      'mantiene el diseño claro con texto al 200 % y sistema ${brightness.name}',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        tester.platformDispatcher.platformBrightnessTestValue = brightness;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
 
-      final auth = FakeAuthRepository(user: const AuthUser(uid: 'Luis'));
-      await mount(tester, auth, (uid) async => []);
-      expect(
-        Theme.of(tester.element(find.byType(HomeScreen))).brightness,
-        brightness,
-      );
-      for (final label in ['Inicio', 'Explorar', 'Biblioteca']) {
-        final destination = find.text(label);
-        expect(destination.hitTestable(), findsOneWidget);
-        await tester.tap(destination);
+        final auth = FakeAuthRepository(user: const AuthUser(uid: 'Luis'));
+        await mount(tester, auth, (uid) async => []);
+        expect(
+          Theme.of(tester.element(find.byType(HomeScreen))).brightness,
+          Brightness.light,
+        );
+        for (final label in ['Inicio', 'Explorar', 'Biblioteca']) {
+          final destination = find.text(label);
+          expect(destination.hitTestable(), findsOneWidget);
+          await tester.tap(destination);
+          await tester.pumpAndSettle();
+        }
+        expect(find.text('Playlists').hitTestable(), findsOneWidget);
+        expect(find.text('Favoritos').hitTestable(), findsOneWidget);
+        await tester.scrollUntilVisible(find.text('Descargas'), 100);
+        expect(find.text('Descargas').hitTestable(), findsOneWidget);
+        expect(find.text('Próximamente'), findsOneWidget);
+        await tester.tap(find.byTooltip('Abrir cuenta'));
         await tester.pumpAndSettle();
-      }
-      expect(find.text('Playlists').hitTestable(), findsOneWidget);
-      expect(find.text('Favoritos').hitTestable(), findsOneWidget);
-      await tester.scrollUntilVisible(find.text('Descargas'), 100);
-      expect(find.text('Descargas').hitTestable(), findsOneWidget);
-      expect(find.text('Próximamente'), findsOneWidget);
-      await tester.tap(find.byTooltip('Abrir cuenta'));
-      await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(find.text('Cerrar sesión'), 100);
-      await tester.pumpAndSettle();
-      expect(find.text('Cerrar sesión').hitTestable(), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
+        await tester.scrollUntilVisible(find.text('Cerrar sesión'), 100);
+        await tester.pumpAndSettle();
+        expect(find.text('Cerrar sesión').hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 }

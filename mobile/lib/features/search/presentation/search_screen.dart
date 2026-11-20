@@ -427,7 +427,7 @@ class _ExploreCategories extends StatelessWidget {
         itemBuilder: (context, index) {
           final (name, icon, color) = _categories[index];
           return Material(
-            color: color,
+            color: Color.lerp(Colors.white, color, .14),
             borderRadius: BorderRadius.circular(16),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
@@ -440,16 +440,12 @@ class _ExploreCategories extends StatelessWidget {
                   children: [
                     Align(
                       alignment: Alignment.topRight,
-                      child: Icon(
-                        icon,
-                        size: 26,
-                        color: const Color(0xCCFFFFFF),
-                      ),
+                      child: Icon(icon, size: 26, color: color),
                     ),
                     Text(
                       name,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: color,
                         fontWeight: FontWeight.w700,
                       ),
                     ),

@@ -602,8 +602,7 @@ Etiqueta: `sprint-13-v0.13.0`
 
 ### Objetivo
 
-Facilitar la transición con copias privadas de playlists y canciones guardadas
-a partir de Google Takeout.
+Alcance histórico. La versión 4028 retiró la importación por archivo y pasó a la consulta en vivo de las bibliotecas.
 
 ### Historia US-016
 

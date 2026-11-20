@@ -93,13 +93,24 @@ class OriginalMusicCatalog {
       );
     }
     final items = <MusicItem>[];
+    var recognizedShelf = false, hasRows = false;
     for (final shelf in data['shelves'] as List) {
       if (shelf is! Map || shelf['items'] is! List) continue;
-      for (final row in shelf['items'] as List) {
+      recognizedShelf = true;
+      final rows = shelf['items'] as List;
+      hasRows = hasRows || rows.isNotEmpty;
+      for (final row in rows) {
         if (row is! Map || row['kind'] is! String) continue;
         final entry = item(row, row['kind'] as String);
         if (entry != null) items.add(entry);
       }
+    }
+    if ((data['shelves'] as List).isNotEmpty &&
+        (!recognizedShelf || (hasRows && items.isEmpty))) {
+      throw const ApiFailure(
+        'Mysic no pudo leer las recomendaciones de esta cuenta.',
+        code: 'DESKTOP_HOME',
+      );
     }
     return MusicPage(items, cursor(data), null, 0);
   }

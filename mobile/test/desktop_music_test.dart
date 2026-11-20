@@ -5,6 +5,7 @@ import 'package:mysic/core/network/authenticated_api_client.dart';
 import 'package:mysic/features/connected_library/application/music_mode_controller.dart';
 import 'package:mysic/features/connected_library/data/desktop_music_client.dart';
 import 'package:mysic/features/connected_library/data/music_mode_client.dart';
+import 'package:mysic/features/connected_library/data/original_music_catalog.dart';
 import 'package:mysic/features/connected_library/domain/music_mode.dart';
 import 'package:mysic/features/connected_library/presentation/desktop_music_access.dart';
 import 'package:mysic/features/playback/application/track_playback_controller.dart';
@@ -338,6 +339,113 @@ void main() {
       await expectLater(login(), throwsA(isA<ApiFailure>()));
       expect(store.saved, isNull);
       expect(await client.connection(), isNull);
+    },
+  );
+  test(
+    'termina un vínculo pendiente sin repetir contraseña ni activar una biblioteca anónima',
+    () async {
+      server.linked = false;
+      await expectLater(login(), throwsA(isA<ApiFailure>()));
+      expect(client.hasPendingLink, isTrue);
+      expect(await client.connection(), isNull);
+      expect(store.saved, isNull);
+      server.linked = true;
+      final connected = await client.finishLink();
+      expect(connected.personalization, 'verified');
+      expect(
+        server.requests.where((r) => r.uri.path.endsWith('/auth/login')),
+        hasLength(1),
+      );
+      expect(client.hasPendingLink, isFalse);
+    },
+  );
+  test(
+    'cambiar al canal conserva la sesión de escritorio al reiniciar y permite volver a usarla',
+    () async {
+      final desktop = await login();
+      await client.preferChannel(true);
+      final reopened = DesktopMusicClient(store, () => true, dio: server.dio);
+      addTearDown(reopened.close);
+      expect(await reopened.connection(), isNull);
+      expect(reopened.hasSession, isTrue);
+      expect(
+        (await reopened.connection(includeInactive: true))?.generation,
+        desktop.generation,
+      );
+      await reopened.preferChannel(false);
+      expect((await reopened.connection())?.generation, desktop.generation);
+      expect(
+        server.requests.where((r) => r.uri.path.endsWith('/auth/login')),
+        hasLength(1),
+      );
+    },
+  );
+  test(
+    'el buscador público usa exclusivamente canciones sin enviar una credencial',
+    () async {
+      final dio = Dio();
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (req, handler) {
+            expect(req.uri.origin, 'https://myslc.duckdns.org');
+            expect(req.queryParameters, {'q': 'again', 'type': 'song'});
+            expect(
+              req.headers.keys.map((k) => k.toLowerCase()),
+              isNot(contains('cookie')),
+            );
+            expect(
+              req.headers.keys.map((k) => k.toLowerCase()),
+              isNot(contains('authorization')),
+            );
+            handler.resolve(
+              Response(
+                requestOptions: req,
+                statusCode: 200,
+                data: {
+                  'type': 'song',
+                  'items': [_song],
+                },
+              ),
+            );
+          },
+        ),
+      );
+      final anonymous = DesktopMusicClient(store, () => true, dio: dio);
+      addTearDown(anonymous.close);
+      expect(
+        (await anonymous.publicSongs('again', null)).items.single.title,
+        'Again',
+      );
+    },
+  );
+  test(
+    'distingue el Inicio personal vacío de una respuesta dañada o anónima',
+    () {
+      expect(
+        OriginalMusicCatalog.homePage({
+          'personalized': true,
+          'shelves': [],
+        }, first: true).items,
+        isEmpty,
+      );
+      for (final invalid in [
+        {'personalized': false, 'shelves': []},
+        {
+          'personalized': true,
+          'shelves': [
+            {
+              'items': [
+                {'kind': 'song', 'title': 'Sin ID'},
+              ],
+            },
+          ],
+        },
+      ]) {
+        expect(
+          () => OriginalMusicCatalog.homePage(invalid, first: true),
+          throwsA(isA<ApiFailure>()),
+        );
+      }
     },
   );
   test(

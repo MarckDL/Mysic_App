@@ -19,7 +19,6 @@ import '../../features/history/data/history_client.dart';
 import '../../features/history/presentation/history_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/library/presentation/library_screen.dart';
-import '../../features/imports/presentation/import_screen.dart';
 import '../../features/playback/application/playback_providers.dart';
 import '../../features/playback/presentation/demo_audio_screen.dart';
 import '../../features/playback/presentation/player_screen.dart';
@@ -104,10 +103,6 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
             ],
           ),
         ],
-      ),
-      GoRoute(
-        path: '/imports/youtube-music',
-        builder: (context, state) => const _MysicOnly(child: ImportScreen()),
       ),
       GoRoute(
         path: '/history',

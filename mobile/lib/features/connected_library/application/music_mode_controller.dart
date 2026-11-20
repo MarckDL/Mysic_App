@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+    show defaultTargetPlatform, kIsWeb, setEquals, TargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_config.dart';
@@ -102,11 +102,41 @@ class MusicModeController extends ChangeNotifier {
   bool get hasDesktopSession => _client.desktop?.hasSession == true;
   bool get supportsDesktop => _client.desktop != null;
 
+  String? get desktopName => _client.desktop?.accountName;
+  bool get pendingDesktopLink => _client.desktop?.hasPendingLink == true;
+  void cancelDesktopLink() => _client.desktop?.cancelPending();
+
   Future<void> connectDesktop(
     String email,
     String password, {
     required bool remember,
-  }) async {
+  }) => _activateSource(
+    () => _client.desktop!.login(email, password, remember: remember),
+  );
+
+  Future<void> finishDesktopLink() =>
+      _activateSource(() => _client.desktop!.finishLink());
+
+  Future<void> switchSource({required bool toDesktop}) async {
+    await _activateSource(() async {
+      final desktop = _client.desktop!;
+      final next = toDesktop
+          ? await desktop.connection(includeInactive: true)
+          : await _client.channelConnection();
+      if (next == null || next.status != MusicLinkStatus.linked) {
+        throw const ApiFailure(
+          'Vincula y confirma la cuenta para usar su biblioteca.',
+        );
+      }
+      await desktop.preferChannel(!toDesktop);
+      return next;
+    });
+    if (!toDesktop && _active) await refresh();
+  }
+
+  Future<void> _activateSource(
+    Future<MusicConnection> Function() operation,
+  ) async {
     if (!_active || busy || _client.desktop == null) {
       throw const ApiFailure('Espera a que termine la consulta.');
     }
@@ -114,11 +144,7 @@ class MusicModeController extends ChangeNotifier {
     final epoch = ++_bindingEpoch;
     notifyListeners();
     try {
-      final next = await _client.desktop!.login(
-        email,
-        password,
-        remember: remember,
-      );
+      final next = await operation();
       if (!_active || epoch != _bindingEpoch) return;
       transitioning = true;
       _forgetData();
@@ -241,7 +267,9 @@ class MusicModeController extends ChangeNotifier {
       final changed =
           connection?.generation != next.generation ||
           connection?.status != next.status;
-      if (!changed && connection?.personalization != next.personalization) {
+      if (!changed &&
+          (connection?.personalization != next.personalization ||
+              !setEquals(connection?.capabilities, next.capabilities))) {
         _revision++;
       }
       if (!changed && connection?.activityEpoch != next.activityEpoch) {
@@ -379,14 +407,29 @@ class MusicModeController extends ChangeNotifier {
     if (!isCurrent(generation)) throw const ApiFailure('Cambió la conexión.');
     final requestRevision = _revision;
     try {
-      final page = await _client.page(
-        generation,
-        surface,
-        playlistId: playlistId,
-        query: query,
-        cursor: cursor,
-        cancelToken: cancelToken,
-      );
+      late final MusicPage page;
+      try {
+        page = await _client.page(
+          generation,
+          surface,
+          playlistId: playlistId,
+          query: query,
+          cursor: cursor,
+          cancelToken: cancelToken,
+        );
+      } on ApiFailure catch (error) {
+        if (error.code != 'MUSIC_SEARCH_UNAVAILABLE' ||
+            surface != MusicSurface.search ||
+            cursor != null ||
+            query == null ||
+            connection?.isDirect != true ||
+            _client.desktop == null ||
+            !isCurrent(generation) ||
+            _revision != requestRevision) {
+          rethrow;
+        }
+        page = await _client.desktop!.publicSongs(query, cancelToken);
+      }
       if (!isCurrent(generation) || _revision != requestRevision) {
         throw const ApiFailure('Cambió la conexión.');
       }

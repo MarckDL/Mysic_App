@@ -1,3 +1,4 @@
+import '../../../app/mysic_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -33,7 +34,7 @@ class HomeScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Row(
           children: [
-            Icon(Icons.graphic_eq_rounded, color: theme.colorScheme.primary),
+            const MysicBrandMark(),
             const SizedBox(width: 8),
             const Flexible(
               child: Text('Mysic', overflow: TextOverflow.ellipsis),
@@ -159,7 +160,7 @@ class HomeScreen extends ConsumerWidget {
                                                 child: Icon(
                                                   Icons.play_arrow,
                                                   size: 20,
-                                                  color: Color(0xFF745096),
+                                                  color: Color(0xFFA03820),
                                                 ),
                                               ),
                                             ),
@@ -311,8 +312,8 @@ class _DiscoverCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 12),
                     const CircleAvatar(
-                      backgroundColor: Color(0xFFC7A9F6),
-                      foregroundColor: Color(0xFF26163D),
+                      backgroundColor: Color(0xFFFFDFD3),
+                      foregroundColor: Color(0xFF572A1A),
                       child: Icon(Icons.arrow_forward_rounded),
                     ),
                   ],

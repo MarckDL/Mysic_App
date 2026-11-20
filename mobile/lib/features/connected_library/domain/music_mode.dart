@@ -5,6 +5,7 @@ enum MusicSurface {
   home,
   songs,
   liked,
+  channelLiked,
   albums,
   album,
   playlists,
@@ -72,8 +73,10 @@ class MusicConnection {
   bool get channelOnly =>
       personalization == 'channelOnly' || personalization == 'unverified';
   String get accessDescription => switch (personalization) {
+    'partialMusic' =>
+      'Google autorizó parte de tu biblioteca musical. Para ver tu Inicio personal, conecta Mysic de escritorio.',
     'channelOnly' =>
-      'Canal vinculado. Google permite consultar sus playlists musicales. El Inicio personal, los Me gusta y los álbumes de Music requieren acceso adicional.',
+      'Google autorizó este canal. Para ver tu Inicio y tus álbumes personales, conecta la biblioteca de Mysic de escritorio.',
     'unverified' =>
       'Canal vinculado. Aún no se pudo verificar la biblioteca personal de YouTube Music.',
     'verified' => 'Canal y biblioteca musical verificados.',
