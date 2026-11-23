@@ -3,7 +3,7 @@ import 'auth_repository.dart';
 class MysicProfile {
   const MysicProfile({
     required this.id,
-    required this.firebaseUid,
+    required this.uid,
     required this.displayName,
     this.email,
     this.nickname,
@@ -11,7 +11,7 @@ class MysicProfile {
   });
 
   final String id;
-  final String firebaseUid;
+  final String uid;
   final String displayName;
   final String? email;
   final String? nickname;
@@ -19,15 +19,30 @@ class MysicProfile {
   String get preferredName => nickname ?? displayName;
   final bool canModerateComments;
 
+  /// El mismo formato que entrega el servidor y lee [MysicProfile.fromJson].
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'uid': uid,
+    'displayName': displayName,
+    'email': email,
+    'nickname': nickname,
+    'canModerateComments': canModerateComments,
+  };
+
   factory MysicProfile.fromJson(Map<String, dynamic> data) {
     final id = data['id'];
-    final uid = data['firebaseUid'];
+    // Los perfiles guardados antes del cambio de cuenta usaban 'firebaseUid'.
+    final uid = data['uid'] ?? data['firebaseUid'];
     final name = data['displayName'];
     final email = data['email'];
     final nickname = data['nickname'];
+    // Un UUID (perfiles del servidor antiguo) o el identificador de 24
+    // caracteres hexadecimales que sale de la cuenta de YouTube Music. Sin
+    // aceptar este último el perfil guardado nunca se leía y la app no podía
+    // abrir sin conexión.
     if (id is! String ||
         !RegExp(
-          r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+          r'^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9a-fA-F]{24})$',
         ).hasMatch(id) ||
         uid is! String ||
         uid.isEmpty ||
@@ -39,7 +54,7 @@ class MysicProfile {
     }
     return MysicProfile(
       id: id,
-      firebaseUid: uid,
+      uid: uid,
       displayName: name,
       email: email as String?,
       nickname: nickname as String?,

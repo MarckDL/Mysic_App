@@ -1,286 +1,284 @@
-import 'package:mysic/features/playback/application/playback_providers.dart';
-import 'package:mysic/features/history/data/history_client.dart';
-import 'support/fake_track_audio_engine.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mysic/features/authentication/application/auth_providers.dart';
-import 'package:mysic/features/authentication/domain/auth_repository.dart';
-import 'package:mysic/features/search/application/catalog_providers.dart';
-import 'package:mysic/features/search/domain/catalog_repository.dart';
-import 'package:mysic/features/search/domain/catalog_track.dart';
-import 'package:mysic/features/search/presentation/search_screen.dart';
-import 'package:mysic/core/network/authenticated_api_client.dart';
-import 'support/fake_auth_repository.dart';
-import 'package:mysic/app/mysic_app.dart';
-import 'package:mysic/features/authentication/domain/mysic_profile.dart';
+import 'package:mysic/features/connected_library/application/music_mode_controller.dart';
+import 'package:mysic/features/connected_library/data/music_mode_client.dart';
+import 'package:mysic/features/connected_library/domain/music_mode.dart';
+import 'package:mysic/features/connected_library/domain/music_search.dart';
+import 'package:mysic/features/connected_library/presentation/library_screen.dart';
+import 'package:mysic/features/connected_library/presentation/music_mode_host.dart';
+import 'package:mysic/features/connected_library/presentation/music_mode_screen.dart';
+import 'package:mysic/features/connected_library/presentation/search_screen.dart';
+import 'package:mysic/features/connected_library/presentation/tab_top_bar.dart';
+import 'package:mysic/features/search/presentation/music_tiles.dart';
 
-class SearchFake implements CatalogRepository {
-  SearchFake({this.extraTracks = 0});
+import 'support/ytm_test_client.dart';
 
-  final int extraTracks;
-  final calls = <String>[];
-  final tokens = <CancelToken?>[];
-  final detailCalls = <String>[];
-  bool fail = false;
+const _song = MusicTrack(
+  'aaaaaaaaaaa',
+  'Around the World',
+  'Daft Punk',
+  430,
+  false,
+  null,
+  nativePlayback: true,
+);
+
+class _Search extends MusicModeClient {
+  _Search() : super(ytm: ytmTestClient(), ytmAccount: () => null);
+
+  final searched = <String>[];
+  final kinds = <SearchKind>[];
+  final suggested = <String>[];
+  var saved = <String>[];
+  var fail = false;
+
   @override
-  Future<List<CatalogTrack>> search(
+  Future<MusicConnection> connection({bool recheckMusic = false}) async =>
+      const MusicConnection(
+        status: MusicLinkStatus.linked,
+        generation: 'search',
+        account: MusicAccount('channel', 'Cuenta A', false),
+        provider: 'youtubeOAuth',
+        personalization: 'full',
+        capabilities: {'search', 'playlists', 'playback'},
+      );
+
+  @override
+  Future<SearchResults> searchAll(
     String query, {
     CancelToken? cancelToken,
   }) async {
-    calls.add(query);
-    tokens.add(cancelToken);
-    if (fail) throw const ApiFailure('Catálogo no disponible');
-    return query == 'none'
-        ? []
-        : [
-            const CatalogTrack(
-              id: 'youtube:abcdefghijk',
-              title: 'Song',
-              artistName: 'Artist',
-            ),
-            for (var index = 0; index < extraTracks; index++)
-              CatalogTrack(
-                id: 'youtube:x${index.toString().padLeft(10, '0')}',
-                title: 'Resultado $index',
-                artistName: 'Artista',
-              ),
-          ];
+    searched.add(query);
+    if (fail) throw Exception('sin red');
+    return const SearchResults(
+      top: MusicArtist('UCaaaaaaaaaaaaaaaaaaaaaa', 'Daft Punk'),
+      topSubtitle: 'Artista • 20 M de oyentes mensuales',
+      topSongs: [_song],
+      songs: [
+        MusicTrack(
+          'bbbbbbbbbbb',
+          'One More Time',
+          'Daft Punk',
+          320,
+          false,
+          null,
+          nativePlayback: true,
+        ),
+      ],
+      albums: [MusicAlbum('MPREb_aaaaaaaa', 'Discovery', detail: '2001')],
+    );
   }
 
   @override
-  Future<CatalogTrack> detail(String id, {CancelToken? cancelToken}) async {
-    detailCalls.add(id);
-    return CatalogTrack(id: id, title: 'Song', artistName: 'Artist');
+  Future<List<MusicItem>> searchKind(
+    String query,
+    SearchKind kind, {
+    CancelToken? cancelToken,
+  }) async {
+    kinds.add(kind);
+    return const [
+      MusicAlbum('MPREb_aaaaaaaa', 'Discovery', detail: '2001'),
+      MusicAlbum('MPREb_bbbbbbbb', 'Homework', detail: '1997'),
+    ];
   }
+
+  @override
+  Future<SearchSuggestions> suggest(
+    String input, {
+    CancelToken? cancelToken,
+  }) async {
+    suggested.add(input);
+    return const SearchSuggestions(queries: ['daft punk discovery']);
+  }
+
+  @override
+  Future<List<MoodSection>?> rememberedMoods() async => null;
+
+  @override
+  Future<List<MoodSection>> moods({CancelToken? cancelToken}) async => const [
+    MoodSection('Ambientes y momentos', [
+      MoodItem('Relax', 'ggMPOg1uX1', 0xFF3366CC),
+    ]),
+    MoodSection('Géneros', [MoodItem('Rock', 'ggMPOg1uX2', 0xFFCC3333)]),
+  ];
+
+  @override
+  Future<String?> moodArtwork(String params) async => null;
+
+  @override
+  Future<List<String>> rememberedSearches() async => saved;
+
+  @override
+  void rememberSearches(List<String> queries) => saved = [...queries];
+}
+
+Future<_Search> _pump(WidgetTester tester) async {
+  final client = _Search();
+  final controller = MusicModeController(client, () => true, () async {});
+  addTearDown(controller.dispose);
+  await tester.pumpWidget(
+    ProviderScope(
+      child: MaterialApp(
+        home: MusicModeHost(
+          controller: controller,
+          child: const MusicModeSurface(surface: MusicSurface.search),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  return client;
+}
+
+Future<void> _type(WidgetTester tester, String text) async {
+  await tester.enterText(find.byType(TextField), text);
+  // La pausa entre teclas antes de pedir sugerencias.
+  await tester.pump(const Duration(milliseconds: 200));
+  await tester.pumpAndSettle();
 }
 
 void main() {
-  Future<void> mount(WidgetTester tester, SearchFake repository) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(
-            FakeAuthRepository(user: const AuthUser(uid: 'a')),
-          ),
-          trackAudioEngineFactoryProvider.overrideWithValue(
-            FakeTrackAudioEngine.new,
-          ),
-          catalogRepositoryProvider.overrideWithValue(repository),
-        ],
-        child: const MaterialApp(home: SearchScreen()),
-      ),
-    );
-    await tester.pumpAndSettle();
-  }
+  setUpAll(() => NowPlayingBars.animationsEnabled = false);
 
-  testWidgets('espera 400 ms y cancela la búsqueda anterior al escribir', (
+  testWidgets('con el campo vacío salen la cabecera común y los géneros', (
     tester,
   ) async {
-    final repository = SearchFake();
-    await mount(tester, repository);
-    await tester.enterText(find.byType(TextField), 'artist');
-    await tester.pump(const Duration(milliseconds: 399));
-    expect(repository.calls, isEmpty);
-    await tester.pump(const Duration(milliseconds: 1));
-    await tester.pumpAndSettle();
-    expect(repository.calls, ['artist']);
-    expect(find.text('Song'), findsOneWidget);
-    await tester.enterText(find.byType(TextField), 'other');
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.pumpAndSettle();
-    expect(repository.calls, ['artist', 'other']);
-    expect(repository.tokens.first!.isCancelled, isTrue);
+    await _pump(tester);
+    // La misma cabecera que Inicio y Biblioteca.
+    expect(
+      find.descendant(
+        of: find.byType(TabTopBar),
+        matching: find.text('Buscar'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Ambientes y momentos'), findsOneWidget);
+    expect(find.text('Relax'), findsOneWidget);
+    expect(find.text('Géneros'), findsOneWidget);
+    expect(find.text('Rock'), findsOneWidget);
+    // Sin búsquedas hechas no hay recientes ni chips de tipo.
+    expect(find.text('Búsquedas recientes'), findsNothing);
+    expect(find.byType(LibraryChip), findsNothing);
+    expect(tester.takeException(), isNull);
   });
-  testWidgets('una categoría inicia una búsqueda por texto', (tester) async {
-    final repository = SearchFake();
-    await mount(tester, repository);
-    await tester.tap(find.text('Lo-fi'));
-    await tester.pump(const Duration(milliseconds: 400));
+
+  testWidgets('escribir propone, y la sugerencia busca y enseña resultados', (
+    tester,
+  ) async {
+    final client = await _pump(tester);
+    await _type(tester, 'daft');
+    expect(client.suggested, ['daft']);
+    expect(find.text('daft punk discovery'), findsOneWidget);
+    // Aún no se ha buscado nada.
+    expect(client.searched, isEmpty);
+
+    await tester.tap(find.text('daft punk discovery'));
     await tester.pumpAndSettle();
-    expect(repository.calls, ['Lo-fi']);
-    expect(find.text('Song'), findsOneWidget);
+    expect(client.searched, ['daft punk discovery']);
+    // Resultado principal con su línea y su canción, y una sección por tipo.
+    expect(find.text('Artista • 20 M de oyentes mensuales'), findsOneWidget);
+    expect(find.text('Around the World'), findsOneWidget);
+    expect(find.text('One More Time'), findsOneWidget);
+    expect(find.text('Discovery'), findsOneWidget);
+    expect(find.widgetWithText(LibraryChip, 'Todo'), findsOneWidget);
+    expect(
+      tester
+          .widget<LibraryChip>(find.widgetWithText(LibraryChip, 'Todo'))
+          .selected,
+      isTrue,
+    );
+    // Los álbumes completos no se piden hasta abrir su chip.
+    expect(client.kinds, isEmpty);
+    expect(tester.takeException(), isNull);
   });
-  testWidgets('distingue vacío y permite reintentar errores', (tester) async {
-    final repository = SearchFake();
-    await mount(tester, repository);
-    await tester.enterText(find.byType(TextField), 'none');
-    await tester.pump(const Duration(milliseconds: 400));
+
+  testWidgets('el chip Álbumes pide su lista una sola vez', (tester) async {
+    final client = await _pump(tester);
+    await _type(tester, 'daft punk');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pumpAndSettle();
-    expect(find.textContaining('No encontramos'), findsOneWidget);
-    repository.fail = true;
-    await tester.enterText(find.byType(TextField), 'artist');
-    await tester.pump(const Duration(milliseconds: 400));
+    expect(client.searched, ['daft punk']);
+
+    await tester.tap(find.widgetWithText(LibraryChip, 'Álbumes'));
     await tester.pumpAndSettle();
-    expect(find.text('Catálogo no disponible'), findsOneWidget);
-    repository.fail = false;
+    expect(client.kinds, [SearchKind.albums]);
+    expect(find.text('Homework'), findsOneWidget);
+    expect(find.text('Around the World'), findsNothing);
+
+    await tester.tap(find.widgetWithText(LibraryChip, 'Todo'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(LibraryChip, 'Álbumes'));
+    await tester.pumpAndSettle();
+    // Volver al chip no repite la petición.
+    expect(client.kinds, [SearchKind.albums]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('las recientes se guardan, se olvidan una a una y se borran', (
+    tester,
+  ) async {
+    final client = await _pump(tester);
+    for (final query in ['daft punk', 'air']) {
+      await _type(tester, query);
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+    }
+    expect(client.saved, ['air', 'daft punk']);
+    // Vaciar el campo vuelve a recientes y géneros.
+    await tester.tap(find.byTooltip('Borrar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Búsquedas recientes'), findsOneWidget);
+    expect(find.text('air'), findsOneWidget);
+    expect(find.text('daft punk'), findsOneWidget);
+
+    await tester.tap(find.bySemanticsLabel('Olvidar air'));
+    await tester.pumpAndSettle();
+    expect(find.text('air'), findsNothing);
+    expect(client.saved, ['daft punk']);
+
+    // «Borrar» de la sección (el del campo ya no está: el campo está vacío).
+    await tester.tap(find.text('Borrar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Búsquedas recientes'), findsNothing);
+    expect(client.saved, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('si la búsqueda falla se ofrece reintentar', (tester) async {
+    final client = await _pump(tester)
+      ..fail = true;
+    await _type(tester, 'daft punk');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(find.text('Ocurrió un error'), findsOneWidget);
+
+    client.fail = false;
     await tester.tap(find.text('Reintentar'));
     await tester.pumpAndSettle();
-    expect(find.text('Song'), findsOneWidget);
+    expect(client.searched, ['daft punk', 'daft punk']);
+    expect(find.text('Around the World'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
-  testWidgets('anticipa solo el primer resultado tras 600 ms estables', (
+
+  testWidgets('volver a tocar la pestaña empieza una búsqueda nueva', (
     tester,
   ) async {
-    final repository = SearchFake();
-    final audio = FakeTrackAudioEngine();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(
-            FakeAuthRepository(user: const AuthUser(uid: 'a')),
-          ),
-          trackAudioEngineFactoryProvider.overrideWithValue(() => audio),
-          catalogRepositoryProvider.overrideWithValue(repository),
-        ],
-        child: const MaterialApp(home: SearchScreen()),
-      ),
-    );
-    await tester.pump();
-    await tester.enterText(find.byType(TextField), 'artist');
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.pump();
-    await tester.pump();
-    expect(find.text('Song'), findsOneWidget);
-    expect(audio.prefetched, isEmpty);
-    await tester.pump(const Duration(milliseconds: 599));
-    expect(audio.prefetched, isEmpty);
-    await tester.pump(const Duration(milliseconds: 2));
+    await _pump(tester);
+    await _type(tester, 'daft punk');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pumpAndSettle();
-    expect(audio.prefetched, ['abcdefghijk']);
+    expect(find.text('Around the World'), findsOneWidget);
+
+    searchTabReselected.value++;
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      '',
+    );
+    expect(find.text('Around the World'), findsNothing);
+    expect(find.text('Búsquedas recientes'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
-  testWidgets(
-    'reproduce al tocar un resultado y elimina las rutas al cerrar sesión',
-    (tester) async {
-      final auth = FakeAuthRepository(user: const AuthUser(uid: 'a'))
-        ..emitOnTokenRefresh = true;
-      final audio = FakeTrackAudioEngine();
-      final repository = SearchFake(extraTracks: 30);
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            authRepositoryProvider.overrideWithValue(auth),
-            recentListeningProvider.overrideWith((ref, uid) async => []),
-            verifiedSessionProvider.overrideWith((ref) async {
-              // Reproducir la dependencia real: antes, un evento de token de
-              // la misma cuenta invalidaba el perfil y desmontaba el audio.
-              final uid = ref.watch(authStateProvider).asData?.value?.uid;
-              if (uid == null) throw const AuthFailure('Sesión terminada');
-              return MysicProfile(
-                id: '00000000-0000-4000-8000-000000000001',
-                firebaseUid: uid,
-                displayName: 'Ana',
-              );
-            }),
-            trackAudioEngineFactoryProvider.overrideWithValue(() => audio),
-            catalogRepositoryProvider.overrideWithValue(repository),
-          ],
-          child: const MysicApp(firebaseReady: true),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Descubre nuevas canciones'));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), 'artist');
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Song'));
-      await tester.pumpAndSettle();
-      expect(find.text('Reproductor'), findsOneWidget);
-      expect(repository.detailCalls, isEmpty);
-      expect(find.text('Artist'), findsOneWidget);
-      expect(audio.sourceId, 'abcdefghijk');
-      expect(auth.refreshes, contains(false));
-      expect(audio.disposals, 0);
-      expect(find.byTooltip('Pausar'), findsOneWidget);
-      await tester.tap(find.byTooltip('Opciones de la canción'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Detalles de la canción'));
-      await tester.pumpAndSettle();
-      expect(find.text('Detalle de canción'), findsOneWidget);
-      expect(repository.detailCalls, ['youtube:abcdefghijk']);
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      // Navegar ya no destruye el motor: la sesión mantiene el mini reproductor.
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(AppBar, 'Explorar'), findsOneWidget);
-      expect(audio.disposals, 0);
-      await tester.tap(find.byTooltip('Pausar audio'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Continuar audio'));
-      await tester.pumpAndSettle();
-      final results = find.descendant(
-        of: find.byType(ListView),
-        matching: find.byWidgetPredicate(
-          (widget) =>
-              widget is Scrollable &&
-              widget.axisDirection == AxisDirection.down,
-        ),
-      );
-      await tester.drag(results, const Offset(0, -440));
-      await tester.pumpAndSettle();
-      final scrollOffset = tester
-          .state<ScrollableState>(results)
-          .position
-          .pixels;
-      expect(scrollOffset, greaterThan(0));
-      await tester.tap(find.text('Biblioteca'));
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(AppBar, 'Biblioteca'), findsOneWidget);
-      await tester.tap(find.text('Inicio'));
-      await tester.pumpAndSettle();
-      expect(find.text('Bienvenido, Ana'), findsOneWidget);
-      await tester.tap(find.text('Explorar'));
-      await tester.pumpAndSettle();
-      expect(find.text('artist'), findsOneWidget);
-      expect(repository.calls, ['artist']);
-      expect(
-        tester.state<ScrollableState>(results).position.pixels,
-        scrollOffset,
-      );
-      expect(audio.disposals, 0);
-      expect(find.byTooltip('Pausar audio'), findsOneWidget);
-      final stops = audio.stops;
-      for (final state in [
-        AppLifecycleState.inactive,
-        AppLifecycleState.hidden,
-        AppLifecycleState.paused,
-      ]) {
-        tester.binding.handleAppLifecycleStateChanged(state);
-      }
-      await tester.pump();
-      expect(audio.stops, stops);
-      for (final state in [
-        AppLifecycleState.hidden,
-        AppLifecycleState.inactive,
-        AppLifecycleState.resumed,
-      ]) {
-        tester.binding.handleAppLifecycleStateChanged(state);
-      }
-      await tester.pump();
-      await tester.tap(find.byTooltip('Abrir reproductor'));
-      await tester.pumpAndSettle();
-      expect(find.text('Reproductor'), findsOneWidget);
-      final queue = find.widgetWithText(TextButton, 'Cola');
-      await tester.scrollUntilVisible(queue.hitTestable(), 160);
-      await tester.pumpAndSettle();
-      await tester.tap(queue);
-      await tester.pumpAndSettle();
-      expect(find.byType(BottomSheet), findsOneWidget);
-      Navigator.pop(tester.element(find.byType(BottomSheet)));
-      await tester.pumpAndSettle();
-      expect(find.byType(NavigationBar), findsNothing);
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      expect(find.text('artist'), findsOneWidget);
-      await auth.signOut();
-      await tester.pumpAndSettle();
-      expect(find.text('Continuar con Google'), findsOneWidget);
-      expect(find.text('Detalle de canción'), findsNothing);
-      expect(find.text('Song'), findsNothing);
-      expect(audio.disposals, 1);
-    },
-  );
 }

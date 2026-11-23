@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/settings/app_settings.dart';
+
 class PlayerBackdrop extends StatefulWidget {
   const PlayerBackdrop({
     super.key,
@@ -150,7 +152,8 @@ class _PlayerBackdropState extends State<PlayerBackdrop> {
       coverColor ?? theme.colorScheme.primary,
       .20,
     )!;
-    final artwork = _available;
+    // Con "Reducir efectos" queda el tinte de la carátula, sin desenfoque.
+    final artwork = EffectsScope.reducedOf(context) ? null : _available;
     final backdrop = IgnorePointer(
       child: ClipRect(
         child: Stack(
@@ -161,7 +164,9 @@ class _PlayerBackdropState extends State<PlayerBackdrop> {
               ImageFiltered(
                 imageFilter: ui.ImageFilter.blur(sigmaX: 30, sigmaY: 30),
                 child: Image(
-                  image: artwork,
+                  // Va desenfocada: decodificarla pequeña ahorra memoria y
+                  // hace el filtro mucho más barato, sin diferencia visible.
+                  image: ResizeImage.resizeIfNeeded(null, 256, artwork),
                   fit: BoxFit.cover,
                   alignment: Alignment.topCenter,
                   excludeFromSemantics: true,
@@ -174,11 +179,20 @@ class _PlayerBackdropState extends State<PlayerBackdrop> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   stops: const [0, .43, .86],
-                  colors: [
-                    tint.withValues(alpha: .93),
-                    Color.lerp(tint, paper, .72)!.withValues(alpha: .97),
-                    paper,
-                  ],
+                  // En oscuro la carátula desenfocada se deja ver en toda la
+                  // pantalla bajo un lavado del fondo (50–78 %), como en
+                  // Limusic; en claro se funde con el papel para leer bien.
+                  colors: theme.brightness == Brightness.dark
+                      ? [
+                          paper.withValues(alpha: .5),
+                          paper.withValues(alpha: .66),
+                          paper.withValues(alpha: .78),
+                        ]
+                      : [
+                          tint.withValues(alpha: .93),
+                          Color.lerp(tint, paper, .72)!.withValues(alpha: .97),
+                          paper,
+                        ],
                 ),
               ),
             ),

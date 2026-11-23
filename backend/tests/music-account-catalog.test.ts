@@ -230,6 +230,82 @@ describe('catálogo de la cuenta de Music', () => {
       excluded: 1,
     });
   });
+  it('conserva el artista y el álbum enlazados de una canción', () => {
+    const item = song('ddddddddddd', 'MUSIC_VIDEO_TYPE_ATV') as unknown as {
+      musicResponsiveListItemRenderer: {
+        flexColumns: Array<{
+          musicResponsiveListItemFlexColumnRenderer: { text: unknown };
+        }>;
+      };
+    };
+    item.musicResponsiveListItemRenderer.flexColumns[1] = {
+      musicResponsiveListItemFlexColumnRenderer: {
+        text: {
+          runs: [
+            {
+              text: 'Artista',
+              navigationEndpoint: {
+                browseEndpoint: {
+                  browseId: 'UCartist0000000000000001',
+                  browseEndpointContextSupportedConfigs: {
+                    browseEndpointContextMusicConfig: {
+                      pageType: 'MUSIC_PAGE_TYPE_ARTIST',
+                    },
+                  },
+                },
+              },
+            },
+            { text: ' • ' },
+            {
+              text: 'Disco',
+              navigationEndpoint: {
+                browseEndpoint: {
+                  browseId: 'MPREb_album',
+                  browseEndpointContextSupportedConfigs: {
+                    browseEndpointContextMusicConfig: {
+                      pageType: 'MUSIC_PAGE_TYPE_ALBUM',
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    };
+    expect(
+      parseMusicAccountPage(
+        { contents: { musicShelfRenderer: { contents: [item] } } },
+        'liked',
+      ).items[0],
+    ).toMatchObject({
+      artistId: 'UCartist0000000000000001',
+      albumId: 'MPREb_album',
+      albumName: 'Disco',
+    });
+  });
+
+  it('reutiliza durante la lectura el Inicio crudo verificado para la misma cuenta', async () => {
+    const transport = vi.fn<typeof fetch>().mockImplementation(async () =>
+      Response.json({
+        responseContext: { mainAppWebResponseContext: { loggedOut: false } },
+        contents: { musicShelfRenderer: { contents: [track] } },
+      }),
+    );
+    const api = new OAuthMusicCatalog(transport);
+    const ctx = {
+      access: 'test-account',
+      signal: new AbortController().signal,
+    };
+
+    await api.verify(ctx, 'user:generation');
+    await api.read(ctx, { surface: 'home' }, undefined, 'user:generation');
+
+    const homeCalls = transport.mock.calls.filter(([, init]) =>
+      String(init?.body).includes('FEmusic_home'),
+    );
+    expect(homeCalls).toHaveLength(1);
+  });
   it('mantiene el videoclip subido por un usuario y descarta el curso en la misma playlist', async () => {
     const uploaded = song('mmmmmmmmmmm', 'MUSIC_VIDEO_TYPE_UGC');
     const transport = vi.fn<typeof fetch>().mockImplementation(async () =>

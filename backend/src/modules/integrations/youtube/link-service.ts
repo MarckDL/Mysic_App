@@ -6,6 +6,7 @@ import {
   type YoutubeTx,
 } from '../../../infrastructure/database/prisma-youtube-connection-repository.js';
 import { randomRef, digest } from '../../../infrastructure/youtube/secrets.js';
+import { LruCache } from '../../../infrastructure/cache/lru-cache.js';
 import { LinkError, readScope, root, ttl, type Grant } from './domain.js';
 import { YoutubeGrants, attemptContext, connectionContext } from './grants.js';
 
@@ -32,6 +33,7 @@ const projection = (a: ExternalMusicLinkAttempt) => ({
   channel: a.channelId ? { id: a.channelId, title: a.channelTitle } : null,
 });
 export class YoutubeLinkService {
+  private readonly owners = new LruCache<string>(2048, 90_000);
   constructor(
     readonly grants: YoutubeGrants,
     readonly callback: URL,
@@ -41,12 +43,18 @@ export class YoutubeLinkService {
   private allow() {
     if (!this.enabled) throw new LinkError(503, 'LINK_DISABLED');
   }
+  rememberOwner(uid: string, userId: string) {
+    this.owners.set(uid, userId);
+  }
   async owner(uid: string) {
+    const cached = this.owners.get(uid);
+    if (cached) return cached;
     const user = await getDatabase().user.findUnique({
       where: { firebaseUid: uid },
       select: { id: true },
     });
     if (!user) throw new LinkError(404, 'PROFILE_NOT_FOUND');
+    this.owners.set(uid, user.id);
     return user.id;
   }
   private async discard(

@@ -1,4 +1,3 @@
-import '../../../core/network/authenticated_api_client.dart';
 import '../domain/music_mode.dart';
 
 /// Maps only catalog metadata from the read-only endpoints of Mysic original.
@@ -13,6 +12,30 @@ class OriginalMusicCatalog {
       value is String && value.trim().isNotEmpty && value.length <= limit
       ? value.trim()
       : null;
+
+  /// "Artist • 1.2M monthly audience" o "422 subscribers" → cifra en español.
+  /// Un subtítulo sin cifra de audiencia (p. ej. solo "Artista") se descarta.
+  static String? _audience(Object? value) {
+    final text = _text(value, 120);
+    if (text == null) return null;
+    for (final part in text.split(RegExp(r'\s[•·]\s'))) {
+      final match = RegExp(
+        r'^([\d.,]+\s?[KMB]?(?:\s(?:k|mil|M|millones|B))?)\s+(.+)$',
+        caseSensitive: false,
+      ).firstMatch(part.trim());
+      if (match == null) continue;
+      final unit = match.group(2)!.toLowerCase();
+      final label = unit.contains('subscri') || unit.contains('suscrip')
+          ? 'suscriptores'
+          : unit.contains('listener') ||
+                unit.contains('audience') ||
+                unit.contains('oyente')
+          ? 'oyentes'
+          : null;
+      if (label != null) return '${match.group(1)!.trim()} $label';
+    }
+    return null;
+  }
 
   static String? _art(Object? value) {
     final url = value is String ? Uri.tryParse(value) : null;
@@ -57,12 +80,25 @@ class OriginalMusicCatalog {
                   RegExp(r'^UC[A-Za-z0-9_-]{22}$').hasMatch(raw['artistId'])
               ? raw['artistId'] as String
               : null,
+          albumId:
+              raw['albumId'] is String &&
+                  _albumId.hasMatch(raw['albumId'] as String)
+              ? raw['albumId'] as String
+              : null,
         );
       case 'album':
         return MusicAlbum(
           id,
           title,
           thumbnailUrl: thumbnail,
+          detail: [
+            // En la discografía `kind` es la etiqueta visible ("Álbum", "EP");
+            // en el resto de filas es la clave interna y no se muestra.
+            if (raw['kind'] != 'album' && _text(raw['kind'], 40) != null)
+              releaseKind(_text(raw['kind'], 40)!),
+            ?_text(raw['year'], 8),
+          ].join(' · ').nullIfEmpty,
+          artist: _text(raw['artist'], 120),
           shelfTitle: shelfTitle,
         );
       case 'artist':
@@ -70,6 +106,7 @@ class OriginalMusicCatalog {
           id,
           title,
           thumbnailUrl: thumbnail,
+          detail: _audience(raw['subtitle']),
           shelfTitle: shelfTitle,
         );
       case 'playlist':
@@ -97,37 +134,106 @@ class OriginalMusicCatalog {
     ];
   }
 
-  static MusicPage homePage(Map<String, dynamic> data, {required bool first}) {
-    if ((first && data['personalized'] != true) || data['shelves'] is! List) {
-      throw const ApiFailure(
-        'Mysic de escritorio no entregó el Inicio personal de esta cuenta.',
-        code: 'DESKTOP_HOME',
-      );
+  static final _albumId = RegExp(r'^MPREb_[A-Za-z0-9_-]{6,60}$');
+  static final _channelId = RegExp(r'^UC[A-Za-z0-9_-]{22}$');
+  static bool isAlbumId(String id) => _albumId.hasMatch(id);
+
+  /// YouTube entrega estos textos según el idioma de la solicitud (inglés).
+  /// Se traducen los que se repiten en toda la discografía; los demás se dejan.
+  static String shelfTitle(String title) =>
+      switch (title.trim().toLowerCase()) {
+        'albums' => 'Álbumes',
+        'singles & eps' || 'singles and eps' => 'Sencillos y EP',
+        'singles' => 'Sencillos',
+        'eps' => 'EP',
+        'videos' => 'Vídeos',
+        'live performances' => 'Actuaciones en directo',
+        'featured on' => 'Aparece en',
+        'fans might also like' => 'También te puede gustar',
+        'playlists' => 'Playlists',
+        'compilations' => 'Recopilatorios',
+        _ => title,
+      };
+
+  static String releaseKind(String kind) => switch (kind.trim().toLowerCase()) {
+    'album' => 'Álbum',
+    'single' => 'Sencillo',
+    'ep' => 'EP',
+    'compilation' => 'Recopilatorio',
+    _ => kind,
+  };
+
+  /// "8 songs • 35 minutes" → "8 canciones • 35 minutos".
+  static String albumInfo(String info) => info
+      .replaceAllMapped(
+        RegExp(r'\b(\d+)\s+(songs?|tracks?)\b'),
+        (m) => '${m[1]} ${m[1] == '1' ? 'canción' : 'canciones'}',
+      )
+      .replaceAllMapped(RegExp(r'\b(\d+)\s+(hours?|minutes?|seconds?)\b'), (m) {
+        final n = m[1]!, one = n == '1';
+        return switch (m[2]![0]) {
+          'h' => '$n ${one ? 'hora' : 'horas'}',
+          'm' => '$n ${one ? 'minuto' : 'minutos'}',
+          _ => '$n ${one ? 'segundo' : 'segundos'}',
+        };
+      });
+  static bool isArtistId(String id) => _channelId.hasMatch(id);
+
+  /// `GET youtube/artist/:id` del catálogo de Mysic.
+  static ArtistProfile artistProfile(Map<String, dynamic> data) {
+    final id = _text(data['id'], 150), name = _text(data['name']);
+    if (id == null || name == null) {
+      throw const FormatException('Mysic no devolvió el artista.');
     }
-    final items = <MusicItem>[];
-    var recognizedShelf = false, hasRows = false;
-    for (final shelf in data['shelves'] as List) {
-      if (shelf is! Map || shelf['items'] is! List) continue;
-      recognizedShelf = true;
-      final rows = shelf['items'] as List;
-      hasRows = hasRows || rows.isNotEmpty;
-      for (final row in rows) {
-        if (row is! Map || row['kind'] is! String) continue;
-        final entry = item(
-          row,
-          row['kind'] as String,
-          shelfTitle: _text(shelf['title']),
-        );
-        if (entry != null) items.add(entry);
-      }
-    }
-    if ((data['shelves'] as List).isNotEmpty &&
-        (!recognizedShelf || (hasRows && items.isEmpty))) {
-      throw const ApiFailure(
-        'Mysic no pudo leer las recomendaciones de esta cuenta.',
-        code: 'DESKTOP_HOME',
-      );
-    }
-    return MusicPage(items, cursor(data), null, 0);
+    List<MusicItem> list(Object? values, String kind) => [
+      if (values is List)
+        for (final row in values)
+          if (item(row, kind) case final MusicItem entry) entry,
+    ];
+    return ArtistProfile(
+      id: id,
+      name: name,
+      audience: _audience(data['subtitle']),
+      description: _text(data['description'], 4000),
+      thumbnailUrl: _art(data['thumbnail']),
+      topSongs: list(data['topSongs'], 'song').whereType<MusicTrack>().toList(),
+      shelves: [
+        if (data['shelves'] is List)
+          for (final shelf in data['shelves'] as List)
+            if (shelf is Map && list(shelf['items'], 'album').isNotEmpty)
+              (
+                title: shelfTitle(_text(shelf['title'], 80) ?? 'Álbumes'),
+                items: list(shelf['items'], 'album'),
+              ),
+      ],
+    );
   }
+
+  /// `GET youtube/album/:id` del catálogo de Mysic.
+  static AlbumDetail albumDetail(Map<String, dynamic> data) {
+    final id = _text(data['id'], 150), title = _text(data['title']);
+    if (id == null || title == null || data['tracks'] is! List) {
+      throw const FormatException('Mysic no devolvió el álbum.');
+    }
+    final artistId = _text(data['artistId'], 40);
+    return AlbumDetail(
+      id: id,
+      title: title,
+      artist: _text(data['artist']) ?? 'Artista desconocido',
+      artistId: artistId != null && _channelId.hasMatch(artistId)
+          ? artistId
+          : null,
+      year: _text(data['year'], 8),
+      info: switch (_text(data['info'], 80)) {
+        final String text => albumInfo(text),
+        null => null,
+      },
+      thumbnailUrl: _art(data['thumbnail']),
+      tracks: rows(data['tracks'], 'song').whereType<MusicTrack>().toList(),
+    );
+  }
+}
+
+extension on String {
+  String? get nullIfEmpty => isEmpty ? null : this;
 }

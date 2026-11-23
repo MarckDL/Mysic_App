@@ -1,5 +1,22 @@
 # YouTube Music en Mysic_App
 
+> **Nota de vigencia (22 nov 2026).** Para la app móvil este documento describe el diseño anterior (Firebase, Render, Supabase/PostgreSQL y vinculación con Mysic de escritorio). La arquitectura actual está en [21-arquitectura-movil-ytm.md](21-arquitectura-movil-ytm.md).
+
+
+## Contrato de arranque acelerado
+
+El backend expone `GET /api/v2/warm` sin autenticación para inicializar Firebase
+Admin y ejecutar `SELECT 1`; responde `204` o `503`. Android puede llamarlo en
+segundo plano al abrir. `GET /api/v2/bootstrap` requiere el Bearer de Firebase y
+devuelve `{ profile, connection, home }`: sincroniza el perfil, resuelve la
+conexión y, si está vinculada, incluye la primera página de Inicio. Las rutas
+anteriores permanecen disponibles.
+
+Las pistas del catálogo directo pueden incluir `artistId`, `albumId` y
+`albumName`. El primer lote crudo de Inicio se reutiliza 75 segundos por
+`(firebaseUid, generation)`. Cada petición de Inicio consume como máximo una
+continuación opaca; el resto queda asociado al cursor del servidor.
+
 ## Android 4029
 
 El Inicio conserva los títulos, el orden y las continuaciones de las secciones que entrega YouTube Music. La cuenta de escritorio utiliza su sesión de Mysic con la API original. Para el canal vinculado con Google, la API móvil comprueba el Inicio y la biblioteca musical por separado. Si únicamente puede leer el canal, la pantalla identifica la colección disponible y ofrece abrir el acceso a la cuenta personal de Mysic. El botón **Actualizar** de un Inicio limitado vuelve a comprobar el permiso del canal. Las solicitudes simultáneas comparten una comprobación y los resultados recientes se reutilizan durante 15 segundos.

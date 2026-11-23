@@ -285,3 +285,9 @@ __pycache__/
 
 # Cliente Prisma regenerado a partir del esquema versionado
 /backend/src/generated/prisma/
+
+# Exportaciones de variables de entorno (p. ej. mysic-api-k03u.env): contienen secretos
+*.env
+**/*.env
+!.env.example
+!**/.env.example

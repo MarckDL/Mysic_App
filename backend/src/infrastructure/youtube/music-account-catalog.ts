@@ -6,6 +6,7 @@ import type {
   MusicItem,
   MusicPageRequest,
 } from '../../modules/integrations/youtube-music/provider.js';
+import { LruCache } from '../cache/lru-cache.js';
 
 type Json = Record<string, unknown>;
 const obj = (value: unknown): Json =>
@@ -52,15 +53,20 @@ export interface AccountMusicPage {
   excluded: number;
 }
 export interface MusicAccountCatalog {
-  verify(ctx: ReadContext): Promise<'privatePlaylists' | 'personalHome' | void>;
+  verify(
+    ctx: ReadContext,
+    cacheKey?: string,
+  ): Promise<'privatePlaylists' | 'personalHome' | void>;
   verifyCollection?(
     ctx: ReadContext,
     surface: 'liked' | 'albums' | 'artists',
+    cacheKey?: string,
   ): Promise<void>;
   read(
     ctx: ReadContext,
     request: AccountSurface,
     continuation?: string,
+    cacheKey?: string,
   ): Promise<AccountMusicPage>;
 }
 
@@ -151,14 +157,15 @@ function card(
     .map(obj);
   const userVideo = kinds.includes('MUSIC_VIDEO_TYPE_UGC');
   if (userVideo) unclassified?.add(trackId);
-  const album = detailRuns.some(
+  const albumRun = detailRuns.find(
     (run) => pageType(obj(run.navigationEndpoint)) === 'MUSIC_PAGE_TYPE_ALBUM',
   );
+  const albumId = str(browse(obj(albumRun?.navigationEndpoint)).browseId);
   if (!(
     kinds.includes('MUSIC_VIDEO_TYPE_ATV') ||
     kinds.includes('MUSIC_VIDEO_TYPE_OMV') ||
     (userVideo && musicVideos.has(trackId)) ||
-    (!kinds.length && (album || surface === 'album'))
+    (!kinds.length && (albumRun || surface === 'album'))
   ))
     return;
   const artists = detailRuns.filter((run) =>
@@ -185,6 +192,8 @@ function card(
     artistId: artists.length
       ? str(browse(obj(artists[0]!.navigationEndpoint)).browseId)
       : undefined,
+    albumId: albumId || undefined,
+    albumName: albumRun ? str(albumRun.text) || undefined : undefined,
     thumbnailUrl,
     durationSeconds:
       durationText?.split(':').reduce((n, s) => n * 60 + Number(s), 0) ?? 0,
@@ -362,6 +371,7 @@ const pages: Partial<Record<MusicPageRequest['surface'], string>> = {
   artists: 'FEmusic_library_corpus_artists',
 };
 export class OAuthMusicCatalog implements MusicAccountCatalog {
+  private readonly homeResponses = new LruCache<unknown>(1024, 75_000);
   constructor(
     private readonly transport: typeof fetch = fetch,
     private readonly videoDetails: Pick<
@@ -370,10 +380,14 @@ export class OAuthMusicCatalog implements MusicAccountCatalog {
     > = new YoutubeDataLibraryProvider(transport, { verifyMusic: true }),
   ) {}
   // Home and the private playlists shelf can be granted independently.
-  async verify(ctx: ReadContext) {
+  async verify(ctx: ReadContext, cacheKey?: string) {
     const probe = async (surface: 'playlists' | 'home') => {
       try {
-        await this.verifyCollection(ctx, surface);
+        await this.verifyCollection(
+          ctx,
+          surface,
+          surface === 'home' ? cacheKey : undefined,
+        );
         return 'granted';
       } catch (error) {
         if (!(error instanceof LinkError)) throw error;
@@ -417,8 +431,9 @@ export class OAuthMusicCatalog implements MusicAccountCatalog {
   async verifyCollection(
     ctx: ReadContext,
     surface: 'home' | 'playlists' | 'liked' | 'albums' | 'artists',
+    cacheKey?: string,
   ) {
-    const data = await this.request(ctx, { surface });
+    const data = await this.request(ctx, { surface }, undefined, cacheKey);
     const page = parseMusicAccountPage(data, surface);
     if (!this.signedIn(data) || (surface === 'home' && !page.items.length))
       throw new LinkError(503, 'MUSIC_CATALOG_RESPONSE');
@@ -427,7 +442,12 @@ export class OAuthMusicCatalog implements MusicAccountCatalog {
     ctx: ReadContext,
     request: AccountSurface,
     continuation?: string,
+    cacheKey?: string,
   ): Promise<unknown> {
+    if (request.surface === 'home' && !continuation && cacheKey) {
+      const cached = this.homeResponses.get(cacheKey);
+      if (cached) return cached;
+    }
     const search = request.surface === 'search';
     const id =
       request.surface === 'playlist' && request.playlistId
@@ -502,12 +522,21 @@ export class OAuthMusicCatalog implements MusicAccountCatalog {
       throw new LinkError(404, 'MUSIC_PLAYLIST_NOT_FOUND');
     if (response.status === 429) throw new LinkError(429, 'TOO_MANY_REQUESTS');
     if (!response.ok) throw new LinkError(503, 'GOOGLE_UNAVAILABLE');
-    return response.json().catch(() => {
+    const data = await response.json().catch(() => {
       throw new LinkError(503, 'MUSIC_CATALOG_RESPONSE');
     });
+    if (request.surface === 'home' && !continuation && cacheKey) {
+      this.homeResponses.set(cacheKey, data);
+    }
+    return data;
   }
-  async read(ctx: ReadContext, request: AccountSurface, continuation?: string) {
-    const json = await this.request(ctx, request, continuation);
+  async read(
+    ctx: ReadContext,
+    request: AccountSurface,
+    continuation?: string,
+    cacheKey?: string,
+  ) {
+    const json = await this.request(ctx, request, continuation, cacheKey);
     if (request.surface === 'home' && !continuation && !this.signedIn(json)) {
       // Verification is cached; never serve an anonymous Home as this user's feed.
       throw new LinkError(403, 'MUSIC_ACCESS_DENIED');

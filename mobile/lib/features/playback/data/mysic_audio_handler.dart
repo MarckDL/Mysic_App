@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:audio_service/audio_service.dart';
 import '../application/track_playback_controller.dart';
 import '../domain/track_audio_engine.dart';
 import '../../search/domain/catalog_track.dart';
+import 'notification_art.dart';
+import 'widget_bridge.dart';
 
 // Adaptador de controles del sistema; el controlador de sesión conserva la lógica.
 class MysicAudioHandler extends BaseAudioHandler {
@@ -12,12 +16,76 @@ class MysicAudioHandler extends BaseAudioHandler {
   TrackAudioPhase? _publishedPhase;
   int? _publishedIndex;
   Duration? _publishedDuration;
-  (PlaybackRepeat, bool, int)? _publishedOptions;
+  (PlaybackRepeat, bool, int, bool)? _publishedOptions;
+
+  // Me gusta: el corazón del widget y de los controles. Sin cuenta enlazada no
+  // hay corazón y el widget solo controla la reproducción.
+  bool Function(String videoId)? _isLiked;
+  Future<bool> Function(String videoId)? _toggleLike;
+  Listenable? _likeChanges;
+  WidgetState? _publishedWidget;
+  final WidgetBridge _widget = const WidgetBridge();
+
+  /// Conecta el corazón: [isLiked] dice si la canción ya tiene Me gusta,
+  /// [toggle] lo cambia y [changes] avisa cuando cambia el conjunto.
+  void bindLikes({
+    required bool Function(String videoId) isLiked,
+    required Future<bool> Function(String videoId) toggle,
+    required Listenable changes,
+  }) {
+    _likeChanges?.removeListener(_onLikesChanged);
+    _isLiked = isLiked;
+    _toggleLike = toggle;
+    _likeChanges = changes..addListener(_onLikesChanged);
+    _onLikesChanged();
+  }
+
+  void _onLikesChanged() {
+    _pushWidget();
+    _publish();
+  }
+
+  void unbindLikes() {
+    _likeChanges?.removeListener(_onLikesChanged);
+    _likeChanges = null;
+    _isLiked = null;
+    _toggleLike = null;
+  }
+
+  static String? _videoId(CatalogTrack? track) =>
+      track != null && track.id.startsWith('youtube:')
+      ? track.id.substring('youtube:'.length)
+      : null;
+
+  /// Publica el estado actual en el widget de la pantalla de inicio; solo si
+  /// cambió algo.
+  void _pushWidget() {
+    final controller = _controller;
+    final current = controller?.current;
+    final id = _videoId(current);
+    final state = current == null || controller == null
+        ? const WidgetState()
+        : WidgetState(
+            has: true,
+            title: current.title,
+            artist: current.artistName,
+            art: current.thumbnailUrl,
+            playing:
+                controller.phase == TrackAudioPhase.playing ||
+                controller.phase == TrackAudioPhase.loading,
+            liked: id != null && (_isLiked?.call(id) ?? false),
+          );
+    if (state == _publishedWidget) return;
+    _publishedWidget = state;
+    unawaited(_widget.update(state));
+  }
+
   void bind(TrackPlaybackController controller) {
     final old = _controller;
     if (old != null) old.removeListener(_publish);
     _controller = controller;
     _publishedPhase = null;
+    _publishedWidget = null;
     controller.addListener(_publish);
     _publish();
   }
@@ -34,24 +102,45 @@ class MysicAudioHandler extends BaseAudioHandler {
     _publishedOptions = null;
     queue.add(const []);
     _clearMediaItem();
+    _pushWidget();
     playbackState.add(
       PlaybackState(processingState: AudioProcessingState.idle, playing: false),
     );
   }
 
-  MediaItem _item(CatalogTrack track, [Duration? actualDuration]) => MediaItem(
-    id: track.id,
-    title: track.title,
-    artist: track.artistName,
-    duration:
-        actualDuration ??
-        (track.durationSeconds == null
-            ? null
-            : Duration(seconds: track.durationSeconds!)),
-    artUri: track.thumbnailUrl == null
-        ? null
-        : Uri.tryParse(track.thumbnailUrl!),
-  );
+  // La portada va cuadrada y de buen tamaño: Android la muestra grande en la
+  // notificación y en la pantalla de bloqueo, y una miniatura pequeña o con
+  // franjas se estira y se sale del recuadro.
+  MediaItem _item(CatalogTrack track, [Duration? actualDuration, Uri? art]) =>
+      MediaItem(
+        id: track.id,
+        title: track.title,
+        artist: track.artistName,
+        duration:
+            actualDuration ??
+            (track.durationSeconds == null
+                ? null
+                : Duration(seconds: track.durationSeconds!)),
+        artUri: art ?? NotificationArt.immediate(track.thumbnailUrl),
+      );
+
+  /// Con una miniatura de vídeo, genera la portada cuadrada y, cuando está,
+  /// la pone en la notificación (si la canción sigue siendo la misma).
+  void _squareArt(CatalogTrack track) {
+    final url = track.thumbnailUrl;
+    if (url == null) return;
+    unawaited(
+      NotificationArt.square(url).then((art) {
+        final controller = _controller;
+        if (art == null ||
+            controller == null ||
+            !identical(controller.current, track)) {
+          return;
+        }
+        mediaItem.add(_item(track, controller.duration, art));
+      }),
+    );
+  }
 
   void _clearMediaItem() {
     // audio_service 0.18 ignora los valores null al sincronizar MediaItem con
@@ -64,6 +153,7 @@ class MysicAudioHandler extends BaseAudioHandler {
   void _publish() {
     final controller = _controller;
     if (controller == null) return;
+    _pushWidget();
     final current = controller.current;
     final phase = controller.phase;
     final nextQueue = controller.queue;
@@ -78,16 +168,20 @@ class MysicAudioHandler extends BaseAudioHandler {
         _clearMediaItem();
       } else {
         mediaItem.add(_item(current, controller.duration));
+        _squareArt(current);
       }
       _publishedDuration = controller.duration;
       _publishedCurrent = current;
     }
     // Publish explicit seeks and playback mode changes, while Android
     // extrapolates the position between updates.
+    final likeId = _videoId(current);
+    final liked = likeId != null && (_isLiked?.call(likeId) ?? false);
     final options = (
       controller.repeat,
       controller.shuffleEnabled,
       controller.seekRevision,
+      liked,
     );
     if (!queueChanged &&
         _publishedPhase == phase &&
@@ -98,22 +192,47 @@ class MysicAudioHandler extends BaseAudioHandler {
     _publishedPhase = phase;
     _publishedIndex = controller.index;
     _publishedOptions = options;
+    // Controles de la notificación y de la pantalla de bloqueo: Me gusta,
+    // anterior, pausa/reproducir y siguiente. La vista compacta muestra los
+    // tres de reproducción; con menos de tres entra el corazón.
+    final hasHeart = current != null && _toggleLike != null;
     final controls = <MediaControl>[
+      if (hasHeart)
+        MediaControl.custom(
+          androidIcon: liked
+              ? 'drawable/ic_notif_heart_on'
+              : 'drawable/ic_notif_heart',
+          label: liked ? 'Quitar de Me gusta' : 'Me gusta',
+          name: 'like',
+        ),
+      // Repetir la canción, con indicador: apagado atenuado, encendido con el
+      // "1". Con dos acciones propias, Android no añade el botón de aleatorio.
+      if (current != null)
+        MediaControl.custom(
+          androidIcon: controller.repeat == PlaybackRepeat.one
+              ? 'drawable/ic_notif_repeat_on'
+              : 'drawable/ic_notif_repeat',
+          label: controller.repeat == PlaybackRepeat.one
+              ? 'Repetir canción: activado'
+              : 'Repetir canción: desactivado',
+          name: 'repeat',
+        ),
       if (controller.hasPrevious) MediaControl.skipToPrevious,
       if (current != null)
         (phase == TrackAudioPhase.playing || phase == TrackAudioPhase.loading)
             ? MediaControl.pause
             : MediaControl.play,
       if (controller.hasNext) MediaControl.skipToNext,
-      if (current != null) MediaControl.stop,
     ];
+    final compact = <int>[
+      for (final (i, c) in controls.indexed)
+        if (c.action != MediaAction.custom) i,
+    ].take(3).toList();
+    if (hasHeart && compact.length < 3) compact.insert(0, 0);
     playbackState.add(
       PlaybackState(
         controls: controls,
-        androidCompactActionIndices: List.generate(
-          controls.length.clamp(0, 3),
-          (i) => i,
-        ),
+        androidCompactActionIndices: compact,
         systemActions: current == null ? const {} : const {MediaAction.seek},
         processingState: switch (phase) {
           TrackAudioPhase.idle => AudioProcessingState.idle,
@@ -160,6 +279,23 @@ class MysicAudioHandler extends BaseAudioHandler {
   Future<void> skipToQueueItem(int index) async => _controller?.jump(index);
   @override
   Future<void> seek(Duration position) async => _controller?.seek(position);
+
+  @override
+  Future<dynamic> customAction(
+    String name, [
+    Map<String, dynamic>? extras,
+  ]) async {
+    if (name == 'like') {
+      final id = _videoId(_controller?.current);
+      if (id != null) await _toggleLike?.call(id);
+      return null;
+    }
+    if (name == 'repeat') {
+      _controller?.toggleRepeatOne();
+      return null;
+    }
+    return super.customAction(name, extras);
+  }
 
   @override
   Future<void> onTaskRemoved() async {

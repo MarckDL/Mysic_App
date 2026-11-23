@@ -1,15 +1,8 @@
 import '../../../app/mysic_theme.dart';
-import 'dart:async';
-
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../playback/application/playback_providers.dart';
-import '../../playback/application/track_playback_controller.dart';
-import '../../connected_library/presentation/connected_screen.dart';
-import '../../connected_library/presentation/music_mode_host.dart';
 import '../../connected_library/presentation/music_mode_screen.dart';
 import '../application/auth_providers.dart';
 import '../domain/mysic_profile.dart';
@@ -36,10 +29,8 @@ class AccountScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final action = ref.watch(authActionsProvider);
-    final music = MusicModeScope.of(context);
-    final localMode = music?.showMusic != true;
     final editedProfile = ref.watch(editedProfileProvider);
-    final currentProfile = editedProfile?.firebaseUid == profile.firebaseUid
+    final currentProfile = editedProfile?.uid == profile.uid
         ? editedProfile!
         : profile;
     return Scaffold(
@@ -91,50 +82,14 @@ class AccountScreen extends ConsumerWidget {
                 builder: (context) => _NicknameDialog(profile: currentProfile),
               ),
             ),
+            ListTile(
+              leading: const Icon(Icons.tune),
+              title: const Text('Ajustes'),
+              subtitle: const Text('Apariencia, letras y almacenamiento'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/settings'),
+            ),
             const MusicModeSettings(),
-            if (localMode && music == null) const ConnectedTile(account: true),
-            if (profile.canModerateComments)
-              ListTile(
-                leading: const Icon(Icons.flag_outlined),
-                title: const Text('Moderar comentarios'),
-                onTap: () => context.push('/moderation/comments'),
-              ),
-            if (localMode &&
-                !kIsWeb &&
-                defaultTargetPlatform == TargetPlatform.android)
-              ListTile(
-                leading: const Icon(Icons.play_circle_outline),
-                title: const Text('Probar el reproductor'),
-                onTap: () {
-                  final controller = ref.read(trackPlaybackControllerProvider);
-                  if (controller.queue.length == 100 &&
-                      !controller.queue.any(
-                        (track) =>
-                            track.id == TrackPlaybackController.demoTrack.id,
-                      )) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('La cola está llena.')),
-                    );
-                    return;
-                  }
-                  unawaited(
-                    controller.playTrack(TrackPlaybackController.demoTrack),
-                  );
-                  context.push('/player');
-                },
-              ),
-            if (localMode && kDebugMode) ...[
-              ListTile(
-                leading: const Icon(Icons.volume_up_outlined),
-                title: const Text('Prueba de audio'),
-                onTap: () => context.push('/audio-test'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.headphones),
-                title: const Text('Probar audio de YouTube'),
-                onTap: () => context.push('/youtube-audio-test'),
-              ),
-            ],
             Align(
               alignment: Alignment.centerLeft,
               child: OutlinedButton.icon(
@@ -183,7 +138,7 @@ class _NicknameDialogState extends ConsumerState<_NicknameDialog> {
       await ref
           .read(editedProfileProvider.notifier)
           .updateNickname(
-            widget.profile.firebaseUid,
+            widget.profile.uid,
             nickname.isEmpty ? null : nickname,
           );
       if (mounted) Navigator.of(context).pop();
@@ -209,7 +164,7 @@ class _NicknameDialogState extends ConsumerState<_NicknameDialog> {
         children: [
           const Text(
             'Elige un apodo corto, de hasta 24 caracteres. Si lo dejas vacío, '
-            'verás tu nombre de Google.',
+            'verás el nombre de tu canal de YouTube Music.',
           ),
           const SizedBox(height: 12),
           TextFormField(

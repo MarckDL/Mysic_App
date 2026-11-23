@@ -1,8 +1,4 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:dio/dio.dart';
-
-import '../../../core/network/api_dio.dart';
 
 class PlaybackSource {
   const PlaybackSource(this.uri, {this.headers = const {}});
@@ -20,16 +16,22 @@ abstract interface class PlaybackSourceResolver {
   });
   Future<void> prefetch(String sourceId, String token);
   void cancelPrefetch();
+
+  /// Resuelve en segundo plano varias fuentes a la vista, sin prioridad sobre
+  /// la reproducción.
+  void warm(List<String> sourceIds);
+
+  /// El dedo está sobre esta canción: se resuelve ya, con prioridad sobre el
+  /// resto del trabajo en segundo plano y sin validar.
+  void touch(String sourceId);
+
   Future<void> clear();
   Future<void> dispose();
 }
 
-PlaybackSourceResolver createPlaybackSourceResolver(String baseUrl) {
-  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-    return AndroidPlaybackSourceResolver();
-  }
-  return BackendPlaybackSourceResolver(baseUrl);
-}
+/// El audio se resuelve en el teléfono (NewPipe Extractor): no hay servidor.
+PlaybackSourceResolver createPlaybackSourceResolver() =>
+    AndroidPlaybackSourceResolver();
 
 class AndroidPlaybackSourceResolver implements PlaybackSourceResolver {
   AndroidPlaybackSourceResolver({MethodChannel? channel})
@@ -65,13 +67,28 @@ class AndroidPlaybackSourceResolver implements PlaybackSourceResolver {
     final rawUrl = response?['url'];
     if (rawUrl is! String) throw StateError('Fuente nativa inválida');
     final uri = Uri.tryParse(rawUrl);
-    if (uri == null ||
-        uri.scheme != 'https' ||
-        !(uri.host == 'googlevideo.com' ||
-            uri.host.endsWith('.googlevideo.com'))) {
+    final isGoogleVideo =
+        uri != null &&
+        uri.scheme == 'https' &&
+        (uri.host == 'googlevideo.com' ||
+            uri.host.endsWith('.googlevideo.com'));
+    // El servidor local del propio teléfono (solo bucle local y su ruta fija).
+    final isLocalProxy =
+        uri != null &&
+        uri.scheme == 'http' &&
+        uri.host == '127.0.0.1' &&
+        uri.path.startsWith('/a/');
+    if (uri == null || !(isGoogleVideo || isLocalProxy)) {
       throw StateError('Destino de audio no permitido');
     }
-    return PlaybackSource(uri);
+    final rawHeaders = response?['headers'];
+    final headers = <String, String>{
+      if (rawHeaders is Map)
+        for (final entry in rawHeaders.entries)
+          if (entry.key is String && entry.value is String)
+            entry.key as String: entry.value as String,
+    };
+    return PlaybackSource(uri, headers: headers);
   }
 
   @override
@@ -94,6 +111,26 @@ class AndroidPlaybackSourceResolver implements PlaybackSourceResolver {
   }
 
   @override
+  void warm(List<String> sourceIds) {
+    final ids = [
+      for (final id in sourceIds)
+        if (RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(id)) id,
+    ];
+    if (_disposed || ids.isEmpty) return;
+    _channel
+        .invokeMethod<void>('warm', {'sourceIds': ids})
+        .catchError((Object _) {});
+  }
+
+  @override
+  void touch(String sourceId) {
+    if (_disposed || !RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(sourceId)) return;
+    _channel
+        .invokeMethod<void>('touch', {'sourceId': sourceId})
+        .catchError((Object _) {});
+  }
+
+  @override
   Future<void> clear() async {
     if (_disposed) return;
     cancelPrefetch();
@@ -112,71 +149,6 @@ class AndroidPlaybackSourceResolver implements PlaybackSourceResolver {
     } on MissingPluginException {
       // Los tests no registran el canal Android.
     }
-  }
-
-  void _validate(String sourceId, String token) {
-    if (!RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(sourceId) || token.isEmpty) {
-      throw StateError('Fuente inválida');
-    }
-  }
-}
-
-class BackendPlaybackSourceResolver implements PlaybackSourceResolver {
-  BackendPlaybackSourceResolver(String baseUrl)
-    : _base = validatedApiUri(baseUrl);
-
-  final Uri _base;
-  final Dio _client = Dio();
-  CancelToken? _prefetchCancel;
-
-  @override
-  Future<void> warmUp() async {}
-
-  @override
-  Future<PlaybackSource> resolve(
-    String sourceId,
-    String token, {
-    bool refresh = false,
-  }) async {
-    _validate(sourceId, token);
-    return PlaybackSource(
-      _base.resolve('/api/v1/playback/audio/$sourceId'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-  }
-
-  @override
-  Future<void> prefetch(String sourceId, String token) async {
-    _validate(sourceId, token);
-    cancelPrefetch();
-    final cancel = CancelToken();
-    _prefetchCancel = cancel;
-    try {
-      await _client.post<void>(
-        _base.resolve('/api/v1/playback/prefetch/$sourceId').toString(),
-        options: Options(headers: {'Authorization': 'Bearer $token'}),
-        cancelToken: cancel,
-      );
-    } on DioException catch (error) {
-      if (!CancelToken.isCancel(error)) rethrow;
-    } finally {
-      if (identical(_prefetchCancel, cancel)) _prefetchCancel = null;
-    }
-  }
-
-  @override
-  void cancelPrefetch() {
-    _prefetchCancel?.cancel();
-    _prefetchCancel = null;
-  }
-
-  @override
-  Future<void> clear() async => cancelPrefetch();
-
-  @override
-  Future<void> dispose() async {
-    cancelPrefetch();
-    _client.close(force: true);
   }
 
   void _validate(String sourceId, String token) {

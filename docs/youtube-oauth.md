@@ -1,5 +1,8 @@
 # Vinculación oficial de YouTube · Fase 1
 
+> **Nota de vigencia (22 nov 2026).** Para la app móvil este documento describe el diseño anterior (Firebase, Render, Supabase/PostgreSQL y vinculación con Mysic de escritorio). La arquitectura actual está en [21-arquitectura-movil-ytm.md](21-arquitectura-movil-ytm.md).
+
+
 El backend autoriza una cuenta de YouTube elegida en el navegador. Firebase sigue identificando la cuenta de Mysic. La prueba de cobertura con dos cuentas en Perú enumeró nueve listas propias, cuatro privadas. Se leyeron dos listas privadas de once y cinco elementos y una lista pública de 68 en dos páginas de 50 y 18. Este resultado se obtuvo con Google OAuth Playground. El canje del nuevo callback requiere validación separada en staging.
 
 ## Flujo de la API

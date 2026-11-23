@@ -11,6 +11,32 @@ describe('API base', () => {
     expect(response.headers['x-powered-by']).toBeUndefined();
   });
 
+  it('calienta Firebase y PostgreSQL mediante una ruta pública mínima', async () => {
+    let calls = 0;
+    const response = await request(
+      createApp({
+        warmup: async () => {
+          calls += 1;
+        },
+      }),
+    ).get('/api/v2/warm');
+    expect(response.status).toBe(204);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(calls).toBe(1);
+  });
+
+  it('informa 503 si el calentamiento no alcanza sus dependencias', async () => {
+    const response = await request(
+      createApp({
+        warmup: async () => {
+          throw new Error('offline');
+        },
+      }),
+    ).get('/api/v2/warm');
+    expect(response.status).toBe(503);
+    expect(response.body.error.code).toBe('WARMUP_UNAVAILABLE');
+  });
+
   it('devuelve un error JSON para rutas inexistentes', async () => {
     const response = await request(createApp()).get('/api/v1/missing');
     expect(response.status).toBe(404);

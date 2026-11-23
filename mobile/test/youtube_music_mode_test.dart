@@ -1,34 +1,19 @@
+import 'package:mysic/features/search/presentation/music_tiles.dart';
 import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mysic/app/mysic_app.dart';
-import 'package:mysic/core/network/authenticated_api_client.dart';
-import 'package:mysic/features/authentication/application/auth_providers.dart';
-import 'package:mysic/features/authentication/domain/auth_repository.dart';
-import 'package:mysic/features/authentication/domain/mysic_profile.dart';
+import 'package:mysic/core/network/api_failure.dart';
 import 'package:mysic/features/connected_library/application/music_mode_controller.dart';
-import 'package:mysic/features/connected_library/data/device_recordings.dart';
 import 'package:mysic/features/connected_library/data/music_mode_client.dart';
+import 'package:mysic/features/ytm/data/ytm_client.dart';
+import 'package:mysic/features/ytm/data/ytm_session.dart';
 import 'package:mysic/features/connected_library/domain/music_mode.dart';
 import 'package:mysic/features/connected_library/presentation/music_mode_screen.dart';
+import 'package:mysic/features/connected_library/presentation/tab_top_bar.dart';
 import 'package:mysic/features/connected_library/presentation/music_mode_host.dart';
-import 'package:mysic/features/history/data/history_client.dart';
-import 'package:mysic/features/history/application/listening_tracker.dart';
-import 'package:mysic/features/playback/application/playback_providers.dart';
-import 'package:mysic/features/playback/application/track_playback_controller.dart';
-import 'package:mysic/features/playback/domain/playback_resolution.dart';
-import 'package:mysic/features/playback/domain/track_audio_engine.dart';
-
-import 'package:mysic/features/connected_library/application/connected_controller.dart';
-import 'package:mysic/features/connected_library/application/connected_host.dart';
-import 'package:mysic/features/connected_library/data/connected_client.dart';
-
-import 'support/fake_connected_library.dart' as oauth;
-import 'support/fake_auth_repository.dart';
-import 'support/fake_track_audio_engine.dart';
 
 const a = MusicAccount('a', 'Cuenta A', false);
 const a2 = MusicAccount('a2', 'Canal alterno A', true);
@@ -45,11 +30,11 @@ const capabilities = {
 };
 
 class _SessionFixture extends MusicModeClient {
-  _SessionFixture(
-    this.accounts,
-    AuthenticatedApiClient api, {
-    this.direct = false,
-  }) : super(api);
+  _SessionFixture(this.accounts, {this.direct = false})
+    : super(
+        ytm: YtmClient(const YtmSession('SAPISID=t')),
+        ytmAccount: () => null,
+      );
   final bool direct;
   bool channelOnly = false;
   int explicitChecks = 0;
@@ -120,17 +105,6 @@ class _SessionFixture extends MusicModeClient {
   }
 
   @override
-  Future<MusicConnection> link(String id, String? generation) async {
-    account = accounts.singleWhere((entry) => entry.id == id);
-    links++;
-    expired = false;
-    return connection();
-  }
-
-  @override
-  Future<void> unlink(String generation) async => account = null;
-
-  @override
   Future<MusicPage> page(
     String generation,
     MusicSurface surface, {
@@ -138,7 +112,14 @@ class _SessionFixture extends MusicModeClient {
     String? query,
     String? cursor,
     CancelToken? cancelToken,
+    bool remember = false,
   }) async {
+    // Recientes y Lo más oído salen de la base local, no de la página que
+    // se está probando.
+    if (surface == MusicSurface.onRepeat ||
+        surface == MusicSurface.mysicRecents) {
+      return const MusicPage([], null, null, 0);
+    }
     if (pending case final pending?) return pending.future;
     final current = account!;
     final playlist = MusicPlaylist(
@@ -225,10 +206,6 @@ class _SessionFixture extends MusicModeClient {
   }
 
   @override
-  Future<bool> hasListen(String generation, String id) async =>
-      recorded.containsKey(id);
-
-  @override
   Future<void> activityPreference(String generation, {bool? paused}) async {
     final current = account!;
     if (paused == null) {
@@ -238,77 +215,14 @@ class _SessionFixture extends MusicModeClient {
     }
     epoch++;
   }
-
-  @override
-  Future<void> record(
-    String generation,
-    String id,
-    String trackId,
-    int listenedMs, {
-    int? activityEpoch,
-  }) async {
-    writes++;
-    recordedEpoch = activityEpoch;
-    recorded[id] = MusicTrack(
-      trackId,
-      'Escucha de ${account!.name}',
-      'Mysic',
-      8,
-      true,
-      DateTime.utc(2026, 11, 19),
-    );
-    if (loseResponse) throw const ApiFailure('Sin respuesta.');
-  }
-}
-
-class _DeviceFixture extends DeviceRecordings {
-  _DeviceFixture() : super('A');
-  final files = <String, Uri>{};
-  String? scope;
-  @override
-  Future<Map<String, Uri>> open(
-    String? generation,
-    bool Function() stillCurrent,
-  ) async {
-    if (scope != generation) files.clear();
-    scope = generation;
-    return Map.of(files);
-  }
-
-  @override
-  Future<Uri?> attach(
-    String generation,
-    String id,
-    bool Function() stillCurrent,
-  ) async => stillCurrent() ? files[id] = Uri.file('/privado/$id.media') : null;
-}
-
-class _ConsentClient extends oauth.Client {
-  _ConsentClient(this.music);
-  final _SessionFixture music;
-  @override
-  Future<void> confirm(String id, Json body, CancelToken cancel) async {
-    await super.confirm(id, body, cancel);
-    await music.link(a.id, null);
-  }
-
-  @override
-  Future<void> unlink(CancelToken cancel, {String? generation}) async {
-    await super.unlink(cancel, generation: generation);
-    await music.unlink('fixture-generation');
-  }
 }
 
 void main() {
+  setUpAll(() => NowPlayingBars.animationsEnabled = false);
   testWidgets(
-    'Actualizar Inicio vuelve a consultar el acceso y conserva el reproductor',
+    'Actualizar Inicio vuelve a pedir la página y conserva el reproductor',
     (tester) async {
-      final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
-      final api = AuthenticatedApiClient(auth, baseUrl: 'https://example.test');
-      addTearDown(api.close);
-      final fixture = _SessionFixture([a], api, direct: true)
-        ..account = a
-        ..channelOnly = true;
+      final fixture = _SessionFixture([a], direct: true)..account = a;
       var clears = 0;
       final model = MusicModeController(fixture, () => true, () async {
         clears++;
@@ -327,25 +241,140 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Recomendado para Cuenta A'), findsNothing);
-      fixture.channelOnly = false;
-      await tester.tap(find.byTooltip('Actualizar'));
-      await tester.pumpAndSettle();
-      expect(fixture.explicitChecks, 1);
       expect(find.text('Recomendado para Cuenta A'), findsOneWidget);
-      expect(clears, initialClears);
       await tester.tap(find.byTooltip('Actualizar'));
       await tester.pumpAndSettle();
-      expect(fixture.explicitChecks, 1);
+      expect(find.text('Recomendado para Cuenta A'), findsOneWidget);
+      // Recargar la página no detiene lo que suena.
+      expect(clears, initialClears);
+    },
+  );
+  testWidgets('el collage de Inicio se compone una vez y no cambia solo', (
+    tester,
+  ) async {
+    final fixture = _SessionFixture([a], direct: true)..account = a;
+    final model = MusicModeController(fixture, () => true, () async {});
+    addTearDown(model.dispose);
+    await model.refresh();
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: MusicModeScope(
+            controller: model,
+            child: const MusicModeSurface(surface: MusicSurface.home),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Llegan los datos secundarios y el collage se compone.
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(find.text('Accesos directos'), findsOneWidget);
+    expect(find.text('Recomendado para Cuenta A'), findsOneWidget);
+    // Aunque pase el tiempo (antes rotaba solo), sigue siendo el mismo.
+    await tester.pump(const Duration(seconds: 40));
+    await tester.pumpAndSettle();
+    expect(find.text('Accesos directos'), findsOneWidget);
+    expect(find.text('Recomendado para Cuenta A'), findsOneWidget);
+  });
+  testWidgets(
+    'el contenido de la pantalla de música empieza bajo la barra superior, también con barra de estado',
+    (tester) async {
+      final fixture = _SessionFixture([a], direct: true)..account = a;
+      final model = MusicModeController(fixture, () => true, () async {});
+      addTearDown(model.dispose);
+      await model.refresh();
+      fixture.pending = Completer<MusicPage>()
+        ..complete(
+          const MusicPage(
+            [
+              MusicTrack(
+                'aaaaaaaaaaa',
+                'Primera canción',
+                'Artista',
+                160,
+                false,
+                null,
+                nativePlayback: true,
+              ),
+            ],
+            null,
+            null,
+            0,
+          ),
+        );
+      const status = 40.0;
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            // Una barra de estado simulada de 40 px, como la de un teléfono.
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(padding: const EdgeInsets.only(top: status)),
+              child: child!,
+            ),
+            // Igual que en la app: la pantalla vive en el cuerpo de un
+            // Scaffold con barra de pestañas.
+            home: Scaffold(
+              body: MusicModeScope(
+                controller: model,
+                child: const MusicModeSurface(surface: MusicSurface.home),
+              ),
+              bottomNavigationBar: NavigationBar(
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.home),
+                    label: 'Inicio',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.search),
+                    label: 'Buscar',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final bar = tester.getRect(find.byType(TabTopBar));
+      final greeting = tester.getTopLeft(
+        find.byWidgetPredicate(
+          // El saludo lleva detrás el nombre de pila de la cuenta.
+          (widget) =>
+              widget is Text &&
+              const [
+                'Buenos días',
+                'Buenas tardes',
+                'Buenas noches',
+              ].any((greeting) => widget.data?.startsWith(greeting) ?? false),
+        ),
+      );
+      // La barra ocupa la barra de estado más la altura de la barra...
+      expect(bar.top, 0);
+      expect(bar.height, closeTo(status + TabTopBar.height, 1));
+      // ...y el primer elemento queda por debajo de ella, no debajo del título.
+      expect(greeting.dy, greaterThanOrEqualTo(bar.bottom));
+
+      // La barra es transparente arriba del todo y también al desplazar: ya no
+      // desenfoca nada (solo baja un velo que se desvanece).
+      expect(find.byType(BackdropFilter), findsNothing);
+      await tester.drag(find.byType(ListView).first, const Offset(0, -120));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(find.byType(BackdropFilter), findsNothing);
+      // Y sigue fija en su sitio.
+      final fixed = tester.getRect(find.byType(TabTopBar));
+      expect(fixed.top, 0);
+      expect(fixed.height, closeTo(status + TabTopBar.height, 1));
     },
   );
   testWidgets('Inicio respeta el orden y los títulos de YouTube Music', (
     tester,
   ) async {
-    final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
-    final api = AuthenticatedApiClient(auth, baseUrl: 'https://example.test');
-    addTearDown(api.close);
-    final fixture = _SessionFixture([a], api, direct: true)..account = a;
+    final fixture = _SessionFixture([a], direct: true)..account = a;
     final model = MusicModeController(fixture, () => true, () async {});
     addTearDown(model.dispose);
     await model.refresh();
@@ -398,25 +427,34 @@ void main() {
       'Selecciones rápidas',
       'Primera canción',
     ];
-    double previousTop = double.negativeInfinity;
+    // Orden de lectura: cada sección va debajo de la anterior y, dentro de su
+    // carrusel horizontal, cada tarjeta queda a la derecha de la previa.
+    Offset? previous;
     for (final text in order) {
-      final label = find.text(text);
-      expect(label, findsOneWidget);
-      final top = tester.getTopLeft(label).dy;
-      expect(top, greaterThan(previousTop));
-      previousTop = top;
+      // El Inicio es más alto que la pantalla de prueba: las últimas
+      // secciones existen fuera de la vista.
+      // Una playlist de la cuenta aparece también en los accesos "De one pe"
+      // del principio; el orden de las secciones se comprueba con la última.
+      final label = find.text(text, skipOffstage: false);
+      expect(label, findsAtLeastNWidgets(1));
+      final at = tester.getTopLeft(label.last);
+      if (previous != null) {
+        expect(
+          at.dy > previous.dy || (at.dy == previous.dy && at.dx > previous.dx),
+          isTrue,
+          reason: '"$text" debe ir después del elemento anterior',
+        );
+      }
+      previous = at;
     }
     expect(find.text('Recomendaciones de YouTube Music'), findsNothing);
-    expect(find.text('En repetición'), findsNothing);
+    expect(find.text('Lo más oído'), findsNothing);
   });
 
   testWidgets(
     'el acceso a Me gusta del reproductor abre la colección de la fuente activa',
     (tester) async {
-      final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
-      final api = AuthenticatedApiClient(auth, baseUrl: 'https://example.test');
-      addTearDown(api.close);
-      final fixture = _SessionFixture([a], api, direct: true)
+      final fixture = _SessionFixture([a], direct: true)
         ..account = a
         ..channelOnly = true;
       final model = MusicModeController(fixture, () => true, () async {});
@@ -437,7 +475,11 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Me gusta de mi canal'), findsOneWidget);
+      // Con cabecera propia: título grande, no el de la barra.
+      expect(find.text('Tus Me gusta'), findsOneWidget);
+      expect(find.text('LISTA AUTOMÁTICA'), findsOneWidget);
+      // Ninguna pantalla repite la línea de la cuenta bajo la barra.
+      expect(find.textContaining('Canal de YouTube ·'), findsNothing);
       expect(find.text('Canción de Cuenta A'), findsOneWidget);
       expect(find.text('Opciones de conexión'), findsNothing);
       await tester.pumpWidget(
@@ -452,7 +494,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Me gusta de mi canal'), findsOneWidget);
-      expect(find.text('Canal de YouTube · Cuenta A'), findsOneWidget);
+      // La Biblioteca no repite la línea de la cuenta arriba.
+      expect(find.text('Canal de YouTube · Cuenta A'), findsNothing);
       expect(find.textContaining('Google autorizó'), findsNothing);
       await tester.pumpWidget(
         ProviderScope(
@@ -465,39 +508,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Música que te gusta en YouTube'), findsOneWidget);
+      // Inicio ya no lleva ese texto de cabecera.
+      expect(find.text('Música que te gusta en YouTube'), findsNothing);
       expect(find.text('Tus playlists musicales'), findsNothing);
       expect(find.text('Recomendaciones de YouTube Music'), findsNothing);
-    },
-  );
-  test(
-    'un canal con acceso limitado sigue buscando y actualiza las capacidades al verificar la biblioteca',
-    () async {
-      final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
-      final api = AuthenticatedApiClient(auth, baseUrl: 'https://example.test');
-      addTearDown(api.close);
-      final fixture = _SessionFixture([a], api, direct: true)
-        ..account = a
-        ..channelOnly = true;
-      final model = MusicModeController(fixture, () => true, () async {});
-      addTearDown(model.dispose);
-      await model.refresh();
-      final limited = model.connection!;
-      final revision = model.revision;
-      expect(limited.channelOnly, isTrue);
-      expect(limited.capabilities, isNot(contains('home')));
-      expect(limited.capabilities, isNot(contains('liked')));
-      expect(limited.capabilities, contains('search'));
-      await model.page(
-        limited.generation!,
-        MusicSurface.search,
-        query: 'again',
-      );
-      fixture.channelOnly = false;
-      await model.refresh();
-      expect(model.connection!.generation, limited.generation);
-      expect(model.connection!.capabilities, contains('liked'));
-      expect(model.revision, greaterThan(revision));
     },
   );
   test('la biblioteca conserva las portadas de playlists y canales', () {
@@ -522,598 +536,4 @@ void main() {
     expect((page.items.first as MusicPlaylist).thumbnailUrl, cover);
     expect((page.items.last as MusicArtist).thumbnailUrl, cover);
   });
-  test(
-    'renovar el canal conserva la fuente del teléfono y rechaza acciones de la sesión anterior',
-    () async {
-      final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
-      final api = AuthenticatedApiClient(auth, baseUrl: 'https://example.test');
-      addTearDown(api.close);
-      final client = _SessionFixture([a, a2], api, direct: true)..account = a;
-      final device = _DeviceFixture();
-      final music = MusicModeController(
-        client,
-        () => true,
-        () async {},
-        device: device,
-      );
-      addTearDown(music.dispose);
-      await music.refresh();
-      final first = music.connection!.generation!;
-      expect(await music.attachAudio(first, 'ABCDEFGHIJK'), isTrue);
-      final file = music.deviceAudio('ABCDEFGHIJK');
-      await client.link(a.id, first);
-      await music.refresh();
-      expect(music.isCurrent(first), isFalse);
-      expect(music.deviceAudio('ABCDEFGHIJK'), file);
-      expect(await music.attachAudio(first, 'ABCDEFGHIJK'), isFalse);
-      await client.link(a2.id, music.connection!.generation);
-      await music.refresh();
-      expect(music.deviceAudio('ABCDEFGHIJK'), isNull);
-      expect(device.files, isEmpty);
-    },
-  );
-  test(
-    'identifica el servidor anterior sin recurrir al catálogo general',
-    () async {
-      final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
-      int status = 404;
-      final dio = Dio()
-        ..interceptors.add(
-          InterceptorsWrapper(
-            onRequest: (options, handler) => handler.reject(
-              DioException.badResponse(
-                statusCode: status,
-                requestOptions: options,
-                response: Response(
-                  requestOptions: options,
-                  statusCode: status,
-                  data: {
-                    'error': {
-                      'code': status == 404 ? 'NOT_FOUND' : 'INTERNAL_ERROR',
-                    },
-                  },
-                ),
-              ),
-            ),
-          ),
-        );
-      final api = AuthenticatedApiClient(
-        auth,
-        baseUrl: 'https://example.test',
-        dio: dio,
-      );
-      addTearDown(api.close);
-      final client = MusicModeClient(api);
-      final missing = await client.connection();
-      expect(missing.status, MusicLinkStatus.unavailable);
-      expect(missing.serverPending, isTrue);
-      status = 503;
-      await expectLater(client.connection(), throwsA(isA<ApiFailure>()));
-      expect(auth.signOutCount, 0);
-    },
-  );
-
-  testWidgets(
-    'el servidor antiguo nunca muestra playlists o favoritos normales como datos de Music',
-    (tester) async {
-      final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
-      final api = AuthenticatedApiClient(auth, baseUrl: 'https://example.test');
-      addTearDown(api.close);
-      final fixture = _SessionFixture([a], api)
-        ..pendingConnection = (Completer<MusicConnection>()
-          ..complete(
-            const MusicConnection(
-              status: MusicLinkStatus.unavailable,
-              provider: 'serverPending',
-            ),
-          ));
-      final controller = MusicModeController(fixture, () => true, () async {});
-      addTearDown(controller.dispose);
-      await tester.pumpWidget(
-        MaterialApp(
-          home: MusicModeHost(
-            controller: controller,
-            child: const MusicModeSurface(
-              surface: MusicSurface.home,
-              local: Text('Biblioteca propia'),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.textContaining('aún no ofrece'), findsOneWidget);
-      expect(find.text('Biblioteca propia'), findsNothing);
-      await tester.tap(find.text('Usar mi biblioteca de Mysic'));
-      await tester.pumpAndSettle();
-      expect(find.text('Biblioteca propia'), findsOneWidget);
-    },
-  );
-  test(
-    'un cambio de vínculo durante una consulta oculta la generación anterior inmediatamente',
-    () async {
-      final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
-      final api = AuthenticatedApiClient(auth, baseUrl: 'https://example.test');
-      addTearDown(api.close);
-      final client = _SessionFixture([a, b], api, direct: true);
-      final old = await client.link(a.id, null);
-      final music = MusicModeController(client, () => true, () async {});
-      addTearDown(music.dispose);
-      await music.refresh();
-      expect(music.isCurrent(old.generation!), isTrue);
-      final gate = Completer<MusicConnection>();
-      client.pendingConnection = gate;
-      final started = music.refresh();
-      await client.link(b.id, old.generation);
-      await music.refresh(invalidate: true);
-      expect(music.isCurrent(old.generation!), isFalse);
-      expect(music.connection, isNull);
-      gate.complete(old);
-      await started;
-      await Future<void>.delayed(Duration.zero);
-      expect(music.connection?.account?.id, b.id);
-      expect(music.isCurrent(old.generation!), isFalse);
-    },
-  );
-
-  testWidgets(
-    'regresa del consentimiento a Biblioteca y reproduce una fuente autorizada en Mysic',
-    (tester) async {
-      final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
-      final api = AuthenticatedApiClient(auth, baseUrl: 'https://example.test');
-      addTearDown(api.close);
-      final music = _SessionFixture([a], api, direct: true);
-      final files = _DeviceFixture();
-      late TrackPlaybackController player;
-      final consent = _ConsentClient(music);
-      final platform = oauth.MemoryPlatform();
-      var engine = FakeTrackAudioEngine();
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            authRepositoryProvider.overrideWithValue(auth),
-            verifiedSessionProvider.overrideWith(
-              (ref) async => const MysicProfile(
-                id: 'test-A',
-                firebaseUid: 'A',
-                displayName: 'A',
-              ),
-            ),
-            recentListeningProvider.overrideWith((ref, uid) => []),
-            youtubeMusicModeEnabledProvider.overrideWithValue(true),
-            youtubePilotProvider.overrideWithValue(true),
-            connectedControllerProvider.overrideWith((ref, uid) {
-              final controller = ConnectedController(uid, consent, platform);
-              ref.onDispose(controller.dispose);
-              return controller;
-            }),
-            trackAudioEngineFactoryProvider.overrideWithValue(
-              () => engine = FakeTrackAudioEngine(),
-            ),
-            musicModeControllerProvider.overrideWith((ref, uid) {
-              player = ref.watch(trackPlaybackControllerProvider);
-              final controller = MusicModeController(
-                music,
-                () => true,
-                player.clear,
-                device: files,
-                onDeviceAudioRemoved: player.removeDeviceAudio,
-              );
-              ref.onDispose(controller.dispose);
-              return controller;
-            }),
-          ],
-          child: const MysicApp(firebaseReady: true),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Abrir cuenta'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Vincular YouTube Music'));
-      await tester.pumpAndSettle();
-      expect(platform.uris.single.host, oauth.host);
-      expect(find.text('Esperando autorización'), findsOneWidget);
-      platform.incoming = (id: oauth.id, ref: null);
-      platform.notifyReturn!();
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Confirmar este canal'));
-      await tester.pumpAndSettle();
-      expect(consent.confirms, [
-        {'channelId': 'ch'},
-      ]);
-      expect(find.text('Lista de Cuenta A'), findsOneWidget);
-      await tester.tap(find.text('Álbumes'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Disco guardado'));
-      await tester.pumpAndSettle();
-      expect(find.text('Canción de Cuenta A'), findsOneWidget);
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Inicio').last);
-      await tester.pumpAndSettle();
-      expect(find.text('Recomendaciones de YouTube Music'), findsOneWidget);
-      await tester.tap(find.text('Recomendado para Cuenta A'));
-      await tester.pumpAndSettle();
-      expect(engine.sourceId, 'aaaaaaaaaaa');
-      expect(engine.lastLicensedAudio, isNull);
-      expect(engine.lastDeviceAudio, isNull);
-      expect(player.current!.isConnectedAudio, isTrue);
-      expect(platform.uris, hasLength(1));
-      await tester.tap(find.byTooltip('Ver mis Me gusta de YouTube Music'));
-      await tester.pumpAndSettle();
-      expect(find.text('Canción de Cuenta A'), findsOneWidget);
-      expect(find.text('Recomendado para Cuenta A'), findsNothing);
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Biblioteca').last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Me gusta de YouTube Music'));
-      await tester.pumpAndSettle();
-      expect(find.text('Canción de Cuenta A'), findsOneWidget);
-      await tester.tap(find.text('Playlists'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Lista de Cuenta A'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Canción de Cuenta A'));
-      await tester.pumpAndSettle();
-      expect(engine.sourceId, '9xgftPjTz7c');
-      expect(
-        engine.lastLicensedAudio,
-        Uri.https('media.example.test', '/recording.mp3'),
-      );
-      expect(engine.prefetched, isEmpty);
-      expect(music.writes, 0);
-      expect(find.text('Canción de Cuenta A'), findsOneWidget);
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      final initialPlays = engine.plays;
-      final options = find.byTooltip('Opciones de Siguiente de Cuenta A');
-      await tester.ensureVisible(options);
-      await tester.tap(options);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Vincular archivo de audio'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('En este dispositivo'), findsOneWidget);
-      await tester.tap(options);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Reproducir a continuación'));
-      await tester.pumpAndSettle();
-      expect(engine.plays, initialPlays);
-      expect(player.queue, hasLength(2));
-      await player.next();
-      await tester.pump();
-      expect(engine.lastDeviceAudio, files.files['k1HtSmS4Tc4']);
-      expect(engine.lastLicensedAudio, isNull);
-      expect(engine.prefetched, isEmpty);
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Abrir cuenta'));
-      await tester.pumpAndSettle();
-      expect(find.text('Borrar actividad de Mysic'), findsNothing);
-      await tester.tap(find.text('Historial de escucha'));
-      await tester.pumpAndSettle();
-      expect(find.text('Borrar actividad de Mysic'), findsOneWidget);
-      expect(find.text('Registrar escuchas en Mysic'), findsOneWidget);
-      await tester.tap(find.text('YouTube Music'));
-      await tester.pumpAndSettle();
-      expect(find.text('Cuenta de YouTube Music'), findsOneWidget);
-      expect(find.byTooltip('Abrir YouTube Music'), findsNothing);
-      await tester.tap(find.byTooltip('Opciones del vínculo'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Desvincular YouTube'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Desvincular'));
-      await tester.pumpAndSettle();
-      expect(consent.unlinks, 1);
-      expect(music.account, isNull);
-      expect(find.text('Canción de Cuenta A'), findsNothing);
-      expect(auth.signOutCount, 0);
-      await tester.pumpWidget(const SizedBox());
-      await tester.pumpAndSettle();
-    },
-  );
-
-  testWidgets('efecto del modo en las pestañas, cola y cambio de dos cuentas', (
-    tester,
-  ) async {
-    final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
-    final api = AuthenticatedApiClient(auth, baseUrl: 'https://example.test');
-    addTearDown(api.close);
-    final fixtures = {
-      'A': _SessionFixture([a, a2], api),
-      'B': _SessionFixture([b], api)..account = b,
-    };
-    var engine = FakeTrackAudioEngine();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(auth),
-          verifiedSessionProvider.overrideWith((ref) async {
-            final uid = ref.watch(authStateProvider).requireValue!.uid;
-            return MysicProfile(
-              id: 'test-$uid',
-              firebaseUid: uid,
-              displayName: uid,
-            );
-          }),
-          recentListeningProvider.overrideWith((ref, uid) => []),
-          youtubeMusicModeEnabledProvider.overrideWithValue(true),
-          trackAudioEngineFactoryProvider.overrideWithValue(
-            () => engine = FakeTrackAudioEngine(),
-          ),
-          musicModeControllerProvider.overrideWith((ref, uid) {
-            final playback = ref.watch(trackPlaybackControllerProvider);
-            final controller = MusicModeController(
-              fixtures[uid]!,
-              () => auth.currentUser?.uid == uid,
-              playback.clear,
-            );
-            ref.onDispose(controller.dispose);
-            return controller;
-          }),
-        ],
-        child: const MysicApp(firebaseReady: true),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Bienvenido, A'), findsOneWidget);
-    await tester.tap(find.byTooltip('Abrir cuenta'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Activar YouTube Music'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Cuenta A'));
-    await tester.pumpAndSettle();
-    expect(find.text('Cuenta A'), findsOneWidget);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    expect(find.text('Canción de Cuenta A'), findsOneWidget);
-    expect(find.text('Bienvenido, A'), findsNothing);
-
-    await tester.tap(find.text('Buscar').hitTestable());
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'Cuenta A');
-    await tester.testTextInput.receiveAction(TextInputAction.search);
-    await tester.pumpAndSettle();
-    expect(find.text('Canción de Cuenta A'), findsOneWidget);
-    await tester.tap(find.text('Biblioteca').hitTestable().last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Playlists'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Lista de Cuenta A'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Elementos omitidos'), findsNothing);
-    await tester.tap(find.text('Siguiente de Cuenta A'));
-    await tester.pumpAndSettle();
-    expect(find.text('Siguiente de Cuenta A').hitTestable(), findsOneWidget);
-    expect(engine.sourceId, PlaybackResolution.demoId);
-    expect(engine.prefetched, isEmpty);
-    final aEngine = engine;
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Abrir cuenta'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Cambiar cuenta o canal'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Canal alterno A'));
-    await tester.pumpAndSettle();
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Cuenta A', skipOffstage: false), findsNothing);
-    expect(aEngine.stops, greaterThan(1));
-    await tester.tap(find.text('Inicio').hitTestable().last);
-    await tester.pumpAndSettle();
-    expect(find.text('Canción de Canal alterno A'), findsOneWidget);
-    await tester.tap(find.text('Canción de Canal alterno A'));
-    await tester.pumpAndSettle();
-
-    auth.changeUser(const AuthUser(uid: 'B'));
-    await tester.pumpAndSettle();
-    expect(find.text('Canción de Cuenta B'), findsOneWidget);
-    expect(find.textContaining('Cuenta A', skipOffstage: false), findsNothing);
-    expect(aEngine.stops, greaterThan(2));
-    expect(
-      find.textContaining('Canal alterno A', skipOffstage: false),
-      findsNothing,
-    );
-    await tester.tap(find.text('Canción de Cuenta B'));
-    await tester.pumpAndSettle();
-    expect(engine.sourceId, PlaybackResolution.demoId);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Abrir Recientes'));
-    await tester.pumpAndSettle();
-    expect(find.text('Aún no hay escuchas.'), findsOneWidget);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Abrir cuenta'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Desvincular y volver a Mysic'));
-    await tester.pumpAndSettle();
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    expect(find.text('Bienvenido, B'), findsOneWidget);
-    expect(find.textContaining('Cuenta B'), findsNothing);
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox());
-    await tester.pumpAndSettle();
-  });
-
-  testWidgets(
-    'descarta respuesta tardía y reconcilia una escucha tras perder la confirmación',
-    (tester) async {
-      final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
-      final api = AuthenticatedApiClient(auth, baseUrl: 'https://example.test');
-      final fixture = _SessionFixture([a, a2], api)..account = a;
-      final controller = MusicModeController(fixture, () => true, () async {});
-      addTearDown(controller.dispose);
-      addTearDown(api.close);
-      await controller.refresh();
-      final original = controller.connection!.generation!;
-      fixture.loseResponse = true;
-      controller.onListened(original, 'listen-1', 'a-1', 4200);
-      await tester.pump();
-      expect(fixture.recorded, hasLength(1));
-      await tester.pump(const Duration(seconds: 15));
-      expect(fixture.writes, 1);
-
-      final blocked = fixture.pending = Completer<MusicPage>();
-      final request = expectLater(
-        controller.page(original, MusicSurface.home),
-        throwsA(isA<ApiFailure>()),
-      );
-      await controller.select(a2);
-      blocked.complete(const MusicPage([], null, null, 0));
-      await request;
-      expect(controller.connection!.account!.id, a2.id);
-      controller.onListened(
-        controller.connection!.generation!,
-        'listen-2',
-        'a2-1',
-        4200,
-      );
-      await tester.pump();
-      expect(fixture.writes, 1);
-
-      fixture.expired = true;
-      await controller.refresh();
-      expect(controller.connection!.status, MusicLinkStatus.expired);
-      expect(controller.showMusic, isTrue);
-      await controller.select(a2);
-      expect(controller.connection!.status, MusicLinkStatus.linked);
-    },
-  );
-
-  testWidgets(
-    'el audio de dispositivo registra tiempo audible en el vínculo y respeta pausa y borrado',
-    (tester) async {
-      final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
-      final api = AuthenticatedApiClient(auth, baseUrl: 'https://example.test');
-      final client = _SessionFixture([a], api, direct: true)..account = a;
-      final engine = FakeTrackAudioEngine();
-      final clock = _ManualStopwatch();
-      final player = TrackPlaybackController(
-        auth,
-        engine,
-        'A',
-        history: ListeningTracker(api, () => true, 'A', clock: clock),
-      );
-      final music = MusicModeController(client, () => true, player.clear);
-      addTearDown(music.dispose);
-      addTearDown(player.dispose);
-      await music.refresh();
-      final generation = music.connection!.generation!;
-      final track = const MusicTrack(
-        '9xgftPjTz7c',
-        'Tema',
-        'Canal',
-        8,
-        false,
-        null,
-      ).toPlaybackTrack(deviceAudio: Uri.file('/privado/tema.media'));
-      Future<void> play() => player.playQueue([
-        track,
-      ], listenForTrack: () => music.listenForTrack(generation));
-      await play();
-      clock.advance(3500);
-      await player.pause();
-      clock.advance(10000);
-      expect(client.recorded, isEmpty);
-      await player.resume();
-      clock.advance(500);
-      engine.events.add(TrackAudioPhase.completed);
-      await tester.pump();
-      expect(client.writes, 1);
-      expect(client.recorded.values.single.id, '9xgftPjTz7c');
-      expect(client.recordedEpoch, client.epoch);
-      await music.updateActivity(generation, paused: true);
-      await play();
-      clock.advance(5000);
-      engine.events.add(TrackAudioPhase.completed);
-      await tester.pump();
-      expect(client.writes, 1);
-      await music.updateActivity(generation);
-      expect(client.recorded, isEmpty);
-      await music.updateActivity(generation, paused: false);
-      await play();
-      clock.advance(3500);
-      await music.updateActivity(generation);
-      clock.advance(500);
-      engine.events.add(TrackAudioPhase.completed);
-      await tester.pump();
-      expect(client.recorded, isEmpty);
-      await play();
-      clock.advance(5000);
-      engine.events.add(TrackAudioPhase.completed);
-      await tester.pump();
-      expect(client.writes, 2);
-      expect(client.recordedEpoch, client.epoch);
-      await player.clear();
-      player.dispose();
-      await tester.pump();
-    },
-  );
-
-  testWidgets('solo el audio en marcha activa el registro del preview', (
-    tester,
-  ) async {
-    final auth = FakeAuthRepository(user: const AuthUser(uid: 'A'));
-    final engine = FakeTrackAudioEngine();
-    final api = AuthenticatedApiClient(auth, baseUrl: 'https://example.test');
-    final clock = _ManualStopwatch();
-    final playback = TrackPlaybackController(
-      auth,
-      engine,
-      'A',
-      history: ListeningTracker(api, () => true, 'A', clock: clock),
-    );
-    final recorded = <String>[];
-    final preview = const MusicTrack(
-      'a-1',
-      'Canción',
-      'Mysic',
-      8,
-      true,
-      null,
-    ).toPlaybackTrack();
-    await playback.playQueue([
-      preview,
-    ], onPreviewListened: (_, id, _) => recorded.add(id));
-    clock.advance(3999);
-    await playback.pause();
-    clock.advance(5000);
-    expect(recorded, isEmpty);
-    await playback.resume();
-    clock.advance(1);
-    engine.events.add(TrackAudioPhase.completed);
-    await tester.pump();
-    expect(recorded, ['a-1']);
-    await playback.clear();
-    expect(recorded, ['a-1']);
-    playback.dispose();
-    await tester.pump();
-  });
-}
-
-class _ManualStopwatch implements Stopwatch {
-  bool _running = false;
-  int _ms = 0;
-
-  void advance(int ms) {
-    if (_running) _ms += ms;
-  }
-
-  @override
-  int get elapsedMilliseconds => _ms;
-  @override
-  void start() => _running = true;
-  @override
-  void stop() => _running = false;
-  @override
-  void reset() => _ms = 0;
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

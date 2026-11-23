@@ -1,4 +1,7 @@
 
+
+> **Nota de vigencia (22 nov 2026).** Para la app móvil este documento describe el diseño anterior (Firebase, Render, Supabase/PostgreSQL y vinculación con Mysic de escritorio). La arquitectura actual está en [21-arquitectura-movil-ytm.md](21-arquitectura-movil-ytm.md).
+
 # Mysic — Diseño de base de datos
 
 **Motor:** PostgreSQL  

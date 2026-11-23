@@ -109,12 +109,20 @@ export class YoutubeGrants {
     return 'revoked';
   }
 
-  async access(userId: string, force = false, expectedGeneration?: string) {
-    const row = await getDatabase().externalMusicConnection.findUnique({
-      where: { userId },
-    });
+  async access(
+    userId: string,
+    force = false,
+    expectedGeneration?: string,
+    knownConnection?: ExternalMusicConnection,
+  ) {
+    const row =
+      knownConnection ??
+      (await getDatabase().externalMusicConnection.findUnique({
+        where: { userId },
+      }));
     if (!row || row.status !== 'linked')
       throw new LinkError(409, 'REAUTHORIZE_YOUTUBE');
+    if (row.userId !== userId) throw new LinkError(409, 'YOUTUBE_LINK_CHANGED');
     if (expectedGeneration && row.generation !== expectedGeneration)
       throw new LinkError(409, 'YOUTUBE_LINK_CHANGED');
     const cached = this.cache.get(row.generation);

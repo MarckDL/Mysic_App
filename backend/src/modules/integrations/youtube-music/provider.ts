@@ -37,6 +37,8 @@ export interface MusicTrack {
   entryId?: string;
   playCount?: number;
   artistId?: string;
+  albumId?: string;
+  albumName?: string;
 }
 
 export interface MusicPlaylist {

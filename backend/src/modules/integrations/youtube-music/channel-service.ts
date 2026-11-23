@@ -128,7 +128,11 @@ export class ChannelMusicService {
   }
 
   async connection(uid: string, _recheckMusic = false) {
-    const current = await this.link.connection(await this.link.owner(uid));
+    return this.connectionFor(await this.link.owner(uid));
+  }
+
+  protected async connectionFor(userId: string) {
+    const current = await this.link.connection(userId);
     const linked = current.status === 'linked';
     const expired = current.status === 'reauthorization_required';
     return {

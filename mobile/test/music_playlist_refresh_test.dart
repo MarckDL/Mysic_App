@@ -1,20 +1,21 @@
+import 'package:mysic/features/search/presentation/music_tiles.dart';
 import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mysic/core/network/authenticated_api_client.dart';
 import 'package:mysic/features/connected_library/application/music_mode_controller.dart';
 import 'package:mysic/features/connected_library/data/music_mode_client.dart';
 import 'package:mysic/features/connected_library/domain/music_mode.dart';
+import 'package:mysic/features/connected_library/presentation/library_screen.dart';
 import 'package:mysic/features/connected_library/presentation/music_mode_host.dart';
 import 'package:mysic/features/connected_library/presentation/music_mode_screen.dart';
 
-import 'support/fake_auth_repository.dart';
+import 'support/ytm_test_client.dart';
 
 class _Playlists extends MusicModeClient {
-  _Playlists(super.api);
+  _Playlists() : super(ytm: ytmTestClient(), ytmAccount: () => null);
 
   final requests = <String?>[];
   String latest = 'Mi lista inicial';
@@ -39,6 +40,7 @@ class _Playlists extends MusicModeClient {
     String? query,
     String? cursor,
     CancelToken? cancelToken,
+    bool remember = false,
   }) async {
     if (surface != MusicSurface.playlists) {
       return const MusicPage([], null, null, 0);
@@ -58,19 +60,15 @@ class _Playlists extends MusicModeClient {
 }
 
 void main() {
+  setUpAll(() => NowPlayingBars.animationsEnabled = false);
   testWidgets(
     'volver recarga playlists nuevas y actualizar conserva la selección y las filas mientras carga',
     (tester) async {
-      final api = AuthenticatedApiClient(
-        FakeAuthRepository(),
-        baseUrl: 'https://example.test',
-      );
-      final catalog = _Playlists(api);
+      final catalog = _Playlists();
       var playbackClears = 0;
       final controller = MusicModeController(catalog, () => true, () async {
         playbackClears++;
       });
-      addTearDown(api.close);
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         ProviderScope(
@@ -83,7 +81,8 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Playlists'));
+      // El chip, no el título de la sección del mismo nombre.
+      await tester.tap(find.widgetWithText(LibraryChip, 'Playlists'));
       await tester.pumpAndSettle();
       expect(catalog.requests, [null, 'next']);
       expect(find.text('Mi lista inicial'), findsOneWidget);

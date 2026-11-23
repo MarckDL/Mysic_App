@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:math' as math;
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -8,18 +10,23 @@ import '../domain/playback_resolution.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
 
+import '../../../core/network/offline_mode.dart';
+import '../../downloads/data/download_store.dart';
 import '../domain/playback_source_resolver.dart';
 import '../domain/track_audio_engine.dart';
 import 'account_audio_source.dart';
+import 'audio_disk_cache.dart';
 
-class JustAudioTrackEngine implements TrackAudioEngine {
-  JustAudioTrackEngine(
-    String baseUrl, {
+class JustAudioTrackEngine implements TrackAudioEngine, TrackAudioTuning {
+  JustAudioTrackEngine({
     PlaybackSourceResolver? sourceResolver,
     AudioPlayer? player,
-  }) : _sourceResolver =
-           sourceResolver ?? createPlaybackSourceResolver(baseUrl),
+    this.keepAudio,
+  }) : _sourceResolver = sourceResolver ?? createPlaybackSourceResolver(),
        _instance = player;
+
+  /// Si el usuario quiere guardar en disco el audio que escucha.
+  final bool Function()? keepAudio;
   final PlaybackSourceResolver _sourceResolver;
   Future<void>? _configuration;
   Future<void>? _resolverWarmUp;
@@ -128,7 +135,8 @@ class JustAudioTrackEngine implements TrackAudioEngine {
     if (_disposed) return;
     _player;
     await (_configuration ??= _configure());
-    if (_disposed) return;
+    // El calentado del resolvedor abre conexiones: no con «solo descargadas».
+    if (_disposed || OfflineMode.instance.active) return;
     // A second selection must reach the native resolver even while it is busy.
     final warming = _resolverWarmUp ??= _sourceResolver.warmUp();
     try {
@@ -153,6 +161,7 @@ class JustAudioTrackEngine implements TrackAudioEngine {
     Uri? deviceAudio,
     TrackAudioReader? readAudio,
     bool refresh = false,
+    int? durationSeconds,
   }) async {
     final demo = sourceId == PlaybackResolution.demoId;
     if ((!demo && !RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(sourceId)) ||
@@ -162,17 +171,27 @@ class JustAudioTrackEngine implements TrackAudioEngine {
     cancelLoad();
     final generation = _loadGeneration;
     try {
-      if (demo ||
+      final ownSource =
+          demo ||
           licensedAudio != null ||
           deviceAudio != null ||
-          readAudio != null) {
+          readAudio != null;
+      // Una canción descargada suena del archivo, sin resolver ni usar datos.
+      final downloaded = ownSource
+          ? null
+          : await DownloadStore.instance.file(sourceId);
+      if (ownSource || downloaded != null) {
         await (_configuration ??= _configure());
       } else {
+        // Con «solo canciones descargadas» no se abre ninguna conexión.
+        if (OfflineMode.instance.active) throw const PlaybackSourceFailure();
         await warmUp();
       }
       if (!_currentLoad(generation)) return;
       final resolutionTimer = Stopwatch()..start();
       final AudioSource audio;
+      Uri? networkUri;
+      Map<String, String> networkHeaders = const {};
       if (deviceAudio != null) {
         if (deviceAudio.scheme != 'file' ||
             deviceAudio.host.isNotEmpty ||
@@ -195,39 +214,124 @@ class JustAudioTrackEngine implements TrackAudioEngine {
         audio = AudioSource.uri(licensedAudio);
       } else if (demo) {
         audio = AudioSource.asset(PlaybackResolution.demoAsset);
+      } else if (downloaded != null) {
+        audio = AudioSource.file(downloaded.path);
       } else {
-        final source = await _sourceResolver.resolve(
-          sourceId,
-          token,
-          refresh: refresh,
-        );
-        audio = AudioSource.uri(source.uri, headers: source.headers);
+        // Los vídeos largos no se guardan: se bajarían enteros en segundo
+        // plano aunque solo se escuche un rato.
+        final keep =
+            (keepAudio?.call() ?? false) &&
+            AudioDiskCache.worthKeeping(durationSeconds);
+        // Tras un fallo (refresh) no se confía en lo guardado.
+        if (keep && refresh) await AudioDiskCache.instance.remove(sourceId);
+        final stored = keep
+            ? await AudioDiskCache.instance.complete(sourceId)
+            : null;
+        if (stored != null) {
+          // Entera en disco: suena sin resolver nada ni tocar la red.
+          audio = AudioSource.file(stored.path);
+        } else {
+          final source = await _sourceResolver.resolve(
+            sourceId,
+            token,
+            refresh: refresh,
+          );
+          networkUri = source.uri;
+          networkHeaders = source.headers;
+          final target = keep
+              ? await AudioDiskCache.instance.target(sourceId)
+              : null;
+          if (target == null) {
+            audio = AudioSource.uri(source.uri, headers: source.headers);
+          } else {
+            // Se reproduce mientras se guarda; el archivo solo queda con
+            // su nombre definitivo cuando se descargó entero.
+            // La API está marcada como experimental en just_audio; por eso
+            // esta opción va apagada por defecto.
+            // ignore: experimental_member_use
+            audio = LockCachingAudioSource(
+              source.uri,
+              headers: source.headers,
+              cacheFile: target,
+            );
+            unawaited(AudioDiskCache.instance.trim());
+          }
+        }
       }
       if (!_currentLoad(generation)) return;
       debugPrint(
         'audio_source_resolution durationMs=${resolutionTimer.elapsedMilliseconds}',
       );
       final preparationTimer = Stopwatch()..start();
-      await _player
-          .setAudioSource(audio, preload: true)
-          .timeout(const Duration(seconds: 40));
+      // Los estados por los que pasa el reproductor mientras se prepara y a los
+      // cuántos ms: separa la espera de red de la preparación de ExoPlayer.
+      final marks = <String>[];
+      final states = _player.processingStateStream.listen(
+        (state) =>
+            marks.add('${state.name}@${preparationTimer.elapsedMilliseconds}'),
+      );
+      try {
+        await _player
+            .setAudioSource(audio, preload: true)
+            .timeout(const Duration(seconds: 40));
+      } finally {
+        await states.cancel();
+        debugPrint('audio_player_timeline ${marks.join(' ')}');
+      }
       if (!_currentLoad(generation)) return;
       _firstProgressArmed = true;
       debugPrint(
         'audio_player_preparation durationMs=${preparationTimer.elapsedMilliseconds}',
       );
+      final probeUri = networkUri;
+      if (_audioProbe && probeUri != null) {
+        unawaited(_probe(probeUri, networkHeaders));
+      }
     } on TimeoutException {
       if (_currentLoad(generation)) throw const PlaybackSourceFailure();
     } on PlayerException {
       if (_currentLoad(generation)) throw const PlaybackSourceFailure();
     } on PlatformException catch (error) {
       if (!_currentLoad(generation)) return;
+      if (error.code == 'RESOLUTION_BLOCKED') {
+        throw const PlaybackSourceFailure(blocked: true);
+      }
       if (error.code == 'RESOLUTION_FAILED') {
         throw const PlaybackSourceFailure();
       }
       rethrow;
     } catch (_) {
       if (_currentLoad(generation)) rethrow;
+    }
+  }
+
+  /// Solo en compilaciones de medición (--dart-define=AUDIO_PROBE=true).
+  static const _audioProbe = bool.fromEnvironment('AUDIO_PROBE');
+
+  /// Una petición aparte a la misma URL, con conexión nueva: cuánto cuesta
+  /// conectar (TCP + TLS) y cuánto tarda el primer byte. Es lo que el primer
+  /// tramo en memoria del escritorio se ahorra. Solo mide; no cambia nada.
+  Future<void> _probe(Uri uri, Map<String, String> headers) async {
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+    try {
+      final timer = Stopwatch()..start();
+      final request = await client.getUrl(uri);
+      final connectMs = timer.elapsedMilliseconds;
+      headers.forEach(request.headers.set);
+      request.headers.set(HttpHeaders.rangeHeader, 'bytes=0-1');
+      final response = await request.close().timeout(
+        const Duration(seconds: 8),
+      );
+      final firstByteMs = timer.elapsedMilliseconds - connectMs;
+      await response.drain<void>();
+      debugPrint(
+        'audio_probe connectMs=$connectMs firstByteMs=$firstByteMs '
+        'status=${response.statusCode} host=${uri.host.split('.').first}',
+      );
+    } on Object catch (error) {
+      debugPrint('audio_probe failed ${error.runtimeType}');
+    } finally {
+      client.close(force: true);
     }
   }
 
@@ -240,6 +344,7 @@ class JustAudioTrackEngine implements TrackAudioEngine {
   @override
   Future<void> prefetch(String sourceId, String token) async {
     if (_disposed ||
+        OfflineMode.instance.active ||
         !RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(sourceId) ||
         token.isEmpty) {
       return;
@@ -251,6 +356,20 @@ class JustAudioTrackEngine implements TrackAudioEngine {
   @override
   void cancelPrefetch() {
     _sourceResolver.cancelPrefetch();
+  }
+
+  @override
+  void touch(String sourceId) {
+    if (!_disposed && !OfflineMode.instance.active) {
+      _sourceResolver.touch(sourceId);
+    }
+  }
+
+  @override
+  void warm(List<String> sourceIds) {
+    if (!_disposed && !OfflineMode.instance.active) {
+      _sourceResolver.warm(sourceIds);
+    }
   }
 
   @override
@@ -275,6 +394,13 @@ class JustAudioTrackEngine implements TrackAudioEngine {
         if (_currentLoad(generation)) _emit(TrackAudioPhase.error);
       }
     }
+  }
+
+  @override
+  Future<void> setTuning({required double speed, required int pitch}) async {
+    await _player.setSpeed(speed);
+    // Un semitono es un factor de 2^(1/12).
+    await _player.setPitch(math.pow(2, pitch / 12).toDouble());
   }
 
   @override

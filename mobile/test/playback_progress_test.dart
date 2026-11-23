@@ -8,6 +8,7 @@ import 'support/fake_auth_repository.dart';
 import 'support/fake_track_audio_engine.dart';
 
 void main() {
+  setUpAll(() => PlaybackProgress.animationsEnabled = false);
   testWidgets('la barra permite adelantar y retroceder con un gesto', (
     tester,
   ) async {

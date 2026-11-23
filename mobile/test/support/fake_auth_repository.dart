@@ -21,7 +21,7 @@ class FakeAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<void> signInWithGoogle() async {
+  Future<void> signIn() async {
     signInCount++;
     await onSignIn?.call();
   }
@@ -43,6 +43,6 @@ class FakeAuthRepository implements AuthRepository {
     if (forceRefresh && emitOnTokenRefresh && user != null) {
       _changes.add(AuthUser(uid: user!.uid, displayName: user!.displayName));
     }
-    return user == null ? null : 'firebase-id-token-for-test';
+    return user == null ? null : 'id-token-for-test';
   }
 }

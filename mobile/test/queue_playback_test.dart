@@ -56,17 +56,110 @@ void main() {
   );
 
   test(
-    'una playlist con posiciones repetidas respeta el máximo de 100 al añadir una tanda',
+    'si YouTube bloquea la red, el fallo lo dice y se limpia al recuperarse',
     () async {
-      await controller.playQueue(List.filled(100, owned));
+      engine.failure = const PlaybackSourceFailure(blocked: true);
+      await controller.playQueue([a]);
+      expect(controller.phase, TrackAudioPhase.error);
+      expect(controller.sourceBlocked, isTrue);
+
+      // Un fallo cualquiera no se presenta como bloqueo.
+      engine.failure = const PlaybackSourceFailure();
+      await controller.playQueue([b]);
+      expect(controller.phase, TrackAudioPhase.error);
+      expect(controller.sourceBlocked, isFalse);
+
+      // Al volver a funcionar, el indicador queda apagado.
+      engine.failure = null;
+      await controller.playQueue([c]);
+      expect(controller.sourceBlocked, isFalse);
+      expect(controller.phase, isNot(TrackAudioPhase.error));
+    },
+  );
+
+  test(
+    'el avance de la pista avisa solo por su canal, no a todo el controlador',
+    () async {
+      await controller.playQueue([a, b]);
+      var general = 0;
+      final ticks = <Duration>[];
+      controller.addListener(() => general++);
+      controller.positionListenable.addListener(
+        () => ticks.add(controller.positionListenable.value),
+      );
+      engine.positionEvents.add(const Duration(seconds: 1));
+      engine.positionEvents.add(const Duration(seconds: 2));
+      expect(ticks, const [Duration(seconds: 1), Duration(seconds: 2)]);
+      expect(controller.position, const Duration(seconds: 2));
+      // Ni una reconstrucción de quien escucha el estado general.
+      expect(general, 0);
+      // Un salto sí avisa a todos: cambia lo que se ve.
+      await controller.seek(const Duration(seconds: 30));
+      expect(general, greaterThan(0));
+    },
+  );
+
+  test(
+    'calentar adelanta solo las canciones que pasan por el resolvedor, hasta el máximo',
+    () {
+      const account = CatalogTrack(
+        id: 'youtube:zzzzzzzzzzz',
+        title: 'De la cuenta',
+        artistName: 'Artista',
+        musicAccountTrack: true,
+      );
+      const preview = CatalogTrack(
+        id: '${CatalogTrack.musicPreviewPrefix}abcdefghijk',
+        title: 'Muestra',
+        artistName: 'Artista',
+      );
+      controller.warmTracks([owned, licensed, preview, account, a, b, c, a]);
+      // Ni el archivo local, ni el audio licenciado, ni la muestra.
+      expect(engine.warmed, [
+        ['zzzzzzzzzzz', 'abcdefghijk', '12345678901', 'ABCDEFGHIJK'],
+      ]);
+      controller.warmTracks([owned, licensed]);
+      expect(engine.warmed, hasLength(1));
+    },
+  );
+
+  test(
+    'tocar una canción empieza a resolverla solo si pasa por el resolvedor',
+    () {
+      const account = CatalogTrack(
+        id: 'youtube:zzzzzzzzzzz',
+        title: 'De la cuenta',
+        artistName: 'Artista',
+        musicAccountTrack: true,
+      );
+      const preview = CatalogTrack(
+        id: '${CatalogTrack.musicPreviewPrefix}abcdefghijk',
+        title: 'Muestra',
+        artistName: 'Artista',
+      );
+      controller.touchTrack(account);
+      controller.touchTrack(a);
+      // Ni el archivo local, ni el audio licenciado, ni la muestra.
+      controller.touchTrack(owned);
+      controller.touchTrack(licensed);
+      controller.touchTrack(preview);
+      expect(engine.touched, ['zzzzzzzzzzz', 'abcdefghijk']);
+    },
+  );
+
+  test(
+    'una playlist con posiciones repetidas respeta el máximo de la cola al añadir una tanda',
+    () async {
+      const max = TrackPlaybackController.maxQueue;
+      await controller.playQueue(List.filled(max, owned));
       expect(
         controller.queueConnected([licensed, third, owned], next: true),
         isFalse,
       );
-      expect(controller.queue, hasLength(100));
-      controller.remove(99);
+      expect(controller.queue, hasLength(max));
+      controller.remove(max - 1);
       expect(controller.queueConnected([licensed, third], next: true), isTrue);
-      expect(controller.queue, hasLength(100));
+      expect(controller.queue, hasLength(max));
       expect(controller.queue[1], licensed);
       expect(controller.current, owned);
     },
@@ -258,7 +351,7 @@ void main() {
       controller.enqueue(a);
       controller.enqueue(a);
       expect(controller.queue.length, 1);
-      for (var i = 0; i < 150; i++) {
+      for (var i = 0; i < TrackPlaybackController.maxQueue + 50; i++) {
         controller.enqueue(
           CatalogTrack(
             id: 'youtube:${i.toString().padLeft(11, '0')}',
@@ -267,7 +360,7 @@ void main() {
           ),
         );
       }
-      expect(controller.queue.length, 100);
+      expect(controller.queue.length, TrackPlaybackController.maxQueue);
       await controller.jump(0);
       await controller.clear();
       expect(controller.current, isNull);

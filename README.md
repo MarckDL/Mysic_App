@@ -1,5 +1,8 @@
 # Mysic
 
+> **Vigente (22 nov 2026): la app móvil ya no usa Firebase, Render ni PostgreSQL.** La identidad es la sesión de YouTube Music y todo va directo desde el teléfono. Lo que dice el resto de este README sobre Google Sign-In, Firebase, Express y PostgreSQL describe el diseño original. Arquitectura actual: [docs/21-arquitectura-movil-ytm.md](docs/21-arquitectura-movil-ytm.md).
+
+
 **Aplicación móvil de exploración musical con biblioteca personalizada, autenticación Google y funcionalidades sociales.**
 
 Mysic es un proyecto personal y académico desarrollado con Flutter, Node.js, Express y PostgreSQL.

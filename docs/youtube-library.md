@@ -1,5 +1,8 @@
 # Biblioteca de YouTube · Fase 2
 
+> **Nota de vigencia (22 nov 2026).** Para la app móvil este documento describe el diseño anterior (Firebase, Render, Supabase/PostgreSQL y vinculación con Mysic de escritorio). La arquitectura actual está en [21-arquitectura-movil-ytm.md](21-arquitectura-movil-ytm.md).
+
+
 La biblioteca muestra las playlists propias que YouTube devuelve para el canal vinculado, incluidas las privadas. Se consulta por demanda con la sesión Firebase de Mysic y el permiso de lectura del canal. El teléfono recibe metadatos y enlaces oficiales. El backend conserva las credenciales. Las pruebas con dos cuentas personales se hicieron en OAuth Playground. La aceptación del callback de Mysic con Google real y la prueba del cliente móvil siguen pendientes.
 
 ## Contrato HTTP

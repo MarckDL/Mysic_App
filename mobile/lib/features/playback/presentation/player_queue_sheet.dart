@@ -1,10 +1,8 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../favorites/application/favorite_providers.dart';
 import '../../search/domain/catalog_track.dart';
 import '../../search/presentation/catalog_widgets.dart';
 import '../application/track_playback_controller.dart';
@@ -14,11 +12,15 @@ class PlayerQueueSheet extends ConsumerStatefulWidget {
   const PlayerQueueSheet({
     super.key,
     required this.controller,
+    this.embedded = false,
     this.openMusicLikes,
     this.musicLikesLabel,
   });
 
   final TrackPlaybackController controller;
+
+  /// Va incrustada en el reproductor (sin tirador ni arrastre).
+  final bool embedded;
   final VoidCallback? openMusicLikes;
   final String? musicLikesLabel;
 
@@ -47,7 +49,7 @@ class _PlayerQueueSheetState extends ConsumerState<PlayerQueueSheet> {
     final queue = _controller.queue;
     final index = _controller.index;
     final phase = _controller.phase;
-    if (_index == index && _phase == phase && listEquals(_queue, queue)) return;
+    if (!mounted) return;
     setState(() {
       _queue = queue;
       _index = index;
@@ -63,7 +65,9 @@ class _PlayerQueueSheetState extends ConsumerState<PlayerQueueSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    // Dentro del reproductor la cola es una vista de la página, no una hoja
+    // que se arrastra.
+    if (widget.embedded) return _content(context, null);
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: .66,
@@ -71,14 +75,21 @@ class _PlayerQueueSheetState extends ConsumerState<PlayerQueueSheet> {
       maxChildSize: 1,
       snap: true,
       snapSizes: const [.66],
-      builder: (context, scrollController) => DefaultTabController(
-        length: 3,
-        child: CustomScrollView(
-          controller: scrollController,
-          slivers: [
-            SliverToBoxAdapter(
-              child: Column(
-                children: [
+      builder: _content,
+    );
+  }
+
+  Widget _content(BuildContext context, ScrollController? scrollController) {
+    final colors = Theme.of(context).colorScheme;
+    return DefaultTabController(
+      length: 3,
+      child: CustomScrollView(
+        controller: scrollController,
+        slivers: [
+          SliverToBoxAdapter(
+            child: Column(
+              children: [
+                if (!widget.embedded)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     child: Container(
@@ -90,71 +101,176 @@ class _PlayerQueueSheetState extends ConsumerState<PlayerQueueSheet> {
                       ),
                     ),
                   ),
-                  TabBar(
-                    isScrollable: true,
-                    tabAlignment: TabAlignment.center,
-                    onTap: (tab) {
-                      if (scrollController.hasClients) {
-                        scrollController.jumpTo(0);
-                      }
-                      setState(() => _tab = tab);
-                    },
-                    tabs: [
-                      const Tab(text: 'Cola'),
-                      const Tab(text: 'Artistas'),
-                      Tab(
-                        text: widget.openMusicLikes == null
-                            ? 'Favoritos'
-                            : 'Me gusta',
-                      ),
-                    ],
+                TabBar(
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.center,
+                  onTap: (tab) {
+                    if (scrollController?.hasClients ?? false) {
+                      scrollController?.jumpTo(0);
+                    }
+                    setState(() => _tab = tab);
+                  },
+                  tabs: [
+                    const Tab(text: 'Cola'),
+                    const Tab(text: 'Artistas'),
+                    const Tab(text: 'Me gusta'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(
+              12,
+              10,
+              12,
+              MediaQuery.viewPaddingOf(context).bottom + 12,
+            ),
+            sliver: switch (_tab) {
+              0 => _queueList(),
+              1 => _artists(),
+              _ => _message(
+                TextButton(
+                  onPressed: widget.openMusicLikes,
+                  child: Text(
+                    widget.musicLikesLabel ??
+                        'Ver mis Me gusta de YouTube Music',
                   ),
-                ],
+                ),
               ),
-            ),
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(
-                12,
-                10,
-                12,
-                MediaQuery.viewPaddingOf(context).bottom + 12,
-              ),
-              sliver: switch (_tab) {
-                0 => _queueList(),
-                1 => _artists(),
-                _ =>
-                  widget.openMusicLikes == null
-                      ? _favorites()
-                      : _message(
-                          TextButton(
-                            onPressed: widget.openMusicLikes,
-                            child: Text(
-                              widget.musicLikesLabel ??
-                                  'Ver mis Me gusta de YouTube Music',
-                            ),
-                          ),
-                        ),
-              },
-            ),
-          ],
-        ),
+            },
+          ),
+        ],
       ),
     );
   }
 
   Widget _queueList() {
     if (_queue.isEmpty) return _message(const Text('La cola está vacía'));
-    return SliverList.builder(
-      itemCount: _queue.length + 1,
-      itemBuilder: (context, index) {
-        if (index == _queue.length) {
-          return TextButton(
-            onPressed: () => unawaited(_controller.clear()),
-            child: const Text('Vaciar cola'),
-          );
-        }
-        return _queuedTrack(index, allowRemoval: true);
-      },
+    final colors = Theme.of(context).colorScheme;
+    final label = Theme.of(context).textTheme.labelLarge?.copyWith(
+      color: colors.onSurfaceVariant,
+      fontWeight: FontWeight.w700,
+    );
+    final first = _index < 0 ? 0 : _index + 1;
+    final upcoming = _queue.length - first;
+    final past = _index < 0 ? 0 : _index;
+    return SliverMainAxisGroup(
+      slivers: [
+        // Lo ya oído, plegado: se puede volver a cualquiera.
+        if (past > 0)
+          SliverToBoxAdapter(
+            child: ExpansionTile(
+              tilePadding: const EdgeInsets.symmetric(horizontal: 10),
+              title: Text(
+                past == 1
+                    ? '1 canción reproducida'
+                    : '$past canciones reproducidas',
+                style: label,
+              ),
+              children: [for (var i = 0; i < past; i++) _queuedTrack(i)],
+            ),
+          ),
+        if (_index >= 0 && _index < _queue.length) ...[
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+              child: Text('Reproduciendo ahora', style: label),
+            ),
+          ),
+          SliverToBoxAdapter(child: _queuedTrack(_index)),
+        ],
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 12, 0, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    upcoming == 0
+                        ? 'A continuación'
+                        : 'A continuación · $upcoming',
+                    style: label,
+                  ),
+                ),
+                if (_controller.hasRadio) ...[
+                  if (_controller.loadingAutoplay)
+                    const Padding(
+                      padding: EdgeInsets.only(right: 8),
+                      child: SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  Text('Autoplay', style: label),
+                  Switch(
+                    value: _controller.autoplay,
+                    onChanged: _controller.setAutoplay,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        if (upcoming == 0)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
+              child: Text(
+                _controller.hasRadio && _controller.autoplay
+                    ? 'Buscando canciones parecidas…'
+                    : 'No hay más canciones en la cola.',
+                style: TextStyle(color: colors.onSurfaceVariant),
+              ),
+            ),
+          )
+        else
+          // Arrastrar una pista la reordena; lo que añadió la radio lleva su
+          // marca y pasa a ser del usuario al moverlo entre sus canciones.
+          SliverReorderableList(
+            itemCount: upcoming,
+            // onReorderItem ya descuenta la pista que se levantó.
+            onReorderItem: (from, to) =>
+                _controller.move(first + from, first + to),
+            proxyDecorator: (child, index, animation) => Material(
+              color: Colors.transparent,
+              elevation: 6,
+              borderRadius: BorderRadius.circular(14),
+              child: child,
+            ),
+            itemBuilder: (context, i) {
+              final queueIndex = first + i;
+              final track = _queue[queueIndex];
+              return _QueueTrackTile(
+                key: ValueKey('queue:${track.id}'),
+                track: track,
+                autoplay: _controller.isAutoplayTrack(track),
+                dragIndex: i,
+                onTap: () => unawaited(_controller.jump(queueIndex)),
+                onRemove: () => _controller.remove(queueIndex),
+              );
+            },
+          ),
+        if (upcoming > 0)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  TextButton(
+                    onPressed: _controller.clearUpcoming,
+                    child: const Text('Vaciar siguientes'),
+                  ),
+                  TextButton(
+                    onPressed: () => unawaited(_controller.clear()),
+                    child: const Text('Vaciar cola'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -181,34 +297,6 @@ class _PlayerQueueSheetState extends ConsumerState<PlayerQueueSheet> {
     );
   }
 
-  Widget _favorites() => ref
-      .watch(favoritesProvider)
-      .when(
-        loading: () => _message(const CircularProgressIndicator()),
-        error: (_, _) => _message(
-          TextButton(
-            onPressed: () => ref.invalidate(favoritesProvider),
-            child: const Text('Reintentar favoritos'),
-          ),
-        ),
-        data: (items) => items.isEmpty
-            ? _message(const Text('Aún no tienes favoritos'))
-            : SliverList.builder(
-                itemCount: items.length,
-                itemBuilder: (context, index) {
-                  final track = items[index].track;
-                  final current = _controller.current?.id == track.id;
-                  return _QueueTrackTile(
-                    track: track,
-                    phase: current ? _phase : null,
-                    onTap: current
-                        ? null
-                        : () => unawaited(_controller.playTrack(track)),
-                  );
-                },
-              ),
-      );
-
   Widget _queuedTrack(int index, {bool allowRemoval = false}) {
     final current = _index == index;
     return _QueueTrackTile(
@@ -231,11 +319,20 @@ class _PlayerQueueSheetState extends ConsumerState<PlayerQueueSheet> {
 
 class _QueueTrackTile extends StatelessWidget {
   const _QueueTrackTile({
+    super.key,
     required this.track,
     this.phase,
     this.onTap,
     this.onRemove,
+    this.autoplay = false,
+    this.dragIndex,
   });
+
+  /// La añadió la radio, no el usuario.
+  final bool autoplay;
+
+  /// Posición en la lista reordenable; null si la fila no se arrastra.
+  final int? dragIndex;
 
   final CatalogTrack track;
   final TrackAudioPhase? phase;
@@ -264,6 +361,7 @@ class _QueueTrackTile extends StatelessWidget {
         title: Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis),
         subtitle: Text(
           [
+            if (autoplay) 'Radio',
             track.artistName,
             if (track.durationLabel case final duration?) duration,
           ].join(' · '),
@@ -276,12 +374,27 @@ class _QueueTrackTile extends StatelessWidget {
                 message: status.$2,
                 child: Icon(status.$1, color: colors.primary),
               )
-            : onRemove == null
-            ? null
-            : IconButton(
-                tooltip: 'Quitar de la cola',
-                onPressed: onRemove,
-                icon: const Icon(Icons.close),
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (onRemove != null)
+                    IconButton(
+                      tooltip: 'Quitar de la cola',
+                      onPressed: onRemove,
+                      icon: const Icon(Icons.close),
+                    ),
+                  if (dragIndex != null)
+                    ReorderableDragStartListener(
+                      index: dragIndex!,
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Icon(
+                          Icons.drag_handle,
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                ],
               ),
       ),
     );

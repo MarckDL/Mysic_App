@@ -1,4 +1,4 @@
-import '../../../core/network/authenticated_api_client.dart';
+import '../../../core/network/api_failure.dart';
 import '../../playback/domain/track_audio_engine.dart';
 
 class CatalogTrack {
@@ -12,6 +12,9 @@ class CatalogTrack {
     this.deviceAudio,
     this.readAudio,
     this.musicAccountTrack = false,
+    this.artistId,
+    this.albumId,
+    this.albumName,
   });
   static const musicPreviewPrefix = 'music-preview:';
 
@@ -25,8 +28,33 @@ class CatalogTrack {
   final Uri? deviceAudio;
   final TrackAudioReader? readAudio;
   final bool musicAccountTrack;
+
+  /// Enlaces a las páginas de artista y de álbum, si el catálogo los dio.
+  final String? artistId;
+  final String? albumId;
+
+  /// Nombre del álbum, si llegó con la canción.
+  final String? albumName;
   bool get isConnectedAudio =>
       musicAccountTrack || deviceAudio != null || licensedAudio != null;
+
+  /// La misma canción con su álbum, si aún no lo traía.
+  CatalogTrack withAlbum(String id, String name) => albumName != null
+      ? this
+      : CatalogTrack(
+          id: this.id,
+          title: title,
+          artistName: artistName,
+          durationSeconds: durationSeconds,
+          thumbnailUrl: thumbnailUrl,
+          licensedAudio: licensedAudio,
+          deviceAudio: deviceAudio,
+          readAudio: readAudio,
+          musicAccountTrack: musicAccountTrack,
+          artistId: artistId,
+          albumId: albumId ?? id,
+          albumName: name,
+        );
 
   factory CatalogTrack.fromJson(Map<String, dynamic> data) {
     final id = data['id'];

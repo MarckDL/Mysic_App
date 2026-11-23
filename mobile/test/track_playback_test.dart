@@ -1,4 +1,3 @@
-import 'package:mysic/features/playback/domain/playback_resolution.dart';
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mysic/features/authentication/domain/auth_repository.dart';
@@ -8,31 +7,6 @@ import 'support/fake_auth_repository.dart';
 import 'support/fake_track_audio_engine.dart';
 
 void main() {
-  test('contrato nativo liga ID y ruta sin URL externa ni promesa de seek', () {
-    final data = <String, dynamic>{
-      'mode': 'direct',
-      'delivery': 'api-stream',
-      'sourceId': 'aqz-KE-bpKQ',
-      'path': '/api/v1/playback/audio/aqz-KE-bpKQ',
-      'contentType': 'audio/mp4',
-      'seekable': false,
-      'availabilityVerified': false,
-    };
-    expect(PlaybackResolution.fromJson(data).streamPath, data['path']);
-    expect(
-      () => PlaybackResolution.fromJson({...data, 'path': 'https://evil.test'}),
-      throwsA(isA<PlaybackFailure>()),
-    );
-    expect(
-      () => PlaybackResolution.fromJson({...data, 'sourceId': 'abcdefghijk'}),
-      throwsA(isA<PlaybackFailure>()),
-    );
-    expect(
-      () => PlaybackResolution.fromJson({...data, 'seekable': true}),
-      throwsA(isA<PlaybackFailure>()),
-    );
-  });
-
   late FakeAuthRepository auth;
   late FakeTrackAudioEngine engine;
   late TrackPlaybackController controller;
@@ -43,12 +17,12 @@ void main() {
   });
   tearDown(() => controller.dispose());
   test(
-    'reproduce ID exacto con token renovado y permite pausa/continuación',
+    'reproduce ID exacto sin pedir ningún token y permite pausa/continuación',
     () async {
       await controller.start('aqz-KE-bpKQ');
       expect(engine.sourceId, 'aqz-KE-bpKQ');
-      expect(engine.token, 'firebase-id-token-for-test');
-      expect(auth.refreshes, [false]);
+      expect(engine.token, 'device');
+      expect(auth.refreshes, isEmpty);
       expect(controller.phase, TrackAudioPhase.playing);
       await controller.pause();
       expect(controller.phase, TrackAudioPhase.paused);
@@ -56,6 +30,19 @@ void main() {
       expect(engine.plays, 2);
     },
   );
+  test('repetir canción se activa y desactiva desde la notificación', () async {
+    await controller.start('aqz-KE-bpKQ');
+    expect(controller.repeat, PlaybackRepeat.off);
+    controller.toggleRepeatOne();
+    expect(controller.repeat, PlaybackRepeat.one);
+    controller.toggleRepeatOne();
+    expect(controller.repeat, PlaybackRepeat.off);
+    // Si estaba en repetir todo, el botón lo pasa a repetir una.
+    controller.cycleRepeat();
+    expect(controller.repeat, PlaybackRepeat.all);
+    controller.toggleRepeatOne();
+    expect(controller.repeat, PlaybackRepeat.one);
+  });
   test('seek usa la duración confirmada y limita el destino', () async {
     engine.duration = const Duration(seconds: 200);
     await controller.start('aqz-KE-bpKQ');

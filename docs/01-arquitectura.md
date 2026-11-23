@@ -1,5 +1,8 @@
 # Mysic — Documento de arquitectura
 
+> **Nota de vigencia (22 nov 2026).** Para la app móvil este documento describe el diseño anterior (Firebase, Render, Supabase/PostgreSQL y vinculación con Mysic de escritorio). La arquitectura actual está en [21-arquitectura-movil-ytm.md](21-arquitectura-movil-ytm.md).
+
+
 **Versión:** 1.0.0  
 **Estado:** Arquitectura inicial propuesta  
 **Tipo:** Proyecto personal y académico  

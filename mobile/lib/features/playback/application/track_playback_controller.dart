@@ -10,8 +10,27 @@ import '../domain/playback_resolution.dart';
 
 enum PlaybackRepeat { off, all, one }
 
+/// Un lote de la radio: las canciones que se proponen y el token para pedir
+/// el siguiente (null cuando YouTube Music no da más).
+class RadioBatch {
+  const RadioBatch(this.tracks, this.next);
+
+  final List<CatalogTrack> tracks;
+  final String? next;
+}
+
+/// Pide la radio de una canción ([videoId]) o su continuación ([cursor]).
+typedef RadioFetcher =
+    Future<RadioBatch> Function(String videoId, {String? cursor});
+
 class TrackPlaybackController extends ChangeNotifier {
-  TrackPlaybackController(this._auth, this._engine, this._uid, {this.history}) {
+  TrackPlaybackController(
+    this._auth,
+    this._engine,
+    this._uid, {
+    this.history,
+    this.radio,
+  }) {
     unawaited(_engine.warmUp().catchError((Object _) {}));
     _subscription = _engine.states.listen((value) {
       if (!_active) return;
@@ -30,6 +49,26 @@ class TrackPlaybackController extends ChangeNotifier {
         return;
       }
       _set(value);
+      // Temporizador «al acabar la canción»: se queda en esta, sin avanzar.
+      if (value == TrackAudioPhase.completed && _sleepAtTrackEnd) {
+        _sleepAtTrackEnd = false;
+        _wantPlayback = false;
+        notifyListeners();
+        return;
+      }
+      // Se acabó la última pista y la radio aún no había contestado: se espera
+      // su respuesta antes de dar la cola por terminada.
+      if (value == TrackAudioPhase.completed &&
+          !hasNext &&
+          repeat == PlaybackRepeat.off &&
+          _extension != null &&
+          _extending) {
+        final generation = _generation;
+        unawaited(() async {
+          await _extension;
+          if (_valid(generation) && hasNext) await next();
+        }());
+      }
       if (value == TrackAudioPhase.completed &&
           (hasNext || repeat == PlaybackRepeat.one)) {
         final generation = _generation;
@@ -42,8 +81,10 @@ class TrackPlaybackController extends ChangeNotifier {
     });
     _positions = _engine.positions.listen((value) {
       if (_active && _eventsEnabled) {
+        // El avance llega varias veces por segundo: solo avisa a quien
+        // dibuja la posición (ver [positionListenable]), no a toda la app.
         position = value;
-        notifyListeners();
+        _positionTicks.value = value;
       }
     });
     _durations = _engine.durations.listen((value) {
@@ -79,6 +120,196 @@ class TrackPlaybackController extends ChangeNotifier {
   late final StreamSubscription<AuthUser?> _authSubscription;
   final List<CatalogTrack> _queue = [];
   List<CatalogTrack> get queue => List.unmodifiable(_queue);
+
+  /// Máximo de pistas en la cola (las ya oídas, la actual y las que siguen).
+  static const maxQueue = 500;
+
+  /// Pistas ya oídas que se conservan atrás para poder volver a ellas.
+  static const maxHistory = 200;
+
+  /// Con cuántas pistas por delante se pide más autoplay.
+  static const autoplayThreshold = 2;
+
+  /// Cuántas canciones de la radio se añaden por lote.
+  static const autoplayBatch = 20;
+
+  /// De dónde salen las canciones del autoplay; null sin sesión.
+  final RadioFetcher? radio;
+
+  /// Si al acercarse el final de la cola se añaden canciones parecidas (la
+  /// radio de YouTube Music). Con repetir activado no hay autoplay.
+  bool autoplay = true;
+
+  /// Las pistas que añadió la radio, no el usuario: van detrás de lo que el
+  /// usuario puso en cola y se distinguen en la lista.
+  final Set<String> _autoIds = {};
+  bool isAutoplayTrack(CatalogTrack track) => _autoIds.contains(track.id);
+
+  /// Hay un proveedor de radio (con sesión de YouTube Music).
+  bool get hasRadio => radio != null;
+
+  bool _extending = false;
+  bool get loadingAutoplay => _extending;
+  String? _radioCursor;
+  bool _radioExhausted = false;
+
+  /// Cambia cada vez que la cola se reemplaza o se vacía; una respuesta de la
+  /// radio pedida para una cola anterior se descarta.
+  var _queueRevision = 0;
+
+  /// Cuántas pistas siguen a la actual.
+  int get upcomingCount =>
+      index < 0 ? _queue.length : _queue.length - index - 1;
+
+  void setAutoplay(bool value) {
+    if (autoplay == value) return;
+    autoplay = value;
+    if (!value) {
+      // Lo que la radio había propuesto y aún no suena se quita.
+      _dropAutoplayAhead();
+    } else {
+      _maybeExtend();
+    }
+    notifyListeners();
+  }
+
+  void _dropAutoplayAhead() {
+    final keep = index + 1;
+    for (var i = _queue.length - 1; i >= keep && i >= 0; i--) {
+      if (_autoIds.contains(_queue[i].id)) _queue.removeAt(i);
+    }
+    _autoIds.removeWhere((id) => !_queue.any((t) => t.id == id));
+    _radioCursor = null;
+    _radioExhausted = false;
+    _engine.cancelPrefetch();
+  }
+
+  /// Pide a la radio más canciones cuando quedan pocas por delante, las añade
+  /// al final (sin repetir ninguna ya en la cola) y las marca como autoplay.
+  void _maybeExtend() {
+    final fetch = radio;
+    final now = current;
+    if (fetch == null ||
+        !autoplay ||
+        _extending ||
+        _radioExhausted ||
+        !_active ||
+        now == null ||
+        !now.musicAccountTrack ||
+        now.isMusicPreview ||
+        repeat != PlaybackRepeat.off ||
+        upcomingCount > autoplayThreshold ||
+        _queue.length >= maxQueue) {
+      return;
+    }
+    _extending = true;
+    final revision = _queueRevision;
+    final cursor = _radioCursor;
+    // La radio sigue desde la última pista de la cola: así lo que se añade
+    // continúa lo que ya estaba por delante.
+    final seed = _queue.last.id.substring(8);
+    _extension = (() async {
+      try {
+        final batch = await fetch(seed, cursor: cursor);
+        if (!_active || revision != _queueRevision) return;
+        final known = {for (final t in _queue) t.id};
+        final fresh = <CatalogTrack>[];
+        for (final track in batch.tracks) {
+          if (fresh.length >= autoplayBatch) break;
+          if (!track.musicAccountTrack ||
+              !_validTrack(track) ||
+              !known.add(track.id)) {
+            continue;
+          }
+          fresh.add(track);
+        }
+        _radioCursor = batch.next;
+        if (fresh.isEmpty) {
+          // Con cursor, se vuelve a empezar desde otra semilla la próxima vez;
+          // sin él no hay nada más que dar.
+          if (batch.next == null) _radioExhausted = true;
+          return;
+        }
+        final room = maxQueue - _queue.length;
+        final take = fresh.take(room).toList();
+        final hadNext = upcomingCount > 0;
+        _queue.addAll(take);
+        _autoIds.addAll(take.map((t) => t.id));
+        if (!hadNext && index >= 0 && _wantPlayback) _prepareAdjacent();
+      } on Object {
+        // Sin red o sin sesión la cola sigue como está; se reintenta al cambiar
+        // de pista.
+      } finally {
+        _extending = false;
+        if (_active && revision == _queueRevision) notifyListeners();
+      }
+    })();
+  }
+
+  /// La petición de autoplay en curso, si hay.
+  Future<void>? _extension;
+
+  /// Cuántas pistas por delante se dejan listas (su URL y el primer tramo de
+  /// su audio), además de la anterior.
+  static const prepareAhead = 3;
+
+  /// Deja preparadas las pistas de alrededor de la actual para que cambiar de
+  /// pista, o volver a la anterior, no espere a YouTube: la siguiente se
+  /// precarga con prioridad y las tres siguientes y la anterior se calientan
+  /// en segundo plano. Solo las que pasan por el resolvedor; con «solo
+  /// descargadas» el motor no abre ninguna conexión.
+  void _prepareAdjacent() {
+    if (index < 0 || !_wantPlayback) return;
+    _prefetchNext();
+    final ids = <String>[];
+    void add(int i) {
+      if (i < 0 || i >= _queue.length) return;
+      final track = _queue[i];
+      if (track.id != demoTrack.id &&
+          !track.isMusicPreview &&
+          track.deviceAudio == null &&
+          track.licensedAudio == null &&
+          track.readAudio == null &&
+          _validTrack(track)) {
+        ids.add(track.id.substring(8));
+      }
+    }
+
+    for (var i = index + 1; i <= index + prepareAhead; i++) {
+      add(i);
+    }
+    add(index - 1);
+    if (ids.isNotEmpty) _engine.warm(ids);
+  }
+
+  void _prefetchNext() {
+    if (index < 0 || !_wantPlayback || index + 1 >= _queue.length) return;
+    final next = _queue[index + 1];
+    if (next.id == demoTrack.id ||
+        next.isMusicPreview ||
+        next.deviceAudio != null ||
+        next.licensedAudio != null ||
+        next.readAudio != null) {
+      return;
+    }
+    unawaited(
+      _engine
+          .prefetch(next.id.substring(8), _sourceToken)
+          .catchError((Object _) {}),
+    );
+  }
+
+  /// Quita de atrás las pistas ya oídas que pasan de [maxHistory].
+  void _trimHistory() {
+    final extra = index - maxHistory;
+    if (extra <= 0) return;
+    final removed = _queue.sublist(0, extra);
+    _queue.removeRange(0, extra);
+    _originalOrder.removeWhere(removed.contains);
+    _autoIds.removeAll(removed.map((t) => t.id));
+    index -= extra;
+  }
+
   int index = -1;
   CatalogTrack? get current =>
       index >= 0 && index < _queue.length ? _queue[index] : null;
@@ -92,6 +323,16 @@ class TrackPlaybackController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Repetir la canción que suena: activa o desactiva el modo "una" (el
+  /// botón de la notificación y de la pantalla de bloqueo).
+  void toggleRepeatOne() {
+    if (!_active) return;
+    repeat = repeat == PlaybackRepeat.one
+        ? PlaybackRepeat.off
+        : PlaybackRepeat.one;
+    notifyListeners();
+  }
+
   void toggleShuffle() {
     if (!_active || _queue.length < 2) return;
     final selected = current;
@@ -100,12 +341,13 @@ class TrackPlaybackController extends ChangeNotifier {
       _originalOrder
         ..clear()
         ..addAll(_queue);
-      final others = _queue.toList();
-      if (index >= 0) others.removeAt(index);
-      others.shuffle();
+      // Solo se baraja lo que viene después: lo ya oído y la pista actual se
+      // quedan donde están.
+      final head = _queue.sublist(0, index < 0 ? 0 : index + 1);
+      final upcoming = _queue.sublist(index < 0 ? 0 : index + 1)..shuffle();
       _queue
         ..clear()
-        ..addAll([if (selected != null) selected, ...others]);
+        ..addAll([...head, ...upcoming]);
     } else {
       final remaining = _queue.toList();
       final restored = <CatalogTrack>[];
@@ -134,8 +376,19 @@ class TrackPlaybackController extends ChangeNotifier {
   bool _disposed = false;
   bool get _active => !_disposed && _auth.currentUser?.uid == _uid;
   TrackAudioPhase phase = TrackAudioPhase.idle;
+
+  /// La última pista falló porque YouTube pide confirmar que no es un bot a
+  /// esta red: las canciones descargadas siguen sonando, las nuevas no.
+  bool sourceBlocked = false;
   String? sourceId;
   Duration position = Duration.zero;
+
+  final _positionTicks = ValueNotifier<Duration>(Duration.zero);
+
+  /// Avisa con cada avance de la reproducción. Los saltos, los cambios de
+  /// pista y de estado siguen avisando por el propio controlador, así que
+  /// quien dibuja la posición debe escuchar los dos.
+  ValueListenable<Duration> get positionListenable => _positionTicks;
   Duration? duration;
   int _seekRevision = 0;
   int get seekRevision => _seekRevision;
@@ -177,7 +430,7 @@ class TrackPlaybackController extends ChangeNotifier {
     }
     var target = _queue.indexWhere((item) => item.id == track.id);
     if (target < 0) {
-      if (_queue.length >= 100) return;
+      if (_queue.length >= maxQueue) return;
       _queue.add(track);
       target = _queue.length - 1;
     } else {
@@ -185,6 +438,11 @@ class TrackPlaybackController extends ChangeNotifier {
     }
     await jump(target);
   }
+
+  /// El resolvedor de Android no usa el token (el audio se resuelve en el
+  /// teléfono); solo exige que no esté vacío. Con la sesión de YouTube Music no
+  /// hay token de ningún servidor, así que se usa un valor fijo.
+  static const _sourceToken = 'device';
 
   Future<void> prefetchTrack(CatalogTrack track) async {
     if (!_active ||
@@ -197,12 +455,49 @@ class TrackPlaybackController extends ChangeNotifier {
     }
     _engine.cancelPrefetch();
     final generation = _generation;
-    final token = await _auth.getIdToken();
-    if (!_valid(generation) || token == null || token.isEmpty) return;
-    await _engine.prefetch(track.id.substring(8), token);
+    if (!_valid(generation)) return;
+    await _engine.prefetch(track.id.substring(8), _sourceToken);
   }
 
   void cancelPrefetch() => _engine.cancelPrefetch();
+
+  /// Máximo de canciones a la vista cuya fuente se adelanta de una vez.
+  static const warmLimit = 12;
+
+  /// Adelanta la resolución de las primeras canciones que el usuario tiene a
+  /// la vista, para que tocar una no espere a resolverla. Solo cuentan las
+  /// que pasan por el resolvedor: las que traen archivo o lector propio no
+  /// tienen nada que adelantar.
+  void warmTracks(Iterable<CatalogTrack> tracks) {
+    if (!_active) return;
+    final ids = <String>{
+      for (final track in tracks)
+        if (_validTrack(track) &&
+            track.id != demoTrack.id &&
+            !track.isMusicPreview &&
+            track.deviceAudio == null &&
+            track.licensedAudio == null &&
+            track.readAudio == null)
+          track.id.substring(8),
+    };
+    if (ids.isNotEmpty) _engine.warm(ids.take(warmLimit).toList());
+  }
+
+  /// El dedo acaba de tocar [track] (aún no se ha levantado): se empieza a
+  /// resolver su audio ya. Si luego se toca de verdad, la reproducción se une a
+  /// esa resolución en vez de empezar de cero.
+  void touchTrack(CatalogTrack track) {
+    if (!_active ||
+        !_validTrack(track) ||
+        track.id == demoTrack.id ||
+        track.isMusicPreview ||
+        track.deviceAudio != null ||
+        track.licensedAudio != null ||
+        track.readAudio != null) {
+      return;
+    }
+    _engine.touch(track.id.substring(8));
+  }
 
   void enqueue(CatalogTrack track) {
     if (!_active ||
@@ -210,7 +505,7 @@ class TrackPlaybackController extends ChangeNotifier {
         _onPreviewListened != null ||
         (_queue.any((t) => t.isConnectedAudio) && !track.isConnectedAudio) ||
         !_validTrack(track) ||
-        _queue.length >= 100 ||
+        _queue.length >= maxQueue ||
         _queue.any((item) => item.id == track.id)) {
       return;
     }
@@ -228,7 +523,7 @@ class TrackPlaybackController extends ChangeNotifier {
     final playing = current;
     final existing = _queue.map((t) => t.id).toSet();
     final incoming = <String, CatalogTrack>{};
-    var slots = 100 - _queue.length;
+    var slots = maxQueue - _queue.length;
     for (final track in tracks) {
       if (!track.isConnectedAudio ||
           !_validTrack(track) ||
@@ -243,22 +538,80 @@ class TrackPlaybackController extends ChangeNotifier {
       incoming[track.id] = track;
     }
     if (incoming.isEmpty) return false;
-    int insert(List<CatalogTrack> list) {
+    // Lo que el usuario añade pasa a ser suyo: deja de ser autoplay.
+    _autoIds.removeAll(incoming.keys);
+    int insert(List<CatalogTrack> list, {required bool skipAutoplay}) {
       list.removeWhere((track) => incoming.containsKey(track.id));
       final selected = playing == null ? -1 : list.indexOf(playing);
-      list.insertAll(
-        next && selected >= 0 ? selected + 1 : list.length,
-        incoming.values,
-      );
+      var at = list.length;
+      if (next && selected >= 0) {
+        at = selected + 1;
+      } else if (skipAutoplay) {
+        // «Añadir a la cola» va al final de lo del usuario, delante de lo que
+        // propuso la radio.
+        var firstAuto = list.length;
+        while (firstAuto > selected + 1 &&
+            _autoIds.contains(list[firstAuto - 1].id)) {
+          firstAuto--;
+        }
+        at = firstAuto;
+      }
+      list.insertAll(at, incoming.values);
       return selected;
     }
 
-    index = insert(_queue);
-    if (shuffleEnabled) insert(_originalOrder);
+    index = insert(_queue, skipAutoplay: true);
+    if (shuffleEnabled) insert(_originalOrder, skipAutoplay: false);
     _listenForTrack = listenForTrack;
     _engine.cancelPrefetch();
+    _prepareAdjacent();
     notifyListeners();
     return true;
+  }
+
+  /// Mueve la pista de [from] a [to] (posiciones de [queue]) sin interrumpir
+  /// el audio. La pista actual se puede mover; el puntero la sigue.
+  void move(int from, int to) {
+    if (!_active ||
+        from < 0 ||
+        to < 0 ||
+        from >= _queue.length ||
+        to >= _queue.length ||
+        from == to) {
+      return;
+    }
+    final playing = current;
+    final track = _queue.removeAt(from);
+    _queue.insert(to, track);
+    // Al arrastrar una propuesta de la radio hacia lo del usuario (o al
+    // revés) cambia de dueño según donde cae.
+    final before = to > 0 ? _queue[to - 1] : null;
+    final after = to + 1 < _queue.length ? _queue[to + 1] : null;
+    if (_autoIds.contains(track.id)) {
+      if (before != null &&
+          !_autoIds.contains(before.id) &&
+          after != null &&
+          !_autoIds.contains(after.id)) {
+        _autoIds.remove(track.id);
+      }
+    }
+    index = playing == null ? -1 : _queue.indexOf(playing);
+    _engine.cancelPrefetch();
+    _prepareAdjacent();
+    notifyListeners();
+  }
+
+  /// Quita todo lo que viene después de la pista actual.
+  void clearUpcoming() {
+    if (!_active || index < 0 || index + 1 >= _queue.length) return;
+    final removed = _queue.sublist(index + 1);
+    _queue.removeRange(index + 1, _queue.length);
+    _originalOrder.removeWhere(removed.contains);
+    _autoIds.removeAll(removed.map((t) => t.id));
+    _radioCursor = null;
+    _engine.cancelPrefetch();
+    notifyListeners();
+    _maybeExtend();
   }
 
   Future<void> playQueue(
@@ -270,7 +623,7 @@ class TrackPlaybackController extends ChangeNotifier {
   }) async {
     if (!_active ||
         tracks.isEmpty ||
-        tracks.length > 100 ||
+        tracks.length > maxQueue ||
         (tracks.any((t) => t.isConnectedAudio) &&
             tracks.any((t) => !t.isConnectedAudio)) ||
         tracks.any(
@@ -285,6 +638,11 @@ class TrackPlaybackController extends ChangeNotifier {
     history?.finish();
     _onPreviewListened = onPreviewListened;
     _listenForTrack = listenForTrack;
+    // Una cola nueva: lo que la radio propuso para la anterior no vale.
+    _queueRevision++;
+    _autoIds.clear();
+    _radioCursor = null;
+    _radioExhausted = false;
     shuffleEnabled = shuffled && tracks.length > 1;
     _originalOrder.clear();
     _queue
@@ -346,21 +704,16 @@ class TrackPlaybackController extends ChangeNotifier {
       _set(TrackAudioPhase.loading);
       await stopped;
       if (!_valid(generation)) return;
-      stage = 'session';
-      // Firebase renueva automáticamente tokens vencidos. Usar el token válido
-      // en caché evita una solicitud de red adicional al iniciar cada canción;
-      // los clientes HTTP conservan su reintento con refresh ante un 401.
-      final token = await _auth.getIdToken();
-      if (!_valid(generation)) return;
-      if (token == null || token.isEmpty) throw StateError('Sesión inválida');
       stage = 'audio-load';
+      sourceBlocked = false;
       await _engine.load(
         requestedId,
-        token,
+        _sourceToken,
         refresh: refresh,
         licensedAudio: current!.licensedAudio,
         deviceAudio: current!.deviceAudio,
         readAudio: current!.readAudio,
+        durationSeconds: current!.durationSeconds,
       );
       if (!_valid(generation)) return;
       final actualDuration = _engine.duration;
@@ -383,21 +736,16 @@ class TrackPlaybackController extends ChangeNotifier {
         return;
       }
       await _engine.play();
-      if (_valid(generation) && _wantPlayback && index + 1 < _queue.length) {
-        final next = _queue[index + 1];
-        if (next.id != demoTrack.id &&
-            !next.isMusicPreview &&
-            !next.isConnectedAudio) {
-          unawaited(
-            _engine
-                .prefetch(next.id.substring(8), token)
-                .catchError((Object _) {}),
-          );
-        }
+      if (_valid(generation) && _wantPlayback) {
+        _trimHistory();
+        _prepareAdjacent();
+        _maybeExtend();
       }
     } catch (error) {
       if (_valid(generation)) {
         if (kDebugMode) debugPrint('audio_start_failed stage=$stage');
+        // El motivo llega al reproductor para explicarlo (y no insistir).
+        sourceBlocked = error is PlaybackSourceFailure && error.blocked;
         final recovery = error is PlaybackSourceFailure && !refresh
             ? _recoverSource()
             : null;
@@ -418,7 +766,13 @@ class TrackPlaybackController extends ChangeNotifier {
     if (hasNext) await jump(index + 1 < _queue.length ? index + 1 : 0);
   }
 
+  /// Como Limusic: con más de 3 s sonando, «anterior» reinicia la pista; solo
+  /// al principio pasa a la anterior.
   Future<void> previous() async {
+    if (current != null && position > const Duration(seconds: 3)) {
+      await jump(index);
+      return;
+    }
     if (hasPrevious) await jump(index - 1);
   }
 
@@ -447,9 +801,12 @@ class TrackPlaybackController extends ChangeNotifier {
       return;
     }
     _engine.cancelPrefetch();
-    _queue.removeAt(target);
+    final removed = _queue.removeAt(target);
+    _autoIds.remove(removed.id);
     if (target < index) index--;
+    _prepareAdjacent();
     notifyListeners();
+    _maybeExtend();
   }
 
   Future<void> pause() async {
@@ -532,6 +889,10 @@ class TrackPlaybackController extends ChangeNotifier {
 
   Future<void> clear() async {
     _engine.cancelPrefetch();
+    _queueRevision++;
+    _autoIds.clear();
+    _radioCursor = null;
+    _radioExhausted = false;
     _queue.clear();
     _onPreviewListened = null;
     _listenForTrack = null;
@@ -545,9 +906,88 @@ class TrackPlaybackController extends ChangeNotifier {
     await stop();
   }
 
+  // ---- Velocidad y tono ----
+  /// Factor de velocidad (1 = normal), de 0,2 a 2 en pasos de 0,1.
+  double speed = 1;
+
+  /// Tono en semitonos, de -12 a 12.
+  int pitch = 0;
+
+  bool get canTune => _engine is TrackAudioTuning;
+
+  /// Cambia la velocidad o el tono; lo que va a null se queda como estaba.
+  Future<void> setTuning({double? speed, int? pitch}) async {
+    final Object engine = _engine;
+    if (engine is! TrackAudioTuning) return;
+    this.speed = (((speed ?? this.speed) * 10).round() / 10).clamp(.2, 2.0);
+    this.pitch = (pitch ?? this.pitch).clamp(-12, 12);
+    notifyListeners();
+    try {
+      await engine.setTuning(speed: this.speed, pitch: this.pitch);
+    } on Object {
+      // Un motor que no puede aplicar el cambio sigue sonando como estaba.
+    }
+  }
+
+  // ---- Temporizador de apagado ----
+
+  DateTime? _sleepAt;
+  bool _sleepAtTrackEnd = false;
+  Timer? _sleepTimer;
+
+  /// Cuándo se pausará; null si no hay cuenta atrás.
+  DateTime? get sleepAt => _sleepAt;
+
+  /// Se pausará al terminar la canción que suena.
+  bool get sleepAtTrackEnd => _sleepAtTrackEnd;
+
+  bool get sleepActive => _sleepAt != null || _sleepAtTrackEnd;
+
+  /// Minutos que quedan, redondeados hacia arriba; 0 si no hay cuenta atrás.
+  int get sleepMinutesLeft {
+    final at = _sleepAt;
+    if (at == null) return 0;
+    final seconds = at.difference(DateTime.now()).inSeconds;
+    return seconds <= 0 ? 1 : (seconds + 59) ~/ 60;
+  }
+
+  /// Pausa la reproducción dentro de [minutes].
+  void setSleepTimer(int minutes) {
+    if (minutes <= 0) return;
+    _sleepTimer?.cancel();
+    _sleepAtTrackEnd = false;
+    _sleepAt = DateTime.now().add(Duration(minutes: minutes));
+    _sleepTimer = Timer(Duration(minutes: minutes), () {
+      _sleepAt = null;
+      _sleepTimer = null;
+      if (_disposed) return;
+      notifyListeners();
+      unawaited(pause());
+    });
+    notifyListeners();
+  }
+
+  /// Pausa la reproducción cuando termine la canción que suena.
+  void sleepAfterTrack() {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    _sleepAt = null;
+    _sleepAtTrackEnd = true;
+    notifyListeners();
+  }
+
+  void cancelSleepTimer() {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    _sleepAt = null;
+    _sleepAtTrackEnd = false;
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     if (_disposed) return;
+    _sleepTimer?.cancel();
     history?.dispose();
     _disposed = true;
     _engine.cancelPrefetch();

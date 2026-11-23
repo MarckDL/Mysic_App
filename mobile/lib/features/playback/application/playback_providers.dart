@@ -1,83 +1,92 @@
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/settings/app_settings.dart';
+import '../../authentication/application/auth_providers.dart';
+import '../../connected_library/domain/music_mode.dart' show MusicTrack;
+import '../../authentication/domain/auth_repository.dart';
 import '../../history/application/listening_tracker.dart';
-import '../data/mysic_audio_handler.dart';
+import '../../history/data/local_listens.dart';
+import '../../ytm/data/liked_tracks.dart';
+import '../../ytm/data/ytm_client.dart';
 import '../data/just_audio_track_engine.dart';
+import '../data/mysic_audio_handler.dart';
 import '../domain/track_audio_engine.dart';
 import 'track_playback_controller.dart';
-import 'dart:async';
-import 'package:dio/dio.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/network/api_config.dart';
-import '../../../core/network/authenticated_api_client.dart';
-import '../../authentication/application/auth_providers.dart';
-import '../../authentication/domain/auth_repository.dart';
-import '../data/playback_repository.dart';
-import '../data/just_audio_demo_engine.dart';
-import '../domain/demo_audio_engine.dart';
-import '../domain/playback_resolution.dart';
-import 'demo_controller.dart';
-
-final playbackRepositoryProvider = Provider.autoDispose<PlaybackRepository>((
-  ref,
-) {
-  final api = AuthenticatedApiClient(
-    ref.watch(authRepositoryProvider),
-    baseUrl: ApiConfig.baseUrl,
-  );
-  ref.onDispose(api.close);
-  return ApiPlaybackRepository(api);
-});
-final demoEngineFactoryProvider = Provider<DemoAudioEngine Function()>(
-  (ref) => JustAudioDemoEngine.new,
-);
-final demoControllerProvider = Provider.autoDispose<DemoController>((ref) {
-  final uid = ref.watch(authStateProvider).asData?.value?.uid;
-  if (uid == null) throw const AuthFailure('Inicia sesión con Google.');
-  final auth = ref.watch(authRepositoryProvider);
-  final controller = DemoController(
-    ref.watch(playbackRepositoryProvider),
-    ref.watch(demoEngineFactoryProvider)(),
-    uid,
-    () => auth.currentUser?.uid,
-  );
-  ref.onDispose(() => unawaited(controller.dispose()));
-  return controller;
-});
-final playbackAvailabilityProvider = FutureProvider.autoDispose
-    .family<PlaybackResolution, String>((ref, sourceId) async {
-      final uid = ref.watch(authStateProvider).asData?.value?.uid;
-      if (uid == null) throw const AuthFailure('Inicia sesión con Google.');
-      final cancel = CancelToken();
-      ref.onDispose(() => cancel.cancel());
-      return ref
-          .watch(playbackRepositoryProvider)
-          .resolve('youtube', sourceId, cancelToken: cancel);
-    }, retry: (count, error) => null);
 
 final mediaHandlerProvider = Provider<MysicAudioHandler?>((ref) => null);
 
+/// Las canciones con Me gusta de la cuenta de YouTube Music; null sin sesión.
+final likedTracksProvider = Provider.autoDispose<LikedTracks?>((ref) {
+  final session = ref.watch(ytmAuthProvider).session;
+  if (session == null) return null;
+  final client = YtmClient(session);
+  final likes = LikedTracks(client);
+  unawaited(likes.load());
+  ref.onDispose(() {
+    likes.dispose();
+    client.close();
+  });
+  return likes;
+});
+
 final trackAudioEngineFactoryProvider = Provider<TrackAudioEngine Function()>(
   (ref) =>
-      () => JustAudioTrackEngine(ApiConfig.baseUrl),
+      () => JustAudioTrackEngine(keepAudio: () => ref.read(keepAudioProvider)),
 );
+
 final trackPlaybackControllerProvider =
     Provider.autoDispose<TrackPlaybackController>((ref) {
-      // El controlador escucha logout; no reconstruirlo sin usuario al salir.
+      // El controlador escucha el cierre de sesión; no reconstruirlo sin
+      // usuario al salir.
       final auth = ref.watch(authRepositoryProvider);
       final uid = auth.currentUser?.uid;
-      if (uid == null) throw const AuthFailure('Inicia sesión con Google.');
+      if (uid == null) {
+        throw const AuthFailure('Inicia sesión en YouTube Music.');
+      }
       final controller = TrackPlaybackController(
         auth,
         ref.watch(trackAudioEngineFactoryProvider)(),
         uid,
+        radio: (videoId, {cursor}) async {
+          final session = ref.read(ytmAuthProvider).session;
+          if (session == null) throw const AuthFailure('Sin sesión.');
+          final client = YtmClient(session);
+          try {
+            final page = await client.radio(videoId, cursor: cursor);
+            return RadioBatch([
+              for (final json in page.tracks)
+                MusicTrack.fromJson(json).toPlaybackTrack(),
+            ], page.next);
+          } finally {
+            client.close();
+          }
+        },
         history: ListeningTracker(
-          AuthenticatedApiClient(auth, baseUrl: ApiConfig.baseUrl),
           () => auth.currentUser?.uid == uid,
-          uid,
+          // Cada escucha que cuenta queda en la base del teléfono, de donde
+          // salen Recientes y Lo más oído.
+          onListened: (track, ms, at) {
+            final listen = LocalListen.of(track, ms, at);
+            if (listen != null) {
+              unawaited(ref.read(localListensProvider(uid)).record(listen));
+            }
+          },
         ),
       );
       final handler = ref.watch(mediaHandlerProvider);
+      final likes = ref.watch(likedTracksProvider);
       handler?.bind(controller);
+      if (handler != null && likes != null) {
+        handler.bindLikes(
+          isLiked: likes.isLiked,
+          toggle: likes.toggle,
+          changes: likes,
+        );
+      }
       ref.onDispose(() {
+        handler?.unbindLikes();
         handler?.unbind(controller);
         controller.dispose();
       });

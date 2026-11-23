@@ -4,34 +4,17 @@ import 'mysic_theme.dart';
 import '../features/authentication/presentation/auth_gate.dart';
 
 class MysicApp extends StatelessWidget {
-  const MysicApp({super.key, this.firebaseReady = false});
-  final bool firebaseReady;
+  const MysicApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Mysic',
-      themeMode: ThemeMode.light,
+      // Oscuro siempre, como Limusic; el claro queda disponible en el código.
+      themeMode: ThemeMode.dark,
       theme: mysicLightTheme(),
-      home: firebaseReady ? const AuthGate() : const _SetupPendingScreen(),
+      darkTheme: mysicDarkTheme(),
+      home: const AuthGate(),
     );
   }
-}
-
-class _SetupPendingScreen extends StatelessWidget {
-  const _SetupPendingScreen();
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Mysic')),
-    body: const SafeArea(
-      child: Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text(
-            'El inicio de sesión todavía no está disponible en esta instalación.',
-          ),
-        ),
-      ),
-    ),
-  );
 }

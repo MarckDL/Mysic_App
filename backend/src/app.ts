@@ -31,7 +31,10 @@ import {
 } from './infrastructure/music/youtube-audio-stream.js';
 import { createAudioStreamRouter } from './modules/playback/presentation/audio-stream.routes.js';
 import express from 'express';
-import { createFirebaseTokenVerifier } from './infrastructure/firebase/firebase-token-verifier.js';
+import {
+  createFirebaseTokenVerifier,
+  loadFirebaseAuth,
+} from './infrastructure/firebase/firebase-token-verifier.js';
 import { createAuthRouter } from './modules/auth/presentation/auth.routes.js';
 import type { TokenVerifier } from './modules/auth/domain/token-verifier.js';
 import { errorHandler } from './middleware/error.middleware.js';
@@ -70,6 +73,8 @@ import { PrismaCommentRepository } from './infrastructure/database/prisma-commen
 import { CommentService } from './modules/comments/application/comment-service.js';
 import type { CommentRepository } from './modules/comments/domain/comment.js';
 import { createCommentRouter } from './modules/comments/presentation/comment.routes.js';
+import { getDatabase } from './infrastructure/database/prisma.js';
+import { createBootstrapRouter } from './modules/bootstrap/presentation/bootstrap.routes.js';
 
 export function createApp(
   options: {
@@ -92,6 +97,7 @@ export function createApp(
     ratingRepository?: RatingRepository;
     ratingService?: RatingService;
     commentRepository?: CommentRepository;
+    warmup?: () => Promise<void>;
   } = {},
 ) {
   const app = express();
@@ -102,6 +108,20 @@ export function createApp(
   // Liveness pública: no comprueba todavía Firebase ni PostgreSQL.
   app.get('/api/v1/health', (_request, response) => {
     response.status(200).json({ status: 'ok' });
+  });
+  app.get('/api/v2/warm', async (_request, response) => {
+    try {
+      await (options.warmup ?? defaultWarmup)();
+      response.setHeader('Cache-Control', 'no-store');
+      response.status(204).end();
+    } catch {
+      response.status(503).json({
+        error: {
+          code: 'WARMUP_UNAVAILABLE',
+          message: 'Servicio no disponible',
+        },
+      });
+    }
   });
 
   const verifier = options.tokenVerifier ?? createFirebaseTokenVerifier();
@@ -154,6 +174,10 @@ export function createApp(
 
   const users = new UserService(
     options.userRepository ?? new PrismaUserRepository(),
+  );
+  app.use(
+    '/api/v2/bootstrap',
+    createBootstrapRouter(verifier, users, youtubeLink, accountMusic),
   );
   app.use(
     '/api/v1/playback',
@@ -235,4 +259,8 @@ export function createApp(
   });
   app.use(errorHandler);
   return app;
+}
+
+async function defaultWarmup() {
+  await Promise.all([loadFirebaseAuth(), getDatabase().$queryRaw`SELECT 1`]);
 }

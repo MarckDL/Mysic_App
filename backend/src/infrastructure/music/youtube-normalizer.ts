@@ -55,6 +55,7 @@ function track(
   artistValue: unknown,
   seconds: unknown,
   thumbnails: unknown,
+  metadata: Pick<Track, 'artistId' | 'albumId' | 'albumName'> = {},
 ): Track | null {
   if (typeof sourceId !== 'string' || !youtubeSourceIdPattern.test(sourceId))
     return null;
@@ -67,6 +68,7 @@ function track(
     sourceId,
     title,
     artistName: text(artistValue, 255) ?? 'Artista no disponible',
+    ...metadata,
     durationSeconds: duration(seconds),
     thumbnailUrl: youtubeThumbnail(thumbnails),
   };
@@ -81,12 +83,23 @@ export function normalizeYoutubeSong(value: unknown): Track | null {
         .filter(Boolean)
         .join(', ')
     : null;
+  const firstArtist = Array.isArray(item.artists)
+    ? record(item.artists[0])
+    : {};
+  const album = record(item.album);
   return track(
     item.id,
     item.title,
     artists,
     record(item.duration).seconds,
     item.thumbnails,
+    {
+      ...(text(firstArtist.id, 150)
+        ? { artistId: text(firstArtist.id, 150)! }
+        : {}),
+      ...(text(album.id, 150) ? { albumId: text(album.id, 150)! } : {}),
+      ...(text(album.name, 500) ? { albumName: text(album.name, 500)! } : {}),
+    },
   );
 }
 

@@ -4,6 +4,9 @@ export interface Track {
   sourceId: string;
   title: string;
   artistName: string;
+  artistId?: string;
+  albumId?: string;
+  albumName?: string;
   durationSeconds: number | null;
   thumbnailUrl: string | null;
 }

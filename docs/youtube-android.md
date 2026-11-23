@@ -1,5 +1,8 @@
 # Biblioteca de YouTube en Android
 
+> **Nota de vigencia (22 nov 2026).** Para la app móvil este documento describe el diseño anterior (Firebase, Render, Supabase/PostgreSQL y vinculación con Mysic de escritorio). La arquitectura actual está en [21-arquitectura-movil-ytm.md](21-arquitectura-movil-ytm.md).
+
+
 En el piloto, Biblioteca abre la autorización en el navegador. Al volver, Mysic comprueba el intento con la sesión Firebase que lo inició, confirma el canal y carga sus playlists. Cuenta permite cambiar el canal y desvincularlo. Cuando Android mantiene el navegador abierto, se puede volver a Mysic, tocar **Comprobar vinculación** y confirmar el canal mostrado. Un cambio de canal requiere confirmación expresa. La importación Takeout conserva su entrada propia.
 
 ## Preparar el entorno de prueba

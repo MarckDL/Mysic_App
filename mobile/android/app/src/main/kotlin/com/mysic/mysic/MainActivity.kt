@@ -1,32 +1,64 @@
 package com.mysic.mysic
 
 import android.content.Intent
-import android.os.Bundle
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : AudioServiceActivity() {
-    private val youtubeLink by lazy { YouTubeLinkBridge(this) }
+    private val ytmSession by lazy { YtmSessionStore(this) }
+    private var pendingLogin: MethodChannel.Result? = null
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        youtubeLink.receive(intent)
-        super.onCreate(savedInstanceState)
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode != YTM_LOGIN) {
+            super.onActivityResult(requestCode, resultCode, data)
+            return
+        }
+        val result = pendingLogin ?: return
+        pendingLogin = null
+        val cookie = if (resultCode == RESULT_OK) data?.getStringExtra("cookie") else null
+        if (cookie != null) ytmSession.save(cookie)
+        result.success(cookie)
     }
 
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        youtubeLink.receive(intent)
+    // Lazy: the cache directory only exists once the activity is attached.
+    private val playbackResolver by lazy {
+        DevicePlaybackResolver(java.io.File(cacheDir, "resolved_sources.json"), filesDir)
     }
-
-    private val playbackResolver = DevicePlaybackResolver()
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
-        youtubeLink.attach(messenger)
-        MethodChannel(messenger, DesktopSessionStore.CHANNEL).setMethodCallHandler(DesktopSessionStore(this))
+        // Sesión de YouTube Music: la cookie vive cifrada en el teléfono.
+        MethodChannel(messenger, "com.mysic/ytm").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "login" -> {
+                    if (pendingLogin != null) {
+                        result.error("BUSY", "Ya hay un inicio de sesión abierto", null)
+                    } else {
+                        pendingLogin = result
+                        startActivityForResult(Intent(this, YtmLoginActivity::class.java), YTM_LOGIN)
+                    }
+                }
+                "load" -> result.success(ytmSession.load())
+                "clear" -> {
+                    ytmSession.clear()
+                    android.webkit.CookieManager.getInstance().removeAllCookies { result.success(null) }
+                }
+                else -> result.notImplemented()
+            }
+        }
+        // Estado para el widget de la pantalla de inicio. Se usa el contexto de la aplicación:
+        // el motor puede seguir vivo con la actividad cerrada.
+        val appContext = applicationContext
+        MethodChannel(messenger, "com.mysic/widget").setMethodCallHandler { call, result ->
+            if (call.method == "update") {
+                MysicWidgetProvider.push(appContext, call.arguments as? Map<*, *> ?: emptyMap<Any, Any>())
+                result.success(null)
+            } else {
+                result.notImplemented()
+            }
+        }
         MethodChannel(messenger, "com.mysic/audio_output").setMethodCallHandler { call, result ->
             if (call.method != "open") {
                 result.notImplemented()
@@ -40,27 +72,31 @@ class MainActivity : AudioServiceActivity() {
                 result.success(null)
             }
         }
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.mysic/history").setMethodCallHandler { call, result ->
-            val uid = call.argument<String>("uid")
-            if (uid == null || uid.length > 128) {
-                result.error("INVALID_ACCOUNT", "Cuenta inválida", null)
+        // Compartir un enlace con el menú del sistema.
+        MethodChannel(messenger, "com.mysic/share").setMethodCallHandler { call, result ->
+            val text = call.argument<String>("text")
+            if (call.method != "text") {
+                result.notImplemented()
+            } else if (text.isNullOrBlank()) {
+                result.error("EMPTY", "No hay nada que compartir", null)
             } else {
-                val preferences = getSharedPreferences("history_pending", MODE_PRIVATE)
-                when (call.method) {
-                    "load" -> result.success(preferences.getString(uid, "{}"))
-                    "save" -> {
-                        val data = call.argument<String>("data")
-                        if (data == null || data.length > 262144) result.error("INVALID_DATA", "Cola inválida", null)
-                        else { preferences.edit().putString(uid, data).apply(); result.success(null) }
-                    }
-                    else -> result.notImplemented()
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, text)
+                    call.argument<String>("title")?.let { putExtra(Intent.EXTRA_TITLE, it) }
                 }
+                startActivity(Intent.createChooser(send, null))
+                result.success(null)
             }
         }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             DevicePlaybackResolver.CHANNEL,
         ).setMethodCallHandler(playbackResolver)
+    }
+
+    private companion object {
+        const val YTM_LOGIN = 4711
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
@@ -70,8 +106,9 @@ class MainActivity : AudioServiceActivity() {
         ).setMethodCallHandler(null)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
         MethodChannel(messenger, "com.mysic/audio_output").setMethodCallHandler(null)
-        MethodChannel(messenger, DesktopSessionStore.CHANNEL).setMethodCallHandler(null)
-        youtubeLink.detach()
+        MethodChannel(messenger, "com.mysic/ytm").setMethodCallHandler(null)
+        MethodChannel(messenger, "com.mysic/widget").setMethodCallHandler(null)
+        MethodChannel(messenger, "com.mysic/share").setMethodCallHandler(null)
         playbackResolver.close()
         super.cleanUpFlutterEngine(flutterEngine)
     }

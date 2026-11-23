@@ -7,11 +7,15 @@ class FakeTrackAudioEngine implements TrackAudioEngine {
   final positionEvents = StreamController<Duration>.broadcast(sync: true);
   Completer<void>? pendingLoad;
   bool fail = false;
+
+  /// Si no es null, `load` lanza exactamente esto.
+  Object? failure;
   String? sourceId;
   String? token;
   Uri? lastLicensedAudio;
   TrackAudioReader? lastReader;
   Uri? lastDeviceAudio;
+  int? lastDurationSeconds;
   int plays = 0;
   int stops = 0;
   int disposals = 0;
@@ -46,15 +50,26 @@ class FakeTrackAudioEngine implements TrackAudioEngine {
     Uri? deviceAudio,
     TrackAudioReader? readAudio,
     bool refresh = false,
+    int? durationSeconds,
   }) async {
+    lastDurationSeconds = durationSeconds;
     this.sourceId = sourceId;
     lastLicensedAudio = licensedAudio;
     lastReader = readAudio;
     lastDeviceAudio = deviceAudio;
     this.token = token;
+    if (failure != null) throw failure!;
     if (fail) throw StateError('Unavailable');
     await pendingLoad?.future;
   }
+
+  final warmed = <List<String>>[];
+  final touched = <String>[];
+
+  @override
+  void touch(String sourceId) => touched.add(sourceId);
+  @override
+  void warm(List<String> sourceIds) => warmed.add(sourceIds);
 
   @override
   Future<void> prefetch(String sourceId, String token) async {

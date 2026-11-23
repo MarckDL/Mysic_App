@@ -37,15 +37,7 @@ export class YoutubeLibraryService {
     verifyActivityEpoch = false,
   ): Promise<T> {
     const connections = getDatabase().externalMusicConnection;
-    const current = await connections.findUnique({
-      where: { userId },
-      select: {
-        status: true,
-        channelId: true,
-        generation: true,
-        mysicActivityEpoch: true,
-      },
-    });
+    const current = await connections.findUnique({ where: { userId } });
     if (!current || current.status !== 'linked')
       throw new LinkError(409, 'REAUTHORIZE_YOUTUBE');
     if (
@@ -76,7 +68,12 @@ export class YoutubeLibraryService {
       if (signal.aborted) throw new LinkError(503, 'GOOGLE_UNAVAILABLE');
     };
     checkTime();
-    let access = await this.grants.access(userId, false, current.generation);
+    let access = await this.grants.access(
+      userId,
+      false,
+      current.generation,
+      current,
+    );
     let refreshed = false,
       retries = 0;
     const read = async <T>(operation: (context: ReadContext) => Promise<T>) => {
@@ -89,7 +86,12 @@ export class YoutubeLibraryService {
           if (e.code === 'YOUTUBE_ACCESS_REJECTED') {
             if (refreshed) throw new LinkError(409, 'REAUTHORIZE_YOUTUBE');
             refreshed = true;
-            access = await this.grants.access(userId, true, current.generation);
+            access = await this.grants.access(
+              userId,
+              true,
+              current.generation,
+              current,
+            );
             continue;
           }
           if (e.code !== 'GOOGLE_UNAVAILABLE' || retries >= 2) throw e;

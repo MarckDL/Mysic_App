@@ -77,6 +77,7 @@ export class AccountMusicService extends ChannelMusicService {
     uid: string,
     generation: string,
     recheck = false,
+    knownUserId?: string,
   ): Promise<Access> {
     const key = this.accessKey(uid, generation);
     const pending = this.checkingAccess.get(key);
@@ -87,7 +88,7 @@ export class AccountMusicService extends ChannelMusicService {
     if (recent) return recent;
     const stable = this.verifiedAccess.get(key);
     if (stable && (!recheck || stable.status === 'verified')) return stable;
-    const check = this.checkAccess(uid, generation, key);
+    const check = this.checkAccess(uid, generation, key, knownUserId);
     this.checkingAccess.set(key, check);
     try {
       return await check;
@@ -99,15 +100,16 @@ export class AccountMusicService extends ChannelMusicService {
     uid: string,
     generation: string,
     key: string,
+    knownUserId?: string,
   ): Promise<Access> {
-    const userId = await this.link.owner(uid);
+    const userId = knownUserId ?? (await this.link.owner(uid));
     const state = await this.library.authorized(
       userId,
       generation,
       AbortSignal.timeout(12_000),
       async (_channel, _binding, read): Promise<Access> => {
         try {
-          const proof = await read((ctx) => this.catalog.verify(ctx));
+          const proof = await read((ctx) => this.catalog.verify(ctx, key));
           if (proof === 'personalHome')
             return this.availableCollections(read, ['home']);
           if (proof === 'privatePlaylists')
@@ -172,10 +174,16 @@ export class AccountMusicService extends ChannelMusicService {
     };
   }
   override async connection(uid: string, recheckMusic = false) {
-    const state = await super.connection(uid);
+    const userId = await this.link.owner(uid);
+    const state = await this.connectionFor(userId);
     if (state.status !== 'linked' || !state.generation)
       return { ...state, personalization: 'notLinked', capabilities: [] };
-    const access = await this.access(uid, state.generation, recheckMusic);
+    const access = await this.access(
+      uid,
+      state.generation,
+      recheckMusic,
+      userId,
+    );
     return {
       ...state,
       personalization: access.status,
@@ -301,6 +309,9 @@ export class AccountMusicService extends ChannelMusicService {
             id: track.sourceId,
             title: track.title,
             artist: track.artistName,
+            artistId: track.artistId,
+            albumId: track.albumId,
+            albumName: track.albumName,
             durationSeconds: track.durationSeconds ?? 0,
             thumbnailUrl: track.thumbnailUrl ?? undefined,
             playback: 'native',
@@ -367,12 +378,22 @@ export class AccountMusicService extends ChannelMusicService {
           request.surface === 'playlist' || request.surface === 'album';
         while (items.length < page.size) {
           if (!state.rows.length) {
+            // Los tokens de Home forman una cadena opaca: no se pueden adelantar en paralelo.
+            // Una petición móvil consume como máximo un lote y deja el siguiente en pendingPages.
+            if (request.surface === 'home' && calls >= 1) break;
             if ((state.started && !state.next) || calls >= 6) break;
             const batch =
               request.surface === 'search'
                 ? await this.searchSongs(request.query ?? '')
                 : await read((ctx) =>
-                    this.catalog.read(ctx, request, state.next),
+                    this.catalog.read(
+                      ctx,
+                      request,
+                      state.next,
+                      request.surface === 'home'
+                        ? this.accessKey(uid, generation)
+                        : undefined,
+                    ),
                   );
             calls++;
             if (batch.next && state.checkedTokens.includes(batch.next))

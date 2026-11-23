@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mysic_widget_description">Controla lo que suena en Mysic: pausa, canciones y Me gusta.</string>
+    <string name="mysic_widget_idle_title">Mysic</string>
+    <string name="mysic_widget_idle_subtitle">Toca para elegir música</string>
+    <string name="mysic_widget_cover">Portada de la canción</string>
+    <string name="mysic_widget_like">Me gusta</string>
+    <string name="mysic_widget_previous">Anterior</string>
+    <string name="mysic_widget_play_pause">Reproducir o pausar</string>
+    <string name="mysic_widget_next">Siguiente</string>
+</resources>

@@ -27,6 +27,50 @@ describe('Firebase TokenVerifier', () => {
     expect(verifyIdToken).toHaveBeenCalledWith('id-token', true);
   });
 
+  it('reutiliza 90 segundos una identidad por hash y comparte verificaciones simultáneas', async () => {
+    let now = 1_000;
+    const verifyIdToken = vi.fn().mockResolvedValue({
+      uid: 'firebase-a',
+      firebase: { sign_in_provider: 'google.com' },
+    });
+    const verifier = createFirebaseTokenVerifier(
+      async () => ({ verifyIdToken }),
+      { ttlMs: 90_000, now: () => now },
+    );
+
+    await Promise.all([
+      verifier.verify('same-token'),
+      verifier.verify('same-token'),
+    ]);
+    await verifier.verify('same-token');
+    expect(verifyIdToken).toHaveBeenCalledTimes(1);
+
+    now += 90_001;
+    await verifier.verify('same-token');
+    expect(verifyIdToken).toHaveBeenCalledTimes(2);
+  });
+
+  it('no guarda fallos de verificación en caché', async () => {
+    const verifyIdToken = vi
+      .fn()
+      .mockRejectedValueOnce({ code: 'auth/id-token-revoked' })
+      .mockResolvedValueOnce({
+        uid: 'firebase-a',
+        firebase: { sign_in_provider: 'google.com' },
+      });
+    const verifier = createFirebaseTokenVerifier(async () => ({
+      verifyIdToken,
+    }));
+
+    await expect(verifier.verify('token')).rejects.toBeInstanceOf(
+      InvalidTokenError,
+    );
+    await expect(verifier.verify('token')).resolves.toMatchObject({
+      firebaseUid: 'firebase-a',
+    });
+    expect(verifyIdToken).toHaveBeenCalledTimes(2);
+  });
+
   it('solo conserva claims de perfil válidos y fotos HTTPS', async () => {
     const verifier = createFirebaseTokenVerifier(async () => ({
       verifyIdToken: async () => ({

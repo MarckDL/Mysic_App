@@ -1,30 +1,27 @@
 import 'package:audio_service/audio_service.dart';
 import 'features/playback/data/mysic_audio_handler.dart';
 import 'features/playback/application/playback_providers.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/mysic_app.dart';
-import 'core/auth/firebase_client_config.dart';
+import 'core/network/offline_mode.dart';
+import 'features/downloads/data/download_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  var firebaseReady = false;
-  if (!kIsWeb &&
-      defaultTargetPlatform == TargetPlatform.android &&
-      FirebaseClientConfig.isConfigured) {
-    try {
-      await Firebase.initializeApp(options: FirebaseClientConfig.options);
-      firebaseReady = true;
-    } catch (_) {
-      // Sin configuración válida no se permite entrar con una identidad local.
-      firebaseReady = false;
-    }
-  }
+  // Portadas decodificadas en memoria: 160 MB (el valor por defecto es 100 MB).
+  // Las descargas viven además en la caché de disco.
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 160 << 20;
+  // «Solo canciones descargadas» y el índice de descargas se leen antes de
+  // abrir nada: así ninguna conexión sale con el modo activo. Corre a la vez
+  // que el servicio de audio.
+  final restored = Future.wait([
+    OfflineMode.instance.restoreManual(),
+    DownloadStore.instance.load(),
+  ]);
   MysicAudioHandler? handler;
-  if (firebaseReady) {
+  {
     try {
       handler = MysicAudioHandler();
       await AudioService.init(
@@ -52,10 +49,11 @@ Future<void> main() async {
       return;
     }
   }
+  await restored;
   runApp(
     ProviderScope(
       overrides: [mediaHandlerProvider.overrideWithValue(handler)],
-      child: MysicApp(firebaseReady: firebaseReady),
+      child: const MysicApp(),
     ),
   );
 }

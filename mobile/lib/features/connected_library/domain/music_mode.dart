@@ -18,6 +18,10 @@ enum MusicSurface {
   artists,
 }
 
+/// Enlaces de una canción a su artista y a su álbum, con el nombre del
+/// álbum cuando el catálogo lo da.
+typedef TrackLinks = ({String? artistId, String? albumId, String? album});
+
 enum MusicLinkStatus { unavailable, unlinked, linked, expired }
 
 class MusicAccount {
@@ -93,31 +97,46 @@ class MusicConnection {
   bool get serverPending => provider == 'serverPending';
   bool get isPreview => provider == 'preview';
   bool get isDirect => provider == 'youtubeOAuth';
-  bool get isDesktop => provider == 'mysicDesktop';
-  bool get nativeCatalog => isDirect || isDesktop;
+  bool get nativeCatalog => isDirect;
+
+  /// La misma conexión con otras capacidades.
+  MusicConnection copyWith({Set<String>? capabilities}) => MusicConnection(
+    status: status,
+    provider: provider,
+    libraryId: libraryId,
+    personalization: personalization,
+    activityEpoch: activityEpoch,
+    accounts: accounts,
+    account: account,
+    generation: generation,
+    capabilities: capabilities ?? this.capabilities,
+  );
 }
 
 sealed class MusicItem {
   const MusicItem(this.id, this.title, {this.shelfTitle});
 
-  factory MusicItem.fromJson(Map<String, dynamic> data) =>
-      switch (data['kind']) {
-        'track' => MusicTrack.fromJson(data),
-        'playlist' => MusicPlaylist.fromJson(data),
-        'album' => MusicAlbum(
-          data['id'] as String,
-          data['title'] as String,
-          thumbnailUrl: data['thumbnailUrl'] as String?,
-          shelfTitle: data['shelfTitle'] as String?,
-        ),
-        'artist' => MusicArtist(
-          data['id'] as String,
-          data['title'] as String,
-          thumbnailUrl: data['thumbnailUrl'] as String?,
-          shelfTitle: data['shelfTitle'] as String?,
-        ),
-        _ => throw const FormatException('Elemento musical desconocido.'),
-      };
+  factory MusicItem.fromJson(
+    Map<String, dynamic> data,
+  ) => switch (data['kind']) {
+    'track' => MusicTrack.fromJson(data),
+    'playlist' => MusicPlaylist.fromJson(data),
+    'album' => MusicAlbum(
+      data['id'] as String,
+      data['title'] as String,
+      thumbnailUrl: data['thumbnailUrl'] as String?,
+      detail: data['subtitle'] is String ? data['subtitle'] as String : null,
+      shelfTitle: data['shelfTitle'] as String?,
+    ),
+    'artist' => MusicArtist(
+      data['id'] as String,
+      data['title'] as String,
+      thumbnailUrl: data['thumbnailUrl'] as String?,
+      detail: data['subtitle'] is String ? data['subtitle'] as String : null,
+      shelfTitle: data['shelfTitle'] as String?,
+    ),
+    _ => throw const FormatException('Elemento musical desconocido.'),
+  };
 
   final String id;
   final String title;
@@ -136,8 +155,11 @@ class MusicTrack extends MusicItem {
     this.audioUri,
     this.nativePlayback = false,
     this.artistId,
+    this.albumId,
+    this.albumName,
     this.playCount,
     this.thumbnailUrl,
+    this.entryId,
   });
 
   factory MusicTrack.fromJson(Map<String, dynamic> data) => MusicTrack(
@@ -157,6 +179,14 @@ class MusicTrack extends MusicItem {
             ).hasMatch(data['artistId'] as String)
         ? data['artistId'] as String
         : null,
+    albumId: _albumId(data['albumId']),
+    // El nombre solo acompaña a un álbum que se puede abrir.
+    albumName:
+        _albumId(data['albumId']) != null &&
+            data['albumName'] is String &&
+            (data['albumName'] as String).trim().isNotEmpty
+        ? (data['albumName'] as String).trim()
+        : null,
     playCount: data['playCount'] as int?,
     audioUri:
         data['playback'] == 'licensed' &&
@@ -165,7 +195,12 @@ class MusicTrack extends MusicItem {
         : null,
     thumbnailUrl: data['thumbnailUrl'] as String?,
     shelfTitle: data['shelfTitle'] as String?,
+    entryId: data['entryId'] is String ? data['entryId'] as String : null,
   );
+
+  /// La entrada de esta canción en la playlist de la que salió; hace falta
+  /// para quitarla de ella.
+  final String? entryId;
 
   final String artist;
   final int durationSeconds;
@@ -174,6 +209,17 @@ class MusicTrack extends MusicItem {
   final DateTime? listenedAt;
   final Uri? audioUri;
   final String? artistId;
+
+  /// Álbum al que pertenece (id de exploración `MPREb_…`), si se conoce.
+  final String? albumId;
+
+  /// Nombre de ese álbum, cuando el servidor lo envía con la canción.
+  final String? albumName;
+
+  static String? _albumId(Object? value) =>
+      value is String && RegExp(r'^MPREb_[A-Za-z0-9_-]{6,60}$').hasMatch(value)
+      ? value
+      : null;
   final int? playCount;
   bool get canPlayInMysic => nativePlayback || audioUri != null;
   static Uri? _licensedUri(Object? value) {
@@ -201,6 +247,9 @@ class MusicTrack extends MusicItem {
     thumbnailUrl: thumbnailUrl,
     licensedAudio: audioUri,
     musicAccountTrack: nativePlayback,
+    artistId: artistId,
+    albumId: albumId,
+    albumName: albumName,
     deviceAudio: deviceAudio,
     readAudio: readAudio,
   );
@@ -232,9 +281,61 @@ class MusicAlbum extends MusicItem {
     super.id,
     super.title, {
     this.thumbnailUrl,
+    this.detail,
+    this.artist,
     super.shelfTitle,
   });
   final String? thumbnailUrl;
+
+  /// Artista del álbum; solo lo traen los resultados de búsqueda.
+  final String? artist;
+
+  /// Tipo y año tal como los da el catálogo, p. ej. "Álbum · 2024".
+  final String? detail;
+}
+
+/// Página pública de un artista: cabecera, canciones destacadas y discografía.
+class ArtistProfile {
+  const ArtistProfile({
+    required this.id,
+    required this.name,
+    required this.topSongs,
+    required this.shelves,
+    this.audience,
+    this.description,
+    this.thumbnailUrl,
+  });
+
+  final String id;
+  final String name;
+  final String? audience;
+  final String? description;
+  final String? thumbnailUrl;
+  final List<MusicTrack> topSongs;
+  final List<({String title, List<MusicItem> items})> shelves;
+}
+
+/// Página pública de un álbum: cabecera y pistas en orden.
+class AlbumDetail {
+  const AlbumDetail({
+    required this.id,
+    required this.title,
+    required this.artist,
+    required this.tracks,
+    this.artistId,
+    this.year,
+    this.info,
+    this.thumbnailUrl,
+  });
+
+  final String id;
+  final String title;
+  final String artist;
+  final String? artistId;
+  final String? year;
+  final String? info;
+  final String? thumbnailUrl;
+  final List<MusicTrack> tracks;
 }
 
 class MusicArtist extends MusicItem {
@@ -242,9 +343,13 @@ class MusicArtist extends MusicItem {
     super.id,
     super.title, {
     this.thumbnailUrl,
+    this.detail,
     super.shelfTitle,
   });
   final String? thumbnailUrl;
+
+  /// Oyentes o suscriptores tal como los entrega el catálogo.
+  final String? detail;
 }
 
 class MusicPage {
@@ -254,6 +359,7 @@ class MusicPage {
     this.playlist,
     this.excludedCount, [
     this.title,
+    this.editable = false,
   ]);
 
   factory MusicPage.fromJson(Map<String, dynamic> data) => MusicPage(
@@ -267,6 +373,7 @@ class MusicPage {
         : null,
     data['excludedCount'] as int? ?? 0,
     data['title'] as String?,
+    data['editable'] == true,
   );
 
   final List<MusicItem> items;
@@ -274,4 +381,7 @@ class MusicPage {
   final MusicPlaylist? playlist;
   final int excludedCount;
   final String? title;
+
+  /// La playlist es de la cuenta (se puede editar y eliminar).
+  final bool editable;
 }

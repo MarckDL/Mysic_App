@@ -9,7 +9,11 @@ const song = {
   id: 'abcdefghijk',
   item_type: 'song',
   title: '  Canción de prueba  ',
-  artists: [{ name: 'Artista A' }, { name: 'Artista B' }],
+  artists: [
+    { id: 'UCartist0000000000000001', name: 'Artista A' },
+    { name: 'Artista B' },
+  ],
+  album: { id: 'MPREb_album', name: 'Disco' },
   duration: { seconds: 215 },
   thumbnails: [{ url: 'https://i.ytimg.com/vi/abcdefghijk/default.jpg' }],
   privateField: 'never-return-this',
@@ -23,6 +27,9 @@ describe('normalización del catálogo YouTube', () => {
       sourceId: 'abcdefghijk',
       title: 'Canción de prueba',
       artistName: 'Artista A, Artista B',
+      artistId: 'UCartist0000000000000001',
+      albumId: 'MPREb_album',
+      albumName: 'Disco',
       durationSeconds: 215,
       thumbnailUrl: song.thumbnails[0]?.url,
     });

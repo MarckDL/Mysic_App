@@ -21,7 +21,7 @@ void main() {
     });
     final resolver = AndroidPlaybackSourceResolver(channel: channel);
 
-    final source = await resolver.resolve('q0Xrs0nfJ0c', 'firebase-token');
+    final source = await resolver.resolve('q0Xrs0nfJ0c', 'token');
 
     expect(source.uri.host, 'r1.googlevideo.com');
     expect(source.headers, isEmpty);
@@ -38,7 +38,7 @@ void main() {
     final resolver = AndroidPlaybackSourceResolver(channel: channel);
 
     await expectLater(
-      resolver.resolve('q0Xrs0nfJ0c', 'firebase-token'),
+      resolver.resolve('q0Xrs0nfJ0c', 'token'),
       throwsStateError,
     );
     await resolver.dispose();
@@ -69,12 +69,20 @@ void main() {
       final resolver = AndroidPlaybackSourceResolver(channel: channel);
 
       await resolver.warmUp();
+      resolver.touch('q0Xrs0nfJ0c');
+      resolver.touch(
+        'invalido',
+      ); // un identificador inválido no llega al nativo
       resolver.cancelPrefetch();
       await Future<void>.delayed(Duration.zero);
       await resolver.clear();
       await resolver.dispose();
 
-      expect(methods, containsAll(['warmUp', 'cancelPrefetch', 'clear']));
+      expect(
+        methods,
+        containsAll(['warmUp', 'touch', 'cancelPrefetch', 'clear']),
+      );
+      expect(methods.where((m) => m == 'touch'), hasLength(1));
     },
   );
 }

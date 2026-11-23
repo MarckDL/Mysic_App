@@ -57,7 +57,7 @@ class LoginScreen extends ConsumerWidget {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                'Encuentra música y guarda tus canciones favoritas.',
+                                'Tu YouTube Music, rápido y sin intermediarios.',
                                 style: theme.textTheme.bodyLarge?.copyWith(
                                   color: colors.onPrimaryContainer,
                                 ),
@@ -90,7 +90,7 @@ class LoginScreen extends ConsumerWidget {
                         label: Text(
                           action.isLoading
                               ? 'Iniciando sesión…'
-                              : 'Continuar con Google',
+                              : 'Iniciar sesión con YouTube Music',
                         ),
                       ),
                       if (action.hasError) ...[

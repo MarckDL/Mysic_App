@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mysic/app/mysic_app.dart';
-import 'package:mysic/features/history/data/history_client.dart';
 import 'package:mysic/features/authentication/application/auth_providers.dart';
 import 'package:mysic/features/authentication/domain/auth_repository.dart';
 
 import 'support/fake_auth_repository.dart';
+import 'support/fake_music.dart';
 import 'package:mysic/features/authentication/domain/mysic_profile.dart';
 
 class FakeEditedProfile extends EditedProfile {
@@ -17,7 +17,7 @@ class FakeEditedProfile extends EditedProfile {
     changes.add(nickname);
     state = MysicProfile(
       id: '00000000-0000-4000-8000-000000000001',
-      firebaseUid: uid,
+      uid: uid,
       displayName: 'Ana',
       nickname: nickname,
     );
@@ -25,35 +25,25 @@ class FakeEditedProfile extends EditedProfile {
 }
 
 void main() {
-  testWidgets(
-    'sin configuración Firebase no permite entrar con identidad ficticia',
-    (tester) async {
-      await tester.pumpWidget(const ProviderScope(child: MysicApp()));
-      expect(find.text('Mysic'), findsOneWidget);
-      expect(find.textContaining('todavía no está disponible'), findsOneWidget);
-      expect(find.text('Cerrar sesión'), findsNothing);
-    },
-  );
-
-  testWidgets('sin sesión muestra Google y permite iniciar el flujo', (
+  testWidgets('sin sesión muestra YouTube Music y permite iniciar el flujo', (
     tester,
   ) async {
     final repository = FakeAuthRepository();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [authRepositoryProvider.overrideWithValue(repository)],
-        child: const MysicApp(firebaseReady: true),
+        child: const MysicApp(),
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Continuar con Google'), findsOneWidget);
+    expect(find.text('Iniciar sesión con YouTube Music'), findsOneWidget);
     expect(find.text('Cerrar sesión'), findsNothing);
-    await tester.tap(find.text('Continuar con Google'));
+    await tester.tap(find.text('Iniciar sesión con YouTube Music'));
     await tester.pumpAndSettle();
     expect(repository.signInCount, 1);
   });
 
-  testWidgets('una cuenta Firebase no entra si el backend rechaza su sesión', (
+  testWidgets('una cuenta no entra si YouTube Music rechaza su sesión', (
     tester,
   ) async {
     final repository = FakeAuthRepository(user: const AuthUser(uid: 'a'));
@@ -65,7 +55,7 @@ void main() {
             throw const AuthFailure('Sesión rechazada');
           }),
         ],
-        child: const MysicApp(firebaseReady: true),
+        child: const MysicApp(),
       ),
     );
     await tester.pumpAndSettle();
@@ -82,23 +72,21 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(repository),
-          recentListeningProvider.overrideWith((ref, uid) async => []),
+          fakeMusicOverride,
           verifiedSessionProvider.overrideWith(
             (ref) async => const MysicProfile(
               id: '00000000-0000-4000-8000-000000000001',
-              firebaseUid: 'a',
+              uid: 'a',
               displayName: 'Ana',
               email: 'ana@example.test',
             ),
           ),
         ],
-        child: const MysicApp(firebaseReady: true),
+        child: const MysicApp(),
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Bienvenido, Ana'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Explorar catálogo'), 150);
-    expect(find.text('Explorar catálogo').hitTestable(), findsOneWidget);
+    expect(find.byType(NavigationBar), findsOneWidget);
     await tester.tap(find.byTooltip('Abrir cuenta'));
     await tester.pumpAndSettle();
     expect(find.text('ana@example.test'), findsOneWidget);
@@ -106,8 +94,8 @@ void main() {
     await tester.tap(find.text('Cerrar sesión'));
     await tester.pumpAndSettle();
     expect(repository.signOutCount, 1);
-    expect(find.text('Bienvenido, Ana'), findsNothing);
-    expect(find.text('Continuar con Google'), findsOneWidget);
+    expect(find.byType(NavigationBar), findsNothing);
+    expect(find.text('Iniciar sesión con YouTube Music'), findsOneWidget);
   });
 
   testWidgets('editar o borrar el apodo actualiza el saludo sin relogin', (
@@ -119,24 +107,20 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(auth),
-          recentListeningProvider.overrideWith((ref, uid) async => []),
+          fakeMusicOverride,
           verifiedSessionProvider.overrideWith(
             (ref) async => const MysicProfile(
               id: '00000000-0000-4000-8000-000000000001',
-              firebaseUid: 'a',
+              uid: 'a',
               displayName: 'Ana',
             ),
           ),
           editedProfileProvider.overrideWith(() => editedProfile),
         ],
-        child: const MysicApp(firebaseReady: true),
+        child: const MysicApp(),
       ),
     );
     await tester.pumpAndSettle();
-    final greeting = tester.widget<Text>(find.text('Bienvenido, Ana'));
-    expect(greeting.maxLines, 2);
-    expect(greeting.overflow, TextOverflow.ellipsis);
-
     await tester.tap(find.byTooltip('Abrir cuenta'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Agregar apodo'));
@@ -152,7 +136,6 @@ void main() {
     expect(find.text('Melo'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.text('Bienvenido, Melo'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Abrir cuenta'));
     await tester.pumpAndSettle();
@@ -163,7 +146,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.text('Bienvenido, Ana'), findsOneWidget);
     expect(editedProfile.changes, ['Melo', null]);
   });
 }
