@@ -8,6 +8,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/network/offline_mode.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../playback/application/playback_providers.dart';
+import '../../connected_library/presentation/library_screen.dart'
+    show LibraryCoverTile;
 import '../../playback/presentation/player_widgets.dart';
 import '../../search/presentation/catalog_widgets.dart';
 import '../application/download_sort_provider.dart';
@@ -251,6 +253,18 @@ class _DownloadsListState extends ConsumerState<DownloadsList> {
                   ],
                 ),
               ),
+            // Los álbumes y playlists descargados enteros, también sin
+            // internet.
+            if (_store.collections.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Text(
+                  'Álbumes y playlists',
+                  style: theme.textTheme.titleSmall,
+                ),
+              ),
+              _collections(_store.collections),
+            ],
             if (all.length > 5)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
@@ -322,6 +336,72 @@ class _DownloadsListState extends ConsumerState<DownloadsList> {
         );
       },
     );
+  }
+
+  /// La cuadrícula de colecciones: tocar una hace sonar sus canciones
+  /// descargadas; mantener pulsada ofrece quitar su descarga.
+  Widget _collections(List<DownloadedCollection> collections) => LayoutBuilder(
+    builder: (context, box) {
+      final columns = (box.maxWidth / 170).round().clamp(3, 12);
+      final cell = (box.maxWidth - 12) / columns;
+      return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: columns,
+          mainAxisExtent:
+              (cell - 20) + 16 + MediaQuery.textScalerOf(context).scale(58),
+        ),
+        itemCount: collections.length,
+        itemBuilder: (context, index) {
+          final collection = collections[index];
+          final have = _store.tracksOf(collection).length;
+          final total = collection.trackIds.length;
+          final kind = collection.album ? 'Álbum' : 'Playlist';
+          return LibraryCoverTile(
+            key: ValueKey('downloaded:${collection.id}'),
+            title: collection.title,
+            subtitle: have < total
+                ? '$kind · $have de $total'
+                : collection.album && collection.subtitle != null
+                ? '$kind · ${collection.subtitle}'
+                : kind,
+            url: collection.thumbnailUrl,
+            icon: collection.album ? Icons.album : Icons.queue_music,
+            onTap: () {
+              final tracks = _store.tracksOf(collection);
+              if (tracks.isNotEmpty) unawaited(_play(tracks, 0));
+            },
+            onLongPress: () => unawaited(_removeCollection(collection)),
+          );
+        },
+      );
+    },
+  );
+
+  Future<void> _removeCollection(DownloadedCollection collection) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(collection.title),
+        content: const Text(
+          '¿Quitar la descarga? Las canciones que no guarde otro álbum o '
+          'playlist dejarán de estar en el teléfono.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Quitar descarga'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await _store.releaseCollection(collection.id);
   }
 
   Future<void> _remove(DownloadedTrack track) async {

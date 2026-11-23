@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/network/offline_mode.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../authentication/presentation/account_screen.dart'
     show AccountAction;
@@ -787,6 +788,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     builder: (context, _) {
       final sort = ref.watch(downloadSortProvider);
       final tracks = sort.apply(_store.tracks);
+      final collections = _store.collections;
       final pending = _store.pending;
       final failures = _store.failures;
       final bytes = tracks.fold<int>(0, (sum, track) => sum + track.bytes);
@@ -849,6 +851,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
               ],
             ),
           ),
+          // Los álbumes y playlists descargados enteros (Limusic:
+          // `GridLibraryPlaylist` con `getAllDownloadedPlaylist`).
+          if (collections.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            LibrarySectionHeader(title: 'Álbumes y playlists'),
+            _collectionsGrid(collections),
+          ],
           const SizedBox(height: 8),
           if (tracks.isNotEmpty)
             // El orden de la lista, como la «ActionsPill» de Limusic.
@@ -893,6 +902,103 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       );
     },
   );
+
+  /// La cuadrícula de colecciones descargadas: cada una con su portada, su
+  /// nombre y cuántas de sus canciones están ya en el teléfono.
+  Widget _collectionsGrid(List<DownloadedCollection> collections) =>
+      LayoutBuilder(
+        builder: (context, box) {
+          final columns = (box.maxWidth / 170).round().clamp(3, 12);
+          final cell = (box.maxWidth - 12) / columns;
+          return GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              mainAxisExtent:
+                  (cell - 20) + 16 + MediaQuery.textScalerOf(context).scale(58),
+            ),
+            itemCount: collections.length,
+            itemBuilder: (context, index) {
+              final collection = collections[index];
+              final have = _store.tracksOf(collection).length;
+              final total = collection.trackIds.length;
+              final kind = collection.album ? 'Álbum' : 'Playlist';
+              return LibraryCoverTile(
+                key: ValueKey('downloaded:${collection.id}'),
+                title: collection.title,
+                // Mientras bajan, cuántas llegaron; después, el artista.
+                subtitle: have < total
+                    ? '$kind · $have de $total'
+                    : collection.album && collection.subtitle != null
+                    ? '$kind · ${collection.subtitle}'
+                    : kind,
+                url: collection.thumbnailUrl,
+                icon: collection.album ? Icons.album : Icons.queue_music,
+                onTap: () => _openCollection(collection),
+                onLongPress: () => _holdCollection(collection),
+              );
+            },
+          );
+        },
+      );
+
+  MusicItem _itemOf(DownloadedCollection collection) => collection.album
+      ? MusicAlbum(
+          collection.id,
+          collection.title,
+          thumbnailUrl: collection.thumbnailUrl,
+          artist: collection.subtitle,
+        )
+      : MusicPlaylist(
+          collection.id,
+          collection.title,
+          false,
+          thumbnailUrl: collection.thumbnailUrl,
+        );
+
+  /// Con internet se abre su página; sin ella, suenan sus canciones
+  /// descargadas.
+  void _openCollection(DownloadedCollection collection) {
+    if (OfflineMode.instance.active) {
+      final tracks = _store.tracksOf(collection);
+      if (tracks.isNotEmpty) unawaited(_playDownloads(tracks, 0));
+      return;
+    }
+    _open(_itemOf(collection));
+  }
+
+  void _holdCollection(DownloadedCollection collection) {
+    if (!OfflineMode.instance.active) {
+      _hold(_itemOf(collection));
+      return;
+    }
+    unawaited(() async {
+      final remove = await showDialog<bool>(
+        context: context,
+        useRootNavigator: true,
+        builder: (context) => AlertDialog(
+          title: Text(collection.title),
+          content: const Text(
+            '¿Quitar la descarga? Las canciones que no guarde otro álbum o '
+            'playlist dejarán de estar en el teléfono.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Quitar descarga'),
+            ),
+          ],
+        ),
+      );
+      if (remove == true) await _store.releaseCollection(collection.id);
+    }());
+  }
 
   Future<void> _playDownloads(List<DownloadedTrack> tracks, int index) async {
     final dir = await _store.directory();

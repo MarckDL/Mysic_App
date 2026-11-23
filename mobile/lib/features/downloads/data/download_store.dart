@@ -10,6 +10,9 @@ import '../../../core/network/offline_mode.dart';
 import '../../playback/data/audio_disk_cache.dart';
 import '../../playback/domain/playback_source_resolver.dart';
 import '../../search/domain/catalog_track.dart';
+import 'downloaded_collection.dart';
+
+export 'downloaded_collection.dart';
 
 /// Una canción guardada en el teléfono para oírla sin internet.
 class DownloadedTrack {
@@ -145,6 +148,75 @@ class DownloadStore extends ChangeNotifier {
   bool isDownloaded(String sourceId) => _tracks.containsKey(sourceId);
   bool isBusy(String sourceId) => _pending.containsKey(sourceId);
 
+  final _collections = <String, DownloadedCollection>{};
+
+  /// Álbumes y playlists descargados, del más reciente al más antiguo.
+  List<DownloadedCollection> get collections =>
+      _collections.values.toList()
+        ..sort((a, b) => b.savedAt.compareTo(a.savedAt));
+
+  /// El álbum o la playlist [id], si se descargó entero.
+  DownloadedCollection? collection(String id) => _collections[id];
+
+  /// Las canciones descargadas de [collection], en su orden.
+  List<DownloadedTrack> tracksOf(DownloadedCollection collection) => [
+    for (final id in collection.trackIds) ?_tracks[id],
+  ];
+
+  /// Recuerda [collection] como descargada (o la actualiza, conservando
+  /// cuándo se pidió). Sus canciones se encolan aparte.
+  Future<void> keepCollection(DownloadedCollection collection) async {
+    await load();
+    final known = _collections[collection.id];
+    _collections[collection.id] = known == null
+        ? collection
+        : DownloadedCollection(
+            id: collection.id,
+            album: collection.album,
+            title: collection.title,
+            subtitle: collection.subtitle ?? known.subtitle,
+            thumbnailUrl: collection.thumbnailUrl ?? known.thumbnailUrl,
+            trackIds: collection.trackIds,
+            savedAt: known.savedAt,
+          );
+    notifyListeners();
+    await _writeCollections();
+  }
+
+  /// Deja de guardar la colección [id] y quita sus canciones, salvo las que
+  /// también guarda otra colección (Limusic: `releaseDownloads`). Devuelve
+  /// cuántas canciones se quitaron.
+  Future<int> releaseCollection(String id) async {
+    await load();
+    final gone = _collections.remove(id);
+    if (gone == null) return 0;
+    final kept = {for (final other in _collections.values) ...other.trackIds};
+    var removed = 0;
+    for (final track in gone.trackIds) {
+      if (kept.contains(track) || !_tracks.containsKey(track)) continue;
+      await remove(track);
+      removed++;
+    }
+    notifyListeners();
+    await _writeCollections();
+    return removed;
+  }
+
+  Future<void> _writeCollections() async {
+    final dir = await _directory();
+    if (dir == null) return;
+    try {
+      final temp = _file(dir, 'collections.json.tmp');
+      await temp.writeAsString(
+        jsonEncode([for (final c in _collections.values) c.toJson()]),
+        flush: true,
+      );
+      await temp.rename(_file(dir, 'collections.json').path);
+    } on Object {
+      // Vale para esta sesión; se corrige en la próxima escritura.
+    }
+  }
+
   /// Pone el álbum [albumId] / [albumName] a las descargas de [sourceIds] que
   /// no lo tienen (las bajadas desde la página del álbum antes de que se
   /// guardara), para poder ordenarlas por álbum. Devuelve cuántas cambió.
@@ -244,6 +316,16 @@ class DownloadStore extends ChangeNotifier {
             if (await audio.exists() && await audio.length() > 0) {
               _tracks[track.id] = track;
             }
+          }
+        }
+      }
+      final saved = _file(dir, 'collections.json');
+      if (await saved.exists()) {
+        final data = jsonDecode(await saved.readAsString());
+        if (data is List) {
+          for (final entry in data) {
+            final collection = DownloadedCollection.fromJson(entry);
+            if (collection != null) _collections[collection.id] = collection;
           }
         }
       }
@@ -437,6 +519,9 @@ class DownloadStore extends ChangeNotifier {
     for (final id in _tracks.keys.toList()) {
       await remove(id);
     }
+    _collections.clear();
+    await _writeCollections();
+    notifyListeners();
   }
 
   /// Bytes que ocupan las descargas.

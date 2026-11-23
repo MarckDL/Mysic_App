@@ -1032,22 +1032,30 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     );
 
     // Una cuadrícula de tarjetas, con el alto que piden su carátula y su texto.
+    // Con [columns] null, las mismas columnas que la cuadrícula de álbumes y
+    // playlists de la Biblioteca (`LibraryGridCells`): las que dejan la
+    // portada cerca de 150 dp, nunca menos de tres.
     Widget grid<T extends MusicItem>(
       List<T> items,
-      int columns,
+      int? columns,
       double Function(double cell) extent,
       Widget Function(T item) card,
     ) => SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 6),
       sliver: SliverLayoutBuilder(
-        builder: (context, box) => SliverGrid.builder(
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columns,
-            mainAxisExtent: extent(box.crossAxisExtent / columns),
-          ),
-          itemCount: items.length,
-          itemBuilder: (context, index) => card(items[index]),
-        ),
+        builder: (context, box) {
+          final count =
+              columns ??
+              ((box.crossAxisExtent + 12) / 170).round().clamp(3, 12);
+          return SliverGrid.builder(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: count,
+              mainAxisExtent: extent(box.crossAxisExtent / count),
+            ),
+            itemCount: items.length,
+            itemBuilder: (context, index) => card(items[index]),
+          );
+        },
       ),
     );
 
@@ -1060,9 +1068,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       case SearchKind.videos:
         return [rows(results.videos, 'videos')];
       case SearchKind.albums:
-        return [grid(results.albums, 2, coverExtent, albumCard)];
+        return [grid(results.albums, null, coverExtent, albumCard)];
       case SearchKind.playlists:
-        return [grid(results.playlists, 2, coverExtent, playlistCard)];
+        return [grid(results.playlists, null, coverExtent, playlistCard)];
       case SearchKind.artists:
         return [grid(results.artists, 3, artistExtent, artistCard)];
       case SearchKind.all:

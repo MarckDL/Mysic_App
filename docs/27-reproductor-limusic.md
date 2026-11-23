@@ -81,6 +81,21 @@ Medido en el teléfono con canciones nunca vistas: 250 ms después de pulsar
 Siguiente, la portada nueva, sus dos vecinas y el color del fondo ya estaban
 pintados.
 
+## 3 ter. Desvanecido al pausar
+
+Al pausar el usuario una canción que suena, el volumen baja hasta cero en medio
+segundo (10 pasos de 50 ms) y entonces se pausa; el icono cambia al instante. Al
+reanudar suena con el volumen entero. Reanudar, cargar otra canción o detener
+durante el desvanecido lo cancela y devuelve el volumen.
+
+Solo lo usa la pausa pedida por el usuario (botón, notificación, auriculares,
+temporizador de apagado). Las interrupciones (una llamada, desconectar los
+auriculares) pausan al instante. Es la interfaz `TrackAudioFade` del motor
+(`pauseFading`), que `JustAudioTrackEngine` implementa; el controlador la usa
+con `TrackPlaybackController.pauseFade`.
+
+Pruebas: `test/pause_fade_test.dart`.
+
 ## 4. Mini reproductor
 
 Como `LimusicMiniPlayer`: tarjeta de radio 10, miniatura de 42 dp, corazón,

@@ -17,7 +17,8 @@ import '../domain/track_audio_engine.dart';
 import 'account_audio_source.dart';
 import 'audio_disk_cache.dart';
 
-class JustAudioTrackEngine implements TrackAudioEngine, TrackAudioTuning {
+class JustAudioTrackEngine
+    implements TrackAudioEngine, TrackAudioTuning, TrackAudioFade {
   JustAudioTrackEngine({
     PlaybackSourceResolver? sourceResolver,
     AudioPlayer? player,
@@ -339,6 +340,8 @@ class JustAudioTrackEngine implements TrackAudioEngine, TrackAudioTuning {
   void cancelLoad() {
     _loadGeneration++;
     _firstProgressArmed = false;
+    // Otra canción (o detener) no hereda un desvanecido a medias.
+    _cancelFade();
   }
 
   @override
@@ -372,8 +375,59 @@ class JustAudioTrackEngine implements TrackAudioEngine, TrackAudioTuning {
     }
   }
 
+  // Cada desvanecido lleva su número; subirlo lo cancela.
+  int _fade = 0;
+  static const _fadeSteps = 10;
+
+  /// Cancela un desvanecido en marcha y devuelve el volumen.
+  void _cancelFade() {
+    _fade++;
+    final player = _instance;
+    if (!_disposed && player != null && player.volume != 1) {
+      unawaited(player.setVolume(1).catchError((Object _) {}));
+    }
+  }
+
+  @override
+  Future<void> pauseFading(Duration duration) async {
+    if (_disposed || _instance == null) return;
+    if (!_player.playing || duration <= Duration.zero) {
+      await pause();
+      return;
+    }
+    final fade = ++_fade;
+    unawaited(_fadeOutAndPause(fade, duration));
+  }
+
+  Future<void> _fadeOutAndPause(int fade, Duration duration) async {
+    try {
+      final start = _player.volume;
+      final step = duration ~/ _fadeSteps;
+      for (var i = 1; i <= _fadeSteps; i++) {
+        await Future<void>.delayed(step);
+        if (_disposed || fade != _fade) return;
+        await _player.setVolume(start * (1 - i / _fadeSteps));
+      }
+      if (_disposed || fade != _fade) return;
+      await _pauseNow();
+      // En pausa, así que subir el volumen no se oye; al reanudar suena entero.
+      if (!_disposed && fade == _fade) await _player.setVolume(start);
+    } on Object {
+      // Un fallo del desvanecido no debe dejar la canción sonando a medias.
+      if (!_disposed && fade == _fade) {
+        try {
+          await _pauseNow();
+          await _player.setVolume(1);
+        } on Object {
+          // Sin reproductor utilizable no hay nada más que hacer.
+        }
+      }
+    }
+  }
+
   @override
   Future<void> play() async {
+    _cancelFade();
     if (!_disposed) {
       final generation = _loadGeneration;
       unawaited(
@@ -384,8 +438,15 @@ class JustAudioTrackEngine implements TrackAudioEngine, TrackAudioTuning {
     }
   }
 
+  /// Pausa al instante (interrupciones, y lo que no pide el usuario).
   @override
   Future<void> pause() async {
+    if (_disposed) return;
+    _cancelFade();
+    await _pauseNow();
+  }
+
+  Future<void> _pauseNow() async {
     if (!_disposed) {
       final generation = _loadGeneration;
       try {

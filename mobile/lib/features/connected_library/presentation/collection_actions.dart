@@ -185,14 +185,21 @@ class CollectionActions extends ConsumerStatefulWidget {
     required this.id,
     required this.album,
     required this.tracks,
+    required this.title,
+    this.subtitle,
+    this.thumbnailUrl,
     this.loadAll,
     this.heart = true,
-    this.albumName,
   });
 
-  /// El nombre del álbum: se guarda con cada canción descargada para poder
-  /// ordenar las descargas por álbum.
-  final String? albumName;
+  /// Nombre, subtítulo y portada de la colección: con ellos se ve en
+  /// Descargas. El nombre de un álbum se guarda también con cada canción,
+  /// para poder ordenar las descargas por álbum.
+  final String title;
+  final String? subtitle;
+  final String? thumbnailUrl;
+
+  String? get albumName => album ? title : null;
 
   /// El álbum (`MPREb_…`) o la playlist.
   final String id;
@@ -239,12 +246,15 @@ class _CollectionActionsState extends ConsumerState<CollectionActions> {
   void didUpdateWidget(CollectionActions oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.tracks.length != widget.tracks.length ||
-        oldWidget.albumName != widget.albumName) {
+        oldWidget.title != widget.title) {
       _fillAlbum();
     }
   }
 
-  /// Las ya descargadas de este álbum sin su nombre lo reciben ahora.
+  /// Las ya descargadas de este álbum sin su nombre lo reciben ahora; y un
+  /// álbum que ya estaba entero en el teléfono, bajado canción a canción
+  /// antes de que se guardaran las colecciones, pasa a ser un álbum
+  /// descargado.
   void _fillAlbum() {
     final name = widget.albumName;
     if (!widget.album || name == null || name.isEmpty) return;
@@ -253,8 +263,54 @@ class _CollectionActionsState extends ConsumerState<CollectionActions> {
     unawaited(() async {
       await _store.load();
       await _store.fillAlbum(ids, widget.id, name);
+      if (_store.collection(_key) == null && ids.every(_store.isDownloaded)) {
+        await _store.keepCollection(_collection(ids));
+      }
     }());
   }
+
+  DownloadedCollection _collection(List<String> ids) => DownloadedCollection(
+    id: _key,
+    album: widget.album,
+    title: widget.title,
+    subtitle: widget.subtitle,
+    thumbnailUrl: widget.thumbnailUrl,
+    trackIds: ids,
+    savedAt: DateTime.now().millisecondsSinceEpoch,
+  );
+
+  /// Pregunta qué hacer con una colección ya descargada: quitarla o, si le
+  /// faltan canciones, bajar las que faltan. null: nada.
+  Future<String?> _askKept(int missing) => showDialog<String>(
+    context: context,
+    useRootNavigator: true,
+    builder: (context) => AlertDialog(
+      title: Text(widget.album ? 'Álbum descargado' : 'Playlist descargada'),
+      content: Text(
+        missing == 0
+            ? '¿Quitar la descarga? Las canciones que no guarde otro álbum o '
+                  'playlist dejarán de estar en el teléfono.'
+            : 'Faltan $missing ${missing == 1 ? 'canción' : 'canciones'} '
+                  'por bajar.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop('remove'),
+          child: const Text('Quitar descarga'),
+        ),
+        if (missing > 0)
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop('missing'),
+            child: const Text('Bajar las que faltan'),
+          )
+        else
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancelar'),
+          ),
+      ],
+    ),
+  );
 
   void _say(String message) {
     if (!mounted) return;
@@ -290,45 +346,44 @@ class _CollectionActionsState extends ConsumerState<CollectionActions> {
       setState(() => _loading = false);
     }
     final tracks = _downloadable(music, all);
+    if (tracks.isEmpty) {
+      _say('No hay canciones que descargar.');
+      return;
+    }
     final missing = [
       for (final track in tracks)
         if (!_store.isDownloaded(track.id) && !_store.isBusy(track.id)) track,
     ];
-    if (missing.isEmpty) {
-      if (tracks.any((track) => _store.isBusy(track.id))) {
+    // Ya descargada (como en Limusic, «descargada» es haberla pedido): el
+    // botón ofrece quitarla o bajar lo que falte.
+    if (_store.collection(_key) != null) {
+      if (missing.isEmpty && tracks.any((track) => _store.isBusy(track.id))) {
         _say('Se está descargando $_what');
         return;
       }
-      if (tracks.isEmpty || !mounted) return;
-      // Ya está entera en el teléfono: el botón ofrece quitarla.
-      final remove = await showDialog<bool>(
-        context: context,
-        useRootNavigator: true,
-        builder: (context) => AlertDialog(
-          title: const Text('Quitar descarga'),
-          content: Text(
-            'Las canciones de $_what dejarán de estar en el teléfono.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Quitar'),
-            ),
-          ],
-        ),
-      );
-      if (remove != true) return;
-      for (final track in tracks) {
-        await _store.remove(track.id);
+      if (!mounted) return;
+      final choice = await _askKept(missing.length);
+      if (choice == 'remove') {
+        await _store.releaseCollection(_key);
+        _say(
+          widget.album
+              ? 'Descarga del álbum quitada'
+              : 'Descarga de la playlist quitada',
+        );
+        return;
       }
+      if (choice != 'missing') return;
+    }
+    // La colección se guarda con todas sus canciones y su portada; las
+    // canciones bajan después, una a una.
+    await _store.keepCollection(
+      _collection([for (final track in tracks) track.id]),
+    );
+    if (missing.isEmpty) {
       _say(
         widget.album
-            ? 'Descarga del álbum quitada'
-            : 'Descarga de la playlist quitada',
+            ? 'Álbum guardado en Descargas'
+            : 'Playlist guardada en Descargas',
       );
       return;
     }
@@ -368,9 +423,9 @@ class _CollectionActionsState extends ConsumerState<CollectionActions> {
           listenable: _store,
           builder: (context, _) {
             final tracks = _downloadable(music, widget.tracks);
-            final done =
-                tracks.isNotEmpty &&
-                tracks.every((track) => _store.isDownloaded(track.id));
+            // Descargada: la colección está guardada (Limusic:
+            // `STATE_DOWNLOADED`); el avance es cuántas canciones llegaron.
+            final done = _store.collection(_key) != null;
             final busy = _loading || tracks.any((t) => _store.isBusy(t.id));
             // Avance: canciones ya en el teléfono entre las cargadas.
             final progress = tracks.isEmpty

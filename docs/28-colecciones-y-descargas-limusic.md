@@ -83,6 +83,42 @@ Código:
 
 Pruebas: `test/download_sort_test.dart`.
 
+## 2 bis. Álbumes y playlists descargados enteros
+
+Antes solo se guardaban las canciones, sueltas. En Limusic, descargar un álbum o
+una playlist guarda además **la colección**: su fila queda marcada como
+descargada (`STATE_DOWNLOADED`) con su lista de canciones, y Biblioteca →
+Descargas muestra esas colecciones (`getAllDownloadedPlaylist`). Mysic hace lo
+mismo:
+
+- Al pulsar Descargar en un álbum o una playlist se guarda la colección (portada,
+  nombre, artista y la lista de sus canciones) y las canciones bajan después, una
+  a una. El botón se pinta como descargado en cuanto la colección está guardada;
+  mientras bajan las canciones, muestra el avance.
+- Biblioteca → Descargas lleva una cuadrícula **Álbumes y playlists** sobre la
+  lista de canciones. Cada tesela dice «Álbum · artista», o «Álbum · 3 de 9»
+  mientras faltan canciones. Con internet se abre su página, y con «Solo
+  canciones descargadas» suenan sus canciones del teléfono. Mantener pulsada
+  abre las mismas opciones que en el resto de la app.
+- Pulsar Descargar en una colección ya descargada pregunta: **Quitar descarga**
+  o, si faltan canciones, **Bajar las que faltan** (Limusic: `downloadMissing`).
+- **Quitar la descarga** suelta la colección y borra sus canciones, salvo las que
+  también guarde otra colección (Limusic: `releaseDownloads`). Una canción
+  descargada suelta, desde su propio menú, sigue funcionando como antes.
+- Un álbum que ya estaba entero en el teléfono, bajado canción a canción antes de
+  este cambio, pasa a ser un álbum descargado al abrir su página.
+
+Se guarda en `collections.json`, junto al índice de las canciones.
+
+Código:
+
+- `downloads/data/downloaded_collection.dart`
+- `DownloadStore.keepCollection`, `releaseCollection`, `collections`, `tracksOf`.
+- `connected_library/presentation/collection_actions.dart`
+- `connected_library/presentation/library_screen.dart` (`_collectionsGrid`).
+
+Pruebas: `test/downloaded_collection_test.dart`.
+
 ## 3. Otros cambios de esta tanda
 
 - **Collage del Inicio en tres páginas que se deslizan**, como el de YouTube

@@ -1741,6 +1741,11 @@ class _MusicPageState extends ConsumerState<_MusicPage>
                 id: widget.playlistId!,
                 album: false,
                 tracks: tracks,
+                title: _heroTitle,
+                subtitle: 'Playlist',
+                thumbnailUrl: (_mosaic?.isNotEmpty ?? false)
+                    ? _mosaic!.first
+                    : tracks.firstOrNull?.thumbnailUrl,
                 loadAll: _loadAllTracks,
                 heart: _ownKnown && !_editable,
               )

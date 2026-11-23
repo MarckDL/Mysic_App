@@ -809,6 +809,9 @@ class TrackPlaybackController extends ChangeNotifier {
     _maybeExtend();
   }
 
+  /// Lo que dura el desvanecido al pausar.
+  static const pauseFade = Duration(milliseconds: 500);
+
   Future<void> pause() async {
     if (!_active) return;
     if (phase == TrackAudioPhase.error) return;
@@ -819,7 +822,14 @@ class TrackPlaybackController extends ChangeNotifier {
       return;
     }
     final generation = _generation;
-    await _engine.pause();
+    final Object engine = _engine;
+    // Al pausar el usuario la canción se desvanece en medio segundo; solo si
+    // estaba sonando. Las interrupciones pausan por su lado, al instante.
+    if (engine is TrackAudioFade && phase == TrackAudioPhase.playing) {
+      await engine.pauseFading(pauseFade);
+    } else {
+      await _engine.pause();
+    }
     if (_valid(generation) &&
         !_wantPlayback &&
         phase != TrackAudioPhase.error) {

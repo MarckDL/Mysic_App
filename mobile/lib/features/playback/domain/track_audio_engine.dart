@@ -72,6 +72,16 @@ abstract interface class TrackAudioEngine {
   Future<void> dispose();
 }
 
+/// Un motor que además puede pausar con un desvanecido. Aparte de
+/// [TrackAudioEngine]: solo lo usa la pausa pedida por el usuario; las
+/// interrupciones (llamada, auriculares desconectados) pausan al instante.
+abstract interface class TrackAudioFade {
+  /// Baja el volumen hasta cero durante [duration] y pausa. Vuelve enseguida,
+  /// sin esperar al desvanecido; reanudar, cargar otra canción o detener lo
+  /// cancela y devuelve el volumen.
+  Future<void> pauseFading(Duration duration);
+}
+
 /// Un motor que además puede cambiar la velocidad y el tono de lo que suena.
 /// Aparte de [TrackAudioEngine] para que un motor que no sepa no tenga que
 /// fingirlo.
