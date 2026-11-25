@@ -50,13 +50,23 @@ Future<void> showSpotifyImport(BuildContext context) async {
       return id;
     }),
   );
+  // El router se toma aquí, de la pantalla que abre la hoja: la hoja se abre
+  // sobre el navegador raíz, fuera del árbol de rutas, y desde ella
+  // `GoRouter.of` falla («No GoRouter found in context»).
+  final router = GoRouter.of(context);
   await showModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,
     showDragHandle: true,
     isDismissible: true,
-    builder: (sheet) => _SpotifyImportBody(controller: controller),
+    builder: (sheet) => SpotifyImportBody(
+      controller: controller,
+      onOpenPlaylist: (id, name) => router.push(
+        '/music/playlist/${Uri.encodeComponent(id)}',
+        extra: PageSeed(title: name),
+      ),
+    ),
   );
   // La búsqueda no se corta al cerrar la hoja a medias: se detiene y se guarda
   // lo encontrado.
@@ -68,16 +78,25 @@ Future<void> showSpotifyImport(BuildContext context) async {
   );
 }
 
-class _SpotifyImportBody extends StatefulWidget {
-  const _SpotifyImportBody({required this.controller});
+/// El contenido de la hoja. Público para poder probarlo.
+class SpotifyImportBody extends StatefulWidget {
+  const SpotifyImportBody({
+    super.key,
+    required this.controller,
+    required this.onOpenPlaylist,
+  });
 
   final SpotifyImportController controller;
 
+  /// Abre la playlist creada ([id], [name]). Lo da quien abre la hoja, que es
+  /// quien tiene el router.
+  final void Function(String id, String name) onOpenPlaylist;
+
   @override
-  State<_SpotifyImportBody> createState() => _SpotifyImportBodyState();
+  State<SpotifyImportBody> createState() => _SpotifyImportBodyState();
 }
 
-class _SpotifyImportBodyState extends State<_SpotifyImportBody> {
+class _SpotifyImportBodyState extends State<SpotifyImportBody> {
   final _link = TextEditingController();
 
   SpotifyImportController get _c => widget.controller;
@@ -377,18 +396,8 @@ class _SpotifyImportBodyState extends State<_SpotifyImportBody> {
                   onPressed: () {
                     final id = _c.createdId;
                     final name = _c.playlist?.name ?? 'Playlist';
-                    // El router se toma antes de cerrar la hoja: después, su
-                    // contexto ya no existe y la navegación no hacía nada.
-                    final router = GoRouter.of(context);
                     Navigator.of(context).pop();
-                    if (id != null) {
-                      unawaited(
-                        router.push(
-                          '/music/playlist/${Uri.encodeComponent(id)}',
-                          extra: PageSeed(title: name),
-                        ),
-                      );
-                    }
+                    if (id != null) widget.onOpenPlaylist(id, name);
                   },
                   child: const Text('Abrir playlist'),
                 ),
