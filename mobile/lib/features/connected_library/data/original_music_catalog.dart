@@ -140,7 +140,15 @@ class OriginalMusicCatalog {
 
   /// YouTube entrega estos textos según el idioma de la solicitud (inglés).
   /// Se traducen los que se repiten en toda la discografía; los demás se dejan.
-  static String shelfTitle(String title) =>
+  static String shelfTitle(String title) {
+    // «Playlists by <artista>»: se conserva el nombre.
+    final by = RegExp(r'^playlists by (.+)$', caseSensitive: false);
+    final match = by.firstMatch(title.trim());
+    if (match != null) return 'Playlists de ${match.group(1)}';
+    return _shelfTitle(title);
+  }
+
+  static String _shelfTitle(String title) =>
       switch (title.trim().toLowerCase()) {
         'albums' => 'Álbumes',
         'singles & eps' || 'singles and eps' => 'Sencillos y EP',
@@ -197,16 +205,60 @@ class OriginalMusicCatalog {
       description: _text(data['description'], 4000),
       thumbnailUrl: _art(data['thumbnail']),
       topSongs: list(data['topSongs'], 'song').whereType<MusicTrack>().toList(),
-      shelves: [
-        if (data['shelves'] is List)
-          for (final shelf in data['shelves'] as List)
-            if (shelf is Map && list(shelf['items'], 'album').isNotEmpty)
+      shelves: _albumShelves(data['shelves']),
+      videos: list(data['videos'], 'song').whereType<MusicTrack>().toList(),
+      playlistShelves: [
+        if (data['playlists'] is List)
+          for (final shelf in data['playlists'] as List)
+            if (shelf is Map && list(shelf['items'], 'playlist').isNotEmpty)
               (
-                title: shelfTitle(_text(shelf['title'], 80) ?? 'Álbumes'),
-                items: list(shelf['items'], 'album'),
+                title: shelfTitle(_text(shelf['title'], 120) ?? 'Playlists'),
+                items: list(shelf['items'], 'playlist'),
               ),
       ],
     );
+  }
+
+  /// Los estantes de álbumes (`shelves`) de la página o de `/releases`: cada
+  /// uno con su título traducido; los que no traen ningún álbum válido se
+  /// descartan.
+  static List<({String title, List<MusicItem> items})> _albumShelves(
+    Object? shelves,
+  ) {
+    final found = <({String title, List<MusicItem> items})>[];
+    if (shelves is! List) return found;
+    for (final shelf in shelves) {
+      if (shelf is! Map || shelf['items'] is! List) continue;
+      final items = <MusicItem>[
+        for (final row in shelf['items'] as List)
+          if (item(row, 'album') case final MusicItem entry) entry,
+      ];
+      if (items.isEmpty) continue;
+      found.add((
+        title: shelfTitle(_text(shelf['title'], 80) ?? 'Álbumes'),
+        items: items,
+      ));
+    }
+    return found;
+  }
+
+  /// `GET youtube/artist/:id/releases`: la discografía completa (la página
+  /// solo trae los primeros álbumes).
+  static List<({String title, List<MusicItem> items})> artistReleases(
+    Map<String, dynamic> data,
+  ) {
+    if (data['shelves'] is! List) {
+      throw const FormatException('Mysic no devolvió la discografía.');
+    }
+    return _albumShelves(data['shelves']);
+  }
+
+  /// `GET youtube/artist/:id/songs`: el catálogo completo de canciones.
+  static List<MusicTrack> artistSongs(Map<String, dynamic> data) {
+    if (data['songs'] is! List) {
+      throw const FormatException('Mysic no devolvió las canciones.');
+    }
+    return rows(data['songs'], 'song').whereType<MusicTrack>().toList();
   }
 
   /// `GET youtube/album/:id` del catálogo de Mysic.

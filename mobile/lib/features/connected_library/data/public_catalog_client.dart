@@ -138,6 +138,41 @@ class PublicCatalogClient {
     );
   }
 
+  /// Todas las canciones del artista («Ver todo» de Canciones destacadas).
+  Future<List<MusicTrack>> artistSongs(
+    String id, {
+    CancelToken? cancelToken,
+  }) async {
+    if (!OriginalMusicCatalog.isArtistId(id)) {
+      throw const ApiFailure('El identificador del artista no es válido.');
+    }
+    final response = await _request(
+      'youtube/artist/$id/songs',
+      cancelToken: cancelToken,
+    );
+    return OriginalMusicCatalog.artistSongs(
+      response.data as Map<String, dynamic>,
+    );
+  }
+
+  /// La discografía completa del artista, por estantes (Álbumes, Sencillos y
+  /// EP…): «Ver todo» de cada uno.
+  Future<List<({String title, List<MusicItem> items})>> artistReleases(
+    String id, {
+    CancelToken? cancelToken,
+  }) async {
+    if (!OriginalMusicCatalog.isArtistId(id)) {
+      throw const ApiFailure('El identificador del artista no es válido.');
+    }
+    final response = await _request(
+      'youtube/artist/$id/releases',
+      cancelToken: cancelToken,
+    );
+    return OriginalMusicCatalog.artistReleases(
+      response.data as Map<String, dynamic>,
+    );
+  }
+
   Future<AlbumDetail> albumPage(String id, {CancelToken? cancelToken}) async {
     if (!OriginalMusicCatalog.isAlbumId(id)) {
       throw const ApiFailure('El identificador del álbum no es válido.');

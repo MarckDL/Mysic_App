@@ -301,6 +301,8 @@ class ArtistProfile {
     required this.name,
     required this.topSongs,
     required this.shelves,
+    this.videos = const [],
+    this.playlistShelves = const [],
     this.audience,
     this.description,
     this.thumbnailUrl,
@@ -313,6 +315,13 @@ class ArtistProfile {
   final String? thumbnailUrl;
   final List<MusicTrack> topSongs;
   final List<({String title, List<MusicItem> items})> shelves;
+
+  /// Los vídeos del artista (se reproducen como canciones: suena su audio).
+  final List<MusicTrack> videos;
+
+  /// Playlists en las que aparece y playlists suyas («Aparece en», «Playlists
+  /// de …»), cada grupo con su título.
+  final List<({String title, List<MusicItem> items})> playlistShelves;
 }
 
 /// Página pública de un álbum: cabecera y pistas en orden.

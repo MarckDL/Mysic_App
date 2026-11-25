@@ -154,6 +154,26 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
         ),
       ),
       GoRoute(
+        path: '/artist/:id/more/:kind',
+        builder: (context, state) {
+          // «Ver todo» de un bloque de la página de artista.
+          final kind = ArtistMoreKind.values
+              .where((k) => k.name == state.pathParameters['kind'])
+              .firstOrNull;
+          return _mini(
+            kind == null
+                ? const MusicModeSurface(surface: MusicSurface.search)
+                : ArtistMoreScreen(
+                    id: state.pathParameters['id']!,
+                    kind: kind,
+                    name: state.extra is PageSeed
+                        ? (state.extra as PageSeed).title
+                        : null,
+                  ),
+          );
+        },
+      ),
+      GoRoute(
         path: '/album/:id',
         builder: (context, state) => _mini(
           AlbumScreen(

@@ -383,6 +383,27 @@ class MusicModeController extends ChangeNotifier {
     return catalog.artistPage(id, cancelToken: cancelToken);
   }
 
+  /// Todas las canciones de un artista (su «Ver todo»).
+  Future<List<MusicTrack>> artistSongs(String id, {CancelToken? cancelToken}) {
+    final catalog = _client.catalog;
+    if (catalog == null) {
+      throw const ApiFailure('El catálogo no está disponible aquí.');
+    }
+    return catalog.artistSongs(id, cancelToken: cancelToken);
+  }
+
+  /// La discografía completa de un artista, por estantes.
+  Future<List<({String title, List<MusicItem> items})>> artistReleases(
+    String id, {
+    CancelToken? cancelToken,
+  }) {
+    final catalog = _client.catalog;
+    if (catalog == null) {
+      throw const ApiFailure('El catálogo no está disponible aquí.');
+    }
+    return catalog.artistReleases(id, cancelToken: cancelToken);
+  }
+
   Future<AlbumDetail> albumDetail(String id, {CancelToken? cancelToken}) {
     final catalog = _client.catalog;
     if (catalog == null) {

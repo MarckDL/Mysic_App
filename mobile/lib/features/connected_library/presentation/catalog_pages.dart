@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/images/disk_cached_image.dart';
 import '../../../core/network/api_failure.dart';
 import '../../playback/application/playback_providers.dart';
 import '../../playback/application/track_playback_controller.dart';
@@ -14,6 +15,7 @@ import '../application/music_mode_controller.dart';
 import '../data/original_music_catalog.dart';
 import '../domain/music_mode.dart';
 import 'collection_actions.dart';
+import 'library_screen.dart' show LibrarySectionHeader;
 import 'music_mode_host.dart';
 import 'track_sheet.dart';
 
@@ -28,6 +30,23 @@ void openArtist(BuildContext context, String id, {PageSeed? seed}) {
     extra: seed,
   );
 }
+
+/// Lo que enseña el «Ver todo» de un bloque de la página de artista.
+enum ArtistMoreKind { songs, releases, videos }
+
+/// «Ver todo» de un bloque de la página de [artistId] (canciones, discografía
+/// o vídeos).
+void openArtistMore(
+  BuildContext context,
+  String artistId,
+  ArtistMoreKind kind, {
+  String? artistName,
+}) => unawaited(
+  context.push(
+    '/artist/$artistId/more/${kind.name}',
+    extra: artistName == null ? null : PageSeed(title: artistName),
+  ),
+);
 
 /// Abre la página de álbum nueva para ids de álbum de YouTube Music; los
 /// álbumes guardados con otro tipo de id siguen en la lista de siempre.
@@ -282,6 +301,9 @@ class _PlayActions extends StatelessWidget {
   );
 }
 
+/// El aire de los títulos con «Ver todo» de la página de artista.
+const _sectionPadding = EdgeInsets.only(top: 14, bottom: 4);
+
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle(this.text);
   final String text;
@@ -455,7 +477,17 @@ class _ArtistScreenState extends ConsumerState<ArtistScreen>
                     ),
                   ),
                 if (songs.isNotEmpty) ...[
-                  const _SectionTitle('Canciones destacadas'),
+                  // «Ver todo»: el catálogo completo de canciones del artista.
+                  LibrarySectionHeader(
+                    title: 'Canciones destacadas',
+                    padding: _sectionPadding,
+                    onMore: () => openArtistMore(
+                      context,
+                      artist.id,
+                      ArtistMoreKind.songs,
+                      artistName: artist.name,
+                    ),
+                  ),
                   for (final (index, track) in songs.indexed)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -479,9 +511,48 @@ class _ArtistScreenState extends ConsumerState<ArtistScreen>
                     ),
                 ],
                 for (final shelf in artist.shelves) ...[
-                  _SectionTitle(shelf.title),
+                  // «Ver todo»: la discografía completa (la página solo trae
+                  // los primeros álbumes).
+                  LibrarySectionHeader(
+                    title: shelf.title,
+                    padding: _sectionPadding,
+                    onMore: () => openArtistMore(
+                      context,
+                      artist.id,
+                      ArtistMoreKind.releases,
+                      artistName: artist.name,
+                    ),
+                  ),
                   _AlbumShelf(
                     albums: shelf.items.whereType<MusicAlbum>().toList(),
+                  ),
+                ],
+                if (artist.videos.isNotEmpty) ...[
+                  LibrarySectionHeader(
+                    title: 'Vídeos',
+                    padding: _sectionPadding,
+                    onMore: artist.videos.length < 4
+                        ? null
+                        : () => openArtistMore(
+                            context,
+                            artist.id,
+                            ArtistMoreKind.videos,
+                            artistName: artist.name,
+                          ),
+                  ),
+                  _VideoShelf(
+                    videos: artist.videos,
+                    onPlay: (index) =>
+                        _playTracks(context, ref, artist.videos, index),
+                  ),
+                ],
+                for (final shelf in artist.playlistShelves) ...[
+                  LibrarySectionHeader(
+                    title: shelf.title,
+                    padding: _sectionPadding,
+                  ),
+                  _PlaylistsShelf(
+                    playlists: shelf.items.whereType<MusicPlaylist>().toList(),
                   ),
                 ],
                 if (songs.isEmpty && artist.shelves.isEmpty)
@@ -669,6 +740,369 @@ class _AlbumShelf extends ConsumerWidget {
           );
         },
       ),
+    );
+  }
+}
+
+/// Estante de vídeos del artista: miniaturas 16:9; tocar una reproduce su audio
+/// y seguir con los demás.
+class _VideoShelf extends ConsumerWidget {
+  const _VideoShelf({required this.videos, required this.onPlay});
+  final List<MusicTrack> videos;
+  final void Function(int index) onPlay;
+
+  static const _width = 200.0;
+  static const _height = _width * 9 / 16;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context), colors = theme.colorScheme;
+    return SizedBox(
+      height: _height + 10 + MediaQuery.textScalerOf(context).scale(44),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: videos.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 12),
+        itemBuilder: (context, index) {
+          final video = videos[index];
+          final url = video.thumbnailUrl;
+          return InkWell(
+            key: ValueKey('video:${video.id}'),
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => onPlay(index),
+            onLongPress: () => unawaited(showTrackSheet(context, ref, video)),
+            child: SizedBox(
+              width: _width,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: SizedBox(
+                      width: _width,
+                      height: _height,
+                      child: url == null
+                          ? ColoredBox(
+                              color: colors.surfaceContainerHighest,
+                              child: Icon(
+                                Icons.ondemand_video_rounded,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            )
+                          : Image(
+                              image: DiskCachedImage(url),
+                              fit: BoxFit.cover,
+                              excludeFromSemantics: true,
+                              errorBuilder: (_, _, _) => ColoredBox(
+                                color: colors.surfaceContainerHighest,
+                              ),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    video.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Estante de playlists del artista («Aparece en», «Playlists de …»).
+class _PlaylistsShelf extends ConsumerWidget {
+  const _PlaylistsShelf({required this.playlists});
+  final List<MusicPlaylist> playlists;
+
+  static const _cover = 132.0;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return SizedBox(
+      height: _cover + 14 + MediaQuery.textScalerOf(context).scale(46),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: playlists.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 14),
+        itemBuilder: (context, index) {
+          final playlist = playlists[index];
+          return InkWell(
+            key: ValueKey('playlist:${playlist.id}'),
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => unawaited(
+              context.push(
+                '/music/playlist/${Uri.encodeComponent(playlist.id)}',
+                extra: PageSeed(
+                  title: playlist.title,
+                  imageUrl: playlist.thumbnailUrl,
+                ),
+              ),
+            ),
+            onLongPress: () => showItemMenu(context, ref, playlist),
+            child: SizedBox(
+              width: _cover,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TrackArtwork(
+                    url: playlist.thumbnailUrl,
+                    size: _cover,
+                    borderRadius: 12,
+                    fallbackIcon: Icons.queue_music_rounded,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    playlist.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Lo que carga el «Ver todo» de un artista.
+class _ArtistMore {
+  const _ArtistMore({this.tracks = const [], this.shelves = const []});
+  final List<MusicTrack> tracks;
+  final List<({String title, List<MusicItem> items})> shelves;
+}
+
+/// «Ver todo» de un bloque de la página de artista: todas sus canciones (el
+/// catálogo completo), sus vídeos o su discografía completa por estantes.
+class ArtistMoreScreen extends ConsumerStatefulWidget {
+  const ArtistMoreScreen({
+    super.key,
+    required this.id,
+    required this.kind,
+    this.name,
+  });
+  final String id;
+  final ArtistMoreKind kind;
+
+  /// El nombre del artista, ya conocido al abrir (para el título).
+  final String? name;
+
+  @override
+  ConsumerState<ArtistMoreScreen> createState() => _ArtistMoreScreenState();
+}
+
+class _ArtistMoreScreenState extends ConsumerState<ArtistMoreScreen>
+    with _PageLoader<ArtistMoreScreen, _ArtistMore> {
+  @override
+  Future<_ArtistMore> fetch(MusicModeController music, CancelToken cancel) =>
+      switch (widget.kind) {
+        ArtistMoreKind.songs =>
+          music
+              .artistSongs(widget.id, cancelToken: cancel)
+              .then((tracks) => _ArtistMore(tracks: tracks)),
+        ArtistMoreKind.videos =>
+          music
+              .artistProfile(widget.id, cancelToken: cancel)
+              .then((profile) => _ArtistMore(tracks: profile.videos)),
+        ArtistMoreKind.releases =>
+          music
+              .artistReleases(widget.id, cancelToken: cancel)
+              .then((shelves) => _ArtistMore(shelves: shelves)),
+      };
+
+  @override
+  List<MusicTrack> songsOf(_ArtistMore page) => page.tracks;
+
+  String get _title => switch (widget.kind) {
+    ArtistMoreKind.songs => 'Canciones',
+    ArtistMoreKind.videos => 'Vídeos',
+    ArtistMoreKind.releases => 'Discografía',
+  };
+
+  PreferredSizeWidget _bar(BuildContext context) {
+    final theme = Theme.of(context);
+    return AppBar(
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(_title, style: theme.textTheme.titleLarge),
+          if (widget.name != null)
+            Text(
+              widget.name!,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<_ArtistMore>(
+    future: future,
+    builder: (context, snapshot) {
+      if (snapshot.hasError) {
+        return _LoadError(error: snapshot.error, retry: load);
+      }
+      final page = snapshot.data;
+      if (page == null) {
+        return Scaffold(
+          appBar: _bar(context),
+          body: Semantics(label: 'Cargando', child: const SkeletonRows()),
+        );
+      }
+      final bottom = 24 + MediaQuery.paddingOf(context).bottom;
+      if (widget.kind == ArtistMoreKind.releases) {
+        return Scaffold(
+          appBar: _bar(context),
+          body: _releases(context, page, bottom),
+        );
+      }
+      final tracks = page.tracks;
+      if (tracks.isEmpty) {
+        return Scaffold(
+          appBar: _bar(context),
+          body: const Center(child: Text('No hay nada que mostrar aquí.')),
+        );
+      }
+      final theme = Theme.of(context);
+      return Scaffold(
+        appBar: _bar(context),
+        body: ListView.builder(
+          padding: EdgeInsets.only(bottom: bottom),
+          // Cabecera + una fila por canción: 140 canciones no se construyen
+          // de golpe.
+          itemCount: tracks.length + 1,
+          itemBuilder: (context, row) {
+            if (row == 0) {
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.kind == ArtistMoreKind.songs
+                            ? '${tracks.length} canciones'
+                            : '${tracks.length} vídeos',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    _PlayActions(
+                      onPlay: () => _playTracks(context, ref, tracks, 0),
+                      onShuffle: tracks.length < 2
+                          ? null
+                          : () => _playTracks(
+                              context,
+                              ref,
+                              tracks,
+                              0,
+                              shuffled: true,
+                            ),
+                    ),
+                  ],
+                ),
+              );
+            }
+            final index = row - 1, track = tracks[index];
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: SongRow(
+                key: ValueKey('more:${track.id}'),
+                url: track.thumbnailUrl,
+                title: track.title,
+                subtitle: track.artist,
+                onTap: () => _playTracks(context, ref, tracks, index),
+                onLongPress: () =>
+                    unawaited(showTrackSheet(context, ref, track)),
+                trailing:
+                    widget.kind == ArtistMoreKind.songs && track.albumId != null
+                    ? IconButton(
+                        tooltip: 'Ver álbum',
+                        icon: const Icon(Icons.album_outlined),
+                        onPressed: () => openAlbum(context, track.albumId!),
+                      )
+                    : null,
+              ),
+            );
+          },
+        ),
+      );
+    },
+  );
+
+  /// La discografía completa: cada estante con sus portadas en una cuadrícula.
+  Widget _releases(BuildContext context, _ArtistMore page, double bottom) {
+    if (page.shelves.isEmpty) {
+      return const Center(child: Text('No hay nada que mostrar aquí.'));
+    }
+    // Tres por fila, como las cuadrículas de la Biblioteca y de Buscar.
+    const columns = 3;
+    // «Álbum · 2026» → «2026» (el tipo ya lo dice el estante); un sencillo o
+    // un EP conserva «Sencillo · 2019», que cabe de sobra en una tercera parte.
+    String subtitleOf(MusicAlbum album) {
+      final detail = album.detail;
+      if (detail == null) return 'Álbum';
+      return detail.startsWith('Álbum · ')
+          ? detail.substring('Álbum · '.length)
+          : detail;
+    }
+
+    final children = <Widget>[];
+    for (final shelf in page.shelves) {
+      final albums = shelf.items.whereType<MusicAlbum>().toList();
+      children.add(_SectionTitle(shelf.title));
+      for (var i = 0; i < albums.length; i += columns) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: ArtistPhotoRow(
+              columns: columns,
+              tiles: [
+                for (final album in albums.skip(i).take(columns))
+                  CoverCard(
+                    key: ValueKey('release:${album.id}'),
+                    title: album.title,
+                    subtitle: subtitleOf(album),
+                    url: album.thumbnailUrl,
+                    fallbackIcon: Icons.album_outlined,
+                    onTap: () => openAlbum(
+                      context,
+                      album.id,
+                      seed: PageSeed(
+                        title: album.title,
+                        imageUrl: album.thumbnailUrl,
+                      ),
+                    ),
+                    onLongPress: () => showItemMenu(context, ref, album),
+                  ),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+    return ListView(
+      padding: EdgeInsets.only(bottom: bottom),
+      children: children,
     );
   }
 }

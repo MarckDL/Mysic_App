@@ -60,6 +60,111 @@ void main() {
     expect(album.detail, 'Álbum · 2024');
   });
 
+  test('la página de artista recoge también vídeos y playlists', () {
+    final artist = OriginalMusicCatalog.artistProfile({
+      'id': 'UCZU9T1ceaOgwfLRq7OKFU4Q',
+      'name': 'Artista de prueba',
+      'topSongs': [],
+      'shelves': [],
+      'videos': [
+        {
+          'id': '9eW5zIOCjOw',
+          'title': 'Un vídeo',
+          'artist': 'Artista de prueba',
+          'durationSeconds': 0,
+          'thumbnail': 'https://i.ytimg.com/vi/9eW5zIOCjOw/hq720.jpg?sqp=x',
+        },
+        // Sin id de vídeo válido: se descarta.
+        {'id': 'corto', 'title': 'Roto'},
+      ],
+      'playlists': [
+        {
+          'title': 'Featured on',
+          'items': [
+            {
+              'id': 'VLRDCLAK5uy_mu9iHKb8YNH653a5c_TvG0',
+              'title': 'Presenting',
+              'thumbnail': cover,
+            },
+          ],
+        },
+        {
+          'title': 'Playlists by Artista de prueba',
+          'items': [
+            {'id': 'VLPLJbdu2UHP5YuiXofDFKePWkaFGNy0mfHU', 'title': 'Suya'},
+          ],
+        },
+        {'title': 'Vacía', 'items': []},
+      ],
+    });
+    expect(artist.videos, hasLength(1));
+    expect(artist.videos.single.id, '9eW5zIOCjOw');
+    expect(artist.videos.single.thumbnailUrl, contains('ytimg.com'));
+    // Los títulos se traducen y los grupos vacíos no salen.
+    expect(artist.playlistShelves.map((s) => s.title), [
+      'Aparece en',
+      'Playlists de Artista de prueba',
+    ]);
+    final playlist = artist.playlistShelves.first.items.single as MusicPlaylist;
+    // El prefijo «VL» de YouTube se quita: es el id de la playlist.
+    expect(playlist.id, 'RDCLAK5uy_mu9iHKb8YNH653a5c_TvG0');
+    // Sin esos campos la página sigue valiendo (el servidor antiguo).
+    final bare = OriginalMusicCatalog.artistProfile({
+      'id': 'UCZU9T1ceaOgwfLRq7OKFU4Q',
+      'name': 'X',
+    });
+    expect(bare.videos, isEmpty);
+    expect(bare.playlistShelves, isEmpty);
+  });
+
+  test('el «Ver todo»: discografía completa y todas las canciones', () {
+    final shelves = OriginalMusicCatalog.artistReleases({
+      'id': 'UCZU9T1ceaOgwfLRq7OKFU4Q',
+      'shelves': [
+        {
+          'title': 'Albums',
+          'items': [
+            for (final id in ['MPREb_d1UkStdzUrN', 'MPREb_d1UkStdzUrM'])
+              {'id': id, 'title': 'Disco $id', 'kind': 'Album', 'year': '2020'},
+          ],
+        },
+        {
+          'title': 'Singles & EPs',
+          'items': [
+            {'id': 'MPREb_k1TcBxQhtek', 'title': 'Single', 'kind': 'Single'},
+          ],
+        },
+        {'title': 'Nada', 'items': []},
+      ],
+    });
+    expect(shelves.map((s) => s.title), ['Álbumes', 'Sencillos y EP']);
+    expect(shelves.first.items, hasLength(2));
+    expect((shelves.last.items.single as MusicAlbum).detail, 'Sencillo');
+    expect(
+      () => OriginalMusicCatalog.artistReleases({'shelves': 5}),
+      throwsFormatException,
+    );
+
+    final songs = OriginalMusicCatalog.artistSongs({
+      'songs': [
+        for (var i = 0; i < 141; i++)
+          {
+            'id': 'AAAAAAAAA${(i ~/ 10) % 10}${i % 10}',
+            'title': 'Canción $i',
+            'artist': 'Artista',
+            'durationSeconds': 200,
+          },
+        {'id': 'x', 'title': 'Rota'},
+      ],
+    });
+    // Las 141 válidas; la rota se descarta.
+    expect(songs, hasLength(141));
+    expect(
+      () => OriginalMusicCatalog.artistSongs({'songs': null}),
+      throwsFormatException,
+    );
+  });
+
   test('los textos en inglés de YouTube se muestran en español', () {
     expect(OriginalMusicCatalog.shelfTitle('Albums'), 'Álbumes');
     expect(OriginalMusicCatalog.shelfTitle('Singles & EPs'), 'Sencillos y EP');
