@@ -491,6 +491,23 @@ class MusicModeController extends ChangeNotifier {
     });
   }
 
+  /// Mueve el atajo de [from] a [to] (índices de la lista final, como los da
+  /// un `ReorderableListView` tras ajustar el destino). Devuelve false si no
+  /// cambia nada. Parte de los de fábrica si aún no se había tocado nada.
+  bool moveShortcut(int from, int to) {
+    final list = [...effectiveShortcuts];
+    if (from < 0 || from >= list.length || to < 0 || to >= list.length) {
+      return false;
+    }
+    if (from == to) return false;
+    list.insert(to, list.removeAt(from));
+    shortcuts.value = list;
+    _client.rememberPrefs('shortcuts', {
+      'items': [for (final item in list) item.toJson()],
+    });
+    return true;
+  }
+
   /// Cómo quiere el usuario su Inicio.
   final homeLayout = ValueNotifier(const HomeLayout());
 

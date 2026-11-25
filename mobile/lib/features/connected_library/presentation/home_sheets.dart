@@ -413,6 +413,147 @@ class _ShortcutPickerState extends State<_ShortcutPicker> {
   }
 }
 
+/// «Ordenar atajos» (la tuerca de «De one pe»): una lista que se reordena
+/// arrastrando por el asa. Cada fila dice en qué bloque cae (los seis primeros
+/// son el Bloque 1; los siguientes, el Bloque 2) y el orden se guarda al soltar.
+Future<void> showShortcutOrder(
+  BuildContext context,
+  MusicModeController music,
+) => _showSheet(context, (context) => _ShortcutOrder(music: music));
+
+class _ShortcutOrder extends StatelessWidget {
+  const _ShortcutOrder({required this.music});
+
+  final MusicModeController music;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context), colors = theme.colorScheme;
+    return ValueListenableBuilder(
+      valueListenable: music.shortcuts,
+      builder: (context, _, _) {
+        final list = music.effectiveShortcuts;
+        return Material(
+          color: colors.surfaceContainerHigh,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * .8,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 10, bottom: 6),
+                    width: 32,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: colors.onSurfaceVariant.withValues(alpha: .4),
+                      borderRadius: BorderRadius.circular(50),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Ordenar atajos',
+                        style: theme.textTheme.titleMedium,
+                      ),
+                      Text(
+                        'Arrastra por el asa para cambiar el orden',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Flexible(
+                  child: ReorderableListView.builder(
+                    shrinkWrap: true,
+                    buildDefaultDragHandles: false,
+                    padding: EdgeInsets.only(
+                      bottom: MediaQuery.viewPaddingOf(context).bottom + 8,
+                    ),
+                    itemCount: list.length,
+                    // `onReorderItem` ya da el destino ajustado (tras quitar la
+                    // fila de su sitio).
+                    onReorderItem: music.moveShortcut,
+                    itemBuilder: (context, index) {
+                      final shortcut = list[index];
+                      final block = index ~/ Shortcut.perBlock + 1;
+                      return Material(
+                        key: ValueKey('${shortcut.kind.name}:${shortcut.id}'),
+                        color: Colors.transparent,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 6,
+                          ),
+                          child: Row(
+                            children: [
+                              ShortcutArt(shortcut: shortcut, size: 48),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      shortcut.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.titleSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
+                                    Text(
+                                      'Bloque $block',
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: colors.onSurfaceVariant,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              ReorderableDragStartListener(
+                                index: index,
+                                child: Tooltip(
+                                  message: 'Arrastrar',
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8),
+                                    child: Icon(
+                                      Icons.drag_handle_rounded,
+                                      color: colors.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// La imagen de un atajo: una colección pinta su icono sobre un tinte del
 /// acento, como las teselas de la Biblioteca; lo demás, su portada.
 class ShortcutArt extends StatelessWidget {

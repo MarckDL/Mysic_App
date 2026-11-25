@@ -13,8 +13,19 @@ class Shortcut {
     this.thumbnail,
   });
 
-  /// Cuántos caben en Inicio (dos por fila, cuatro filas), como en Limusic.
-  static const max = 8;
+  /// Cuántos atajos entran en un bloque de «De one pe»: dos columnas y tres
+  /// filas, como las páginas del collage de accesos directos.
+  static const perBlock = 6;
+
+  /// Cuántos bloques hay.
+  static const blocks = 2;
+
+  /// Cuántos caben en Inicio: dos bloques de [perBlock].
+  static const max = perBlock * blocks;
+
+  /// Con cuántos arranca una cuenta que aún no fijó nada (un bloque y un
+  /// poco más, como antes de ampliar el tope).
+  static const factory = 8;
 
   // Las colecciones de la Biblioteca que se pueden fijar.
   static const liked = 'liked';

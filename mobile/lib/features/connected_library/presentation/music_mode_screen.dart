@@ -2157,7 +2157,7 @@ class _MusicPageState extends ConsumerState<_MusicPage>
             subtitle: playlist.isPrivate ? 'Playlist · Privada' : 'Playlist',
             thumbnail: playlist.thumbnailUrl,
           ),
-      ].take(Shortcut.max).toList();
+      ].take(Shortcut.factory).toList();
       final pinned = music.effectiveShortcuts;
       void pick() => unawaited(
         showShortcutPicker(context, music, widget.connection.generation!),
@@ -2171,6 +2171,10 @@ class _MusicPageState extends ConsumerState<_MusicPage>
             children: [
               OnePeShortcuts(
                 onAdd: pinned.length < Shortcut.max ? pick : null,
+                blockSize: Shortcut.perBlock,
+                onReorder: pinned.length < 2
+                    ? null
+                    : () => unawaited(showShortcutOrder(context, music)),
                 items: [
                   for (final shortcut in pinned)
                     (

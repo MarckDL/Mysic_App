@@ -42,4 +42,22 @@ Ahora:
   título, sin distinguir mayúsculas ni acentos (`foldForSearch`: «cancion» encuentra
   «Canción»). Si nada coincide: «No hay resultados para «…»».
 - La hoja sube con el teclado (`_sheetFrame` suma el alto del teclado).
-- El número máximo de atajos fijados sigue siendo el de siempre.
+- El tope de atajos ya no es 8 (ver el apartado siguiente).
+
+## «De one pe»: dos bloques de seis y orden con arrastre
+
+- **Tope 12** (`Shortcut.max = perBlock × blocks`): dos bloques de **6** atajos (dos
+  columnas × tres filas, como las páginas del collage de accesos directos). Cada bloque
+  es su propia cuadrícula (`OnePeShortcuts`, `blockSize`), con un hueco mayor entre el
+  primero y el segundo. Una cuenta sin atajos fijados sigue arrancando con 8
+  (`Shortcut.factory`) para no cambiar su Inicio.
+- **Tuerca** (`Icons.settings_outlined`, «Ordenar atajos») en el título «De one pe»,
+  visible con 2 o más atajos. Abre `showShortcutOrder`: una hoja con los atajos en lista y
+  un **asa** a la derecha de cada uno; se arrastra para reordenar
+  (`ReorderableListView`, `MusicModeController.moveShortcut`). Cada fila dice en qué
+  bloque cae («Bloque 1» los seis primeros, «Bloque 2» los siguientes) y se actualiza al
+  mover; arrastrar un atajo de un bloque al otro lo cambia de bloque. El orden se guarda
+  al soltar (mismo `shortcuts` de las preferencias de la cuenta). No hay botón de
+  aceptar.
+- «Añadir atajo», la ficha de la canción («Ya hay 12 atajos: quita uno primero») y la
+  restauración al abrir usan el nuevo tope.

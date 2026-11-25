@@ -209,7 +209,7 @@ void main() {
   );
 
   test(
-    'los atajos se fijan, se quitan, se guardan y no pasan de ocho',
+    'los atajos se fijan, se quitan, se guardan y no pasan de doce',
     () async {
       final client = _Account();
       final controller = MusicModeController(client, () => true, () async {});
@@ -230,10 +230,13 @@ void main() {
       controller.toggleShortcut(playlist(0));
       expect(controller.effectiveShortcuts.map((s) => s.id), ['PL1']);
 
-      for (var n = 2; n < 12; n++) {
+      // Dos bloques de seis: doce y no más.
+      expect(Shortcut.max, 12);
+      for (var n = 2; n < 20; n++) {
         controller.toggleShortcut(playlist(n));
       }
-      expect(controller.effectiveShortcuts, hasLength(Shortcut.max));
+      expect(controller.effectiveShortcuts, hasLength(12));
+      expect(controller.effectiveShortcuts.last.id, 'PL12');
       expect(controller.shortcutsFull, isTrue);
 
       // Otra sesión de la misma cuenta los recupera.

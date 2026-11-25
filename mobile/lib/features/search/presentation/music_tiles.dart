@@ -1185,11 +1185,24 @@ class LibraryTiles extends StatelessWidget {
 /// "De one pe": dos columnas de tarjetas de 56 dp con la portada pegada a la
 /// izquierda (o un cuadro con icono para las colecciones), título y subtítulo.
 class OnePeShortcuts extends StatelessWidget {
-  const OnePeShortcuts({super.key, required this.items, this.onAdd});
+  const OnePeShortcuts({
+    super.key,
+    required this.items,
+    this.onAdd,
+    this.onReorder,
+    this.blockSize = 6,
+  });
 
   /// «Añadir» en el título (no una tesela más, para que una última fila corta
   /// siga corta); null si la cuadrícula está llena.
   final VoidCallback? onAdd;
+
+  /// La tuerca del título: abre la hoja que ordena los atajos; null sin ella.
+  final VoidCallback? onReorder;
+
+  /// Cuántos atajos hay en cada bloque (dos columnas por tres filas): cada
+  /// bloque es su propia cuadrícula, con un hueco entre uno y otro.
+  final int blockSize;
 
   final List<
     ({
@@ -1232,6 +1245,15 @@ class OnePeShortcuts extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (onReorder != null)
+                  IconButton(
+                    tooltip: 'Ordenar atajos',
+                    iconSize: 20,
+                    visualDensity: VisualDensity.compact,
+                    color: colors.onSurfaceVariant,
+                    onPressed: onReorder,
+                    icon: const Icon(Icons.settings_outlined),
+                  ),
                 if (onAdd != null && items.isNotEmpty)
                   InkWell(
                     onTap: onAdd,
@@ -1268,81 +1290,94 @@ class OnePeShortcuts extends StatelessWidget {
           builder: (context, box) {
             const gap = 8.0;
             final width = (box.maxWidth - gap) / 2;
-            return Wrap(
-              spacing: gap,
-              runSpacing: gap,
-              children: [
-                for (final item in items.take(8))
-                  SizedBox(
-                    width: width,
-                    height: 56,
-                    child: Material(
-                      color: colors.onSurface.withValues(alpha: .06),
-                      borderRadius: BorderRadius.circular(10),
-                      clipBehavior: Clip.antiAlias,
-                      child: InkWell(
-                        onTap: item.onTap,
-                        onLongPress: item.onLongPress,
-                        child: Row(
-                          children: [
-                            // Cuadrado de 56 dp pegado al borde; lo redondea el
-                            // recorte de la tarjeta (solo las esquinas izquierdas).
-                            if (item.url != null)
-                              TrackArtwork(
-                                url: item.url,
-                                size: 56,
-                                borderRadius: 0,
-                                fallbackIcon:
-                                    item.icon ?? Icons.queue_music_rounded,
-                              )
-                            else
-                              ColoredBox(
-                                color: colors.primary.withValues(alpha: .16),
-                                child: SizedBox.square(
-                                  dimension: 56,
-                                  child: Icon(
-                                    item.icon ?? Icons.queue_music_rounded,
-                                    size: 24,
-                                    color: colors.primary,
-                                  ),
-                                ),
-                              ),
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: theme.textTheme.titleSmall
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                    ),
-                                    Text(
-                                      item.subtitle,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: theme.textTheme.bodySmall
-                                          ?.copyWith(
-                                            color: colors.onSurfaceVariant,
-                                          ),
-                                    ),
-                                  ],
+            final tiles = <Widget>[
+              for (final item in items)
+                SizedBox(
+                  width: width,
+                  height: 56,
+                  child: Material(
+                    color: colors.onSurface.withValues(alpha: .06),
+                    borderRadius: BorderRadius.circular(10),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: item.onTap,
+                      onLongPress: item.onLongPress,
+                      child: Row(
+                        children: [
+                          // Cuadrado de 56 dp pegado al borde; lo redondea el
+                          // recorte de la tarjeta (solo las esquinas izquierdas).
+                          if (item.url != null)
+                            TrackArtwork(
+                              url: item.url,
+                              size: 56,
+                              borderRadius: 0,
+                              fallbackIcon:
+                                  item.icon ?? Icons.queue_music_rounded,
+                            )
+                          else
+                            ColoredBox(
+                              color: colors.primary.withValues(alpha: .16),
+                              child: SizedBox.square(
+                                dimension: 56,
+                                child: Icon(
+                                  item.icon ?? Icons.queue_music_rounded,
+                                  size: 24,
+                                  color: colors.primary,
                                 ),
                               ),
                             ),
-                          ],
-                        ),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.titleSmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    item.subtitle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: colors.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
+                ),
+            ];
+            // Cada bloque es su propia cuadrícula de dos columnas; el segundo
+            // empieza más abajo, como la segunda página del collage.
+            final blocks = (tiles.length / blockSize).ceil();
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var block = 0; block < blocks; block++) ...[
+                  if (block > 0) const SizedBox(height: 18),
+                  Wrap(
+                    spacing: gap,
+                    runSpacing: gap,
+                    children: tiles
+                        .skip(block * blockSize)
+                        .take(blockSize)
+                        .toList(),
+                  ),
+                ],
               ],
             );
           },
