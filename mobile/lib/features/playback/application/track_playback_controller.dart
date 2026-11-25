@@ -203,20 +203,32 @@ class TrackPlaybackController extends ChangeNotifier {
     final s = _schedule, h = _hls;
     if (s == null && h == null) return;
     _hasLiveInfo = true;
-    liveTitle = h?.title ?? s?.title;
-    liveArtist = h != null ? h.artist : s?.artist;
-    liveLabel = h != null ? h.label : s?.label;
-    liveProgram = s?.program;
-    liveCurator = s?.curator;
-    liveMoods = s?.moods ?? const [];
-    liveStartedAt = s?.startedAt;
-    liveEndsAt = s?.endsAt;
-    // Carátula: la de la canción que suena; si no la tiene, la foto del
-    // programa; si tampoco, la imagen del mood o el logo.
-    liveArtwork =
-        (h != null ? h.coverUri?.toString() : s?.artwork) ??
-        s?.showImage ??
-        current?.thumbnailUrl;
+    if (s != null) {
+      // La programación manda: es lo que muestra la web de la emisora (calcula
+      // la canción por la hora, `ahora − inicio` sobre las marcas del programa,
+      // sin leer la etiqueta del audio). Leer la del audio iba una canción por
+      // detrás de la web: sus relojes difieren varios minutos.
+      liveTitle = s.title;
+      liveArtist = s.artist;
+      liveLabel = s.label;
+      liveProgram = s.program;
+      liveCurator = s.curator;
+      liveMoods = s.moods;
+      liveStartedAt = s.startedAt;
+      liveEndsAt = s.endsAt;
+      // Carátula: la de la canción; si no la tiene, la foto del programa; si
+      // tampoco, el logo.
+      liveArtwork = s.artwork ?? s.showImage ?? current?.thumbnailUrl;
+    } else if (h != null) {
+      // Sin programación (los moods de ROVR): lo que dice el propio audio.
+      liveTitle = h.title;
+      liveArtist = h.artist;
+      liveLabel = h.label;
+      liveProgram = liveCurator = null;
+      liveMoods = const [];
+      liveStartedAt = liveEndsAt = null;
+      liveArtwork = h.coverUri?.toString() ?? current?.thumbnailUrl;
+    }
     notifyListeners();
   }
 
@@ -248,11 +260,14 @@ class TrackPlaybackController extends ChangeNotifier {
         var wait = liveInfoEvery;
         final ends = info?.trackEndsAt;
         if (ends != null) {
+          // Justo después del cambio (medio segundo de margen), sin esperar
+          // más de [liveInfoEvery] ni consultar más de una vez cada 2 s.
           final untilEnd =
-              ends.difference(DateTime.now()) + const Duration(seconds: 2);
+              ends.difference(DateTime.now()) +
+              const Duration(milliseconds: 500);
           if (untilEnd < wait) {
-            wait = untilEnd < const Duration(seconds: 5)
-                ? const Duration(seconds: 5)
+            wait = untilEnd < const Duration(seconds: 2)
+                ? const Duration(seconds: 2)
                 : untilEnd;
           }
         }
@@ -262,8 +277,13 @@ class TrackPlaybackController extends ChangeNotifier {
       unawaited(poll());
     }
 
+    // La etiqueta del audio solo se lee si no hay programación (los moods): con
+    // ella, la canción sale de la programación, como en la web de la emisora.
     final stream = track.liveStream, readHls = hlsInfo;
-    if (stream != null && readHls != null && stream.path.endsWith('.m3u8')) {
+    if (url == null &&
+        stream != null &&
+        readHls != null &&
+        stream.path.endsWith('.m3u8')) {
       Future<void> pollHls() async {
         HlsTrackInfo? info;
         if (_wantPlayback) {

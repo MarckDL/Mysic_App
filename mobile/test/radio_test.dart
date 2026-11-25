@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -274,7 +275,19 @@ void main() {
       // La línea de tiempo es la del programa (2 h), en la hora del teléfono.
       expect(first?.startedAt, DateTime(2026, 11, 25, 18, 0, 0));
       expect(first?.endsAt, DateTime(2026, 11, 25, 20, 0, 0));
-      expect(first?.trackEndsAt, isNotNull);
+      // La canción cambia en el inicio de la siguiente marca (130,6 s), como en
+      // la web, no en el final de esta (138,9 s).
+      expect(
+        first?.trackEndsAt,
+        DateTime(
+          2026,
+          11,
+          25,
+          18,
+          0,
+          0,
+        ).add(const Duration(milliseconds: 130600)),
+      );
 
       // 18:03:00 = 180 s: ya empezó la segunda (carátula http: se descarta).
       final second = LiveNowPlaying.parse(
@@ -510,40 +523,87 @@ void main() {
     });
 
     test(
-      'el controlador une la programación y el audio: manda el audio',
+      'con programación, la canción es la de la programación (como la web) y no se lee el audio',
       () async {
         final engine = FakeTrackAudioEngine();
+        var audioReads = 0;
         final controller = TrackPlaybackController(
           FakeAuthRepository(user: const AuthUser(uid: 'a')),
           engine,
           'a',
           liveInfo: (url) async => const LiveNowPlaying(
-            title: 'Calculada',
-            artist: 'Otro',
-            program: 'Steel Vagina Radio',
-            curator: 'Pink Siifu',
-            artwork: 'https://a.test/calculada.jpg',
+            title: 'Hyperballad',
+            artist: 'Bjork',
+            label: 'One Little Independent',
+            program: 'Circadian Rhythms',
+            curator: 'Mike Simonetti',
+            artwork: 'https://a.test/hyperballad.jpg',
             showImage: 'https://a.test/show.jpg',
           ),
-          hlsInfo: (master) async => const HlsTrackInfo(
-            title: 'Real',
-            artist: 'Quien suena',
-            label: 'Sello',
-          ),
+          hlsInfo: (master) async {
+            audioReads++;
+            return const HlsTrackInfo(title: 'Blind', artist: 'Otro');
+          },
         );
         addTearDown(controller.dispose);
         await controller.playQueue([RadioStation.rovr.toTrack()]);
-        await Future<void>.delayed(Duration.zero);
-        await Future<void>.delayed(Duration.zero);
-        // Título, artista y discográfica salen del audio…
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        // La canción, el artista, la discográfica y la carátula son los de la
+        // programación: lo mismo que enseña la web de la emisora.
+        expect(controller.liveTitle, 'Hyperballad');
+        expect(controller.liveArtist, 'Bjork');
+        expect(controller.liveLabel, 'One Little Independent');
+        expect(controller.liveArtwork, 'https://a.test/hyperballad.jpg');
+        expect(controller.liveProgram, 'Circadian Rhythms');
+        expect(controller.liveCurator, 'Mike Simonetti');
+        // Y la etiqueta del audio (que va varios minutos por detrás) ni se pide.
+        expect(audioReads, 0);
+      },
+    );
+
+    test('sin carátula de la canción sale la foto del programa', () async {
+      final controller = TrackPlaybackController(
+        FakeAuthRepository(user: const AuthUser(uid: 'a')),
+        FakeTrackAudioEngine(),
+        'a',
+        liveInfo: (url) async => const LiveNowPlaying(
+          title: 'X',
+          showImage: 'https://a.test/show.jpg',
+        ),
+      );
+      addTearDown(controller.dispose);
+      await controller.playQueue([RadioStation.rovr.toTrack()]);
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(controller.liveArtwork, 'https://a.test/show.jpg');
+    });
+
+    test(
+      'un mood espera la etiqueta del audio y no enseña nada antes',
+      () async {
+        final hls = Completer<HlsTrackInfo?>();
+        final controller = TrackPlaybackController(
+          FakeAuthRepository(user: const AuthUser(uid: 'a')),
+          FakeTrackAudioEngine(),
+          'a',
+          hlsInfo: (master) => hls.future,
+        );
+        addTearDown(controller.dispose);
+        final radio = RadioStation.rovr.toTrack();
+        final drive = RadioMood(
+          id: 'drive',
+          title: 'DRIVE',
+          stream: Uri.parse('https://hls.test/mood_drive/llhls.m3u8'),
+          image: 'https://i.test/drive.png',
+        ).toTrack(radio);
+        await controller.playQueue([drive]);
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        // Aún sin etiqueta: ninguna canción, y la portada es la imagen del mood.
+        expect(controller.liveTitle, isNull);
+        expect(controller.liveArtwork, 'https://i.test/drive.png');
+        hls.complete(const HlsTrackInfo(title: 'Real', artist: 'Quien suena'));
+        await Future<void>.delayed(const Duration(milliseconds: 30));
         expect(controller.liveTitle, 'Real');
         expect(controller.liveArtist, 'Quien suena');
-        expect(controller.liveLabel, 'Sello');
-        // …y el programa y el curador, de la programación.
-        expect(controller.liveProgram, 'Steel Vagina Radio');
-        expect(controller.liveCurator, 'Pink Siifu');
-        // Sin carátula de la canción: la foto del programa.
-        expect(controller.liveArtwork, 'https://a.test/show.jpg');
       },
     );
 

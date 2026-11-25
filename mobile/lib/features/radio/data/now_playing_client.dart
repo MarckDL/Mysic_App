@@ -72,22 +72,39 @@ Future<HlsTrackInfo?> fetchHlsTrackInfo(Uri master) async {
         .where((l) => l.isNotEmpty && !l.startsWith('#'))
         .toList();
     if (segments.length < 2) return null;
-    // El penúltimo está entero; el último puede estar a medias (baja latencia).
-    final segment = chunklist.resolve(segments[segments.length - 2]);
-    if (segment.scheme != 'https' || segment.host != master.host) return null;
-    final r = await dio.getUri<List<int>>(
-      segment,
-      options: Options(responseType: ResponseType.bytes),
-    );
-    final data = r.data;
-    if (data == null || data.length > 2000000) return null;
-    final info = HlsTrackInfo.fromSegment(Uint8List.fromList(data));
-    if (info == null) return null;
-    return await _withCover(dio, info);
+    // El reproductor va ~30 s por detrás del borde del directo (la señal lo
+    // declara: PART-HOLD-BACK=30). Leer el último segmento enseñaría la
+    // canción siguiente antes de que se oiga; se lee uno de hace
+    // [_hlsLagSegments] (~5 s cada uno). Si ya no existe, se prueba con el
+    // siguiente más nuevo. El último puede estar a medias (baja latencia).
+    final lastFull = segments.length - 2;
+    final first = (segments.length - 1 - _hlsLagSegments).clamp(0, lastFull);
+    for (var i = first; i <= lastFull; i++) {
+      final segment = chunklist.resolve(segments[i]);
+      if (segment.scheme != 'https' || segment.host != master.host) return null;
+      List<int>? data;
+      try {
+        final r = await dio.getUri<List<int>>(
+          segment,
+          options: Options(responseType: ResponseType.bytes),
+        );
+        data = r.data;
+      } on DioException {
+        continue; // ya se retiró de la lista: el siguiente
+      }
+      if (data == null || data.length > 2000000) return null;
+      final info = HlsTrackInfo.fromSegment(Uint8List.fromList(data));
+      return info == null ? null : await _withCover(dio, info);
+    }
+    return null;
   } on Object {
     return null;
   }
 }
+
+/// Cuántos segmentos (~5 s) por detrás del último se lee la etiqueta: ~25 s, lo
+/// que el reproductor se retrasa respecto al borde del directo.
+const _hlsLagSegments = 5;
 
 final _hlsDio = Dio(
   BaseOptions(

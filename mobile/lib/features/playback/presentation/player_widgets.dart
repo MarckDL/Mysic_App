@@ -170,7 +170,11 @@ class MiniPlayer extends StatelessWidget {
                         },
                       ),
                     IconButton.filled(
-                      tooltip: playing ? 'Pausar audio' : 'Continuar audio',
+                      tooltip: current.isLive
+                          ? (playing ? 'Detener radio' : 'Sintonizar radio')
+                          : playing
+                          ? 'Pausar audio'
+                          : 'Continuar audio',
                       style: IconButton.styleFrom(
                         minimumSize: const Size.square(38),
                         maximumSize: const Size.square(38),
@@ -191,36 +195,46 @@ class MiniPlayer extends StatelessWidget {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : Icon(
+                              // Una radio se detiene (como en la web), no se
+                              // pausa.
                               playing
-                                  ? Icons.pause_rounded
+                                  ? (current.isLive
+                                        ? Icons.stop_rounded
+                                        : Icons.pause_rounded)
                                   : Icons.play_arrow_rounded,
                             ),
                     ),
-                    IconButton(
-                      tooltip: 'Siguiente pista',
-                      onPressed: controller.hasNext
-                          ? () => unawaited(controller.next())
-                          : null,
-                      icon: const Icon(Icons.skip_next_rounded),
-                    ),
+                    // Una radio en directo no tiene «siguiente».
+                    if (!current.isLive)
+                      IconButton(
+                        tooltip: 'Siguiente pista',
+                        onPressed: controller.hasNext
+                            ? () => unawaited(controller.next())
+                            : null,
+                        icon: const Icon(Icons.skip_next_rounded),
+                      )
+                    else
+                      const SizedBox(width: 8),
                     const SizedBox(width: 4),
                   ],
                 ),
                 // Avance de la pista en el borde inferior de la tarjeta.
-                // Solo esta línea se redibuja con cada avance.
-                ValueListenableBuilder<Duration>(
-                  valueListenable: controller.positionListenable,
-                  builder: (context, _, _) => LinearProgressIndicator(
-                    minHeight: 2,
-                    backgroundColor: colors.onSurface.withValues(alpha: .12),
-                    value: length > 0
-                        ? (controller.position.inMilliseconds / length).clamp(
-                            0.0,
-                            1.0,
-                          )
-                        : 0,
+                // Solo esta línea se redibuja con cada avance. Una radio en
+                // directo no tiene avance que mostrar.
+                if (!current.isLive)
+                  ValueListenableBuilder<Duration>(
+                    valueListenable: controller.positionListenable,
+                    builder: (context, _, _) => LinearProgressIndicator(
+                      minHeight: 2,
+                      backgroundColor: colors.onSurface.withValues(alpha: .12),
+                      value: length > 0
+                          ? (controller.position.inMilliseconds / length).clamp(
+                              0.0,
+                              1.0,
+                            )
+                          : 0,
+                    ),
                   ),
-                ),
               ],
             ),
           ),

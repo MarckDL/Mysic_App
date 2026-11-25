@@ -90,18 +90,40 @@ Lima (UTC-5) se veía «Saturation Point» cuando la web mostraba «Steel Vagina
 teléfono (`LiveNowPlaying.wall/instant`: la programación viene sin zona y se compara
 campo a campo). Sin retraso añadido: el contador sale de la hora de pared, como en su web.
 
-**Canción real, de dentro del audio (ID3):** cada segmento fMP4 del HLS lleva una caja
-`emsg` con una etiqueta ID3 (`TIT2` título, `TPE1` artista, `TALB` álbum, `TPUB`
-discográfica, `TYER` año, `TXXX/TrackId`): es lo que lee la web, y vale para la radio
-**y para todos los moods** (los moods no tienen programación). `HlsTrackInfo.fromSegment`
-la lee; `fetchHlsTrackInfo` pide el maestro una vez (recuerda la lista de la variante
-de menos calidad: segmentos de ~40 KB con los mismos metadatos), el penúltimo segmento,
-cada 15 s (`hlsInfoEvery`). La carátula sale de `album_art/<TrackId>.jpg`, comprobada con
-un HEAD (no todas existen; si no, se usa la foto del programa y, si no, el logo o la
-imagen del mood). Verificado con un segmento real: «Remember to Remember — Rick Holmes
-· 12 inch · Gold Mink · 2016». El controlador une las dos fuentes (`_applyLive`): título,
-artista, discográfica y carátula del audio; programa, curador y línea de tiempo de la
-programación.
+**De dónde sale la canción (y por qué Mysic iba una por detrás de la web):** la web de
+ROVR **no lee ninguna etiqueta del audio**: calcula la pista por la hora
+(`elapsed = (Date.now() − startTime)/1000` y `getTrackIndexFromStitchedOrDuration` sobre
+las marcas `tracks_cues` de la programación, comprobado en su JavaScript). Mysic leía antes
+la etiqueta ID3 del audio y, medido el 2026-11-25 en la señal de Lima, esa etiqueta cambia
+hasta ~4 min 40 s **después** que la programación (p. ej. «Hyperballad» empieza a las 15:09:26
+según las marcas, pero la etiqueta del stream pasó de «Blind» a «Hyperballad» a las
+15:14:06). Dos relojes que no coinciden: Mysic mostraba «Blind» mientras la web mostraba
+«Hyperballad». Regla actual: **con programación, la canción es la de la programación**
+(título, artista, discográfica, carátula del álbum o, si no, la foto del programa), igual
+que la web, con el mismo cálculo y sin retraso añadido; el sondeo vuelve a preguntar justo
+al empezar la siguiente marca (la web cambia en el inicio de la siguiente, que solapa ~2 s con
+el final de la anterior) y como mucho cada 30 s. La etiqueta del audio ya no se pide en
+la radio principal.
+
+**Moods (sin programación): etiqueta ID3 del audio.** Cada segmento fMP4 del HLS lleva una
+caja `emsg` con una etiqueta ID3 (`TIT2` título, `TPE1` artista, `TALB` álbum, `TPUB`
+discográfica, `TYER` año, `TXXX/TrackId`). `HlsTrackInfo.fromSegment` la lee;
+`fetchHlsTrackInfo` pide el maestro una vez (recuerda la variante de menos calidad:
+segmentos de ~40 KB con los mismos metadatos), lee un segmento de hace ~25 s
+(`_hlsLagSegments`: el reproductor va ~30 s por detrás del borde del directo,
+`PART-HOLD-BACK=30`) y repite cada 15 s (`hlsInfoEvery`). La carátula sale de
+`album_art/<TrackId>.jpg`, comprobada con un HEAD (no todas existen; si no, la imagen del
+mood). Verificado con un segmento real: «Remember to Remember — Rick Holmes · 12 inch ·
+Gold Mink · 2016». Hasta que llega la primera etiqueta no se enseña ninguna canción.
+No se verificó cuánto va esta etiqueta respecto al audio que se oye en los moods.
+
+**Controles de una radio (coherentes con la web de ROVR):** un solo botón grande,
+**detener / sintonizar** (icono de parar; reanudar vuelve al directo); sin anterior ni
+siguiente, repetir, aleatorio, letra, cola ni guardar; el menú (⋮) conserva el
+temporizador de apagado y «Detener reproducción» (sin velocidad/tono ni ficha de
+canción). Deslizar hacia arriba no abre la cola. El mini-reproductor usa el mismo icono,
+sin «siguiente» ni barra de avance, y la notificación del sistema no muestra repetir ni
+anterior/siguiente ni permite buscar un punto.
 
 **Pastillas:** son `LibraryChip`, las mismas que los filtros de la Biblioteca.
 

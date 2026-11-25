@@ -178,7 +178,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           : null,
       onTap: () => unawaited(showSleepTimerSheet(context, controller)),
     ),
-    if (controller.canTune)
+    // Una radio en directo no se acelera ni se afina, ni tiene ficha de canción.
+    if (controller.canTune && !track.isLive)
       SheetRow(
         icon: Icons.speed_rounded,
         label: 'Velocidad y tono',
@@ -188,11 +189,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             : null,
         onTap: () => unawaited(showTuningSheet(context, controller)),
       ),
-    SheetRow(
-      icon: Icons.info_outline_rounded,
-      label: 'Información de la canción',
-      onTap: () => unawaited(showSongInfoSheet(context, track, controller)),
-    ),
+    if (!track.isLive)
+      SheetRow(
+        icon: Icons.info_outline_rounded,
+        label: 'Información de la canción',
+        onTap: () => unawaited(showSongInfoSheet(context, track, controller)),
+      ),
     SheetRow(
       icon: Icons.stop_circle_outlined,
       label: 'Detener reproducción',
@@ -387,7 +389,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                 child: _view == _View.player || _pillsShown
                     ? Padding(
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        child: _TransportRow(controller: controller),
+                        child: _TransportRow(
+                          controller: controller,
+                          live: track.isLive,
+                        ),
                       )
                     : const SizedBox(width: double.infinity),
               ),
@@ -462,8 +467,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                           child: PlayerCoverCarousel(
                             controller: controller,
                             side: side,
-                            onSwipeUp: () =>
-                                setState(() => _view = _View.queue),
+                            // Una radio no tiene cola que abrir.
+                            onSwipeUp: track.isLive
+                                ? null
+                                : () => setState(() => _view = _View.queue),
                             onDoubleTap: () => _like(track, burst: true),
                             onLongPress: () => _openMenu(controller, track),
                           ),
@@ -619,6 +626,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     TrackPlaybackController controller,
     CatalogTrack track,
   ) {
+    // Una radio en directo no tiene cola, repetir, aleatorio, letra ni lista
+    // donde guardarla: solo el menú (temporizador de apagado, detener…).
+    if (track.isLive) {
+      return Row(
+        children: [
+          const Spacer(),
+          IconButton.filled(
+            tooltip: 'Opciones de la radio',
+            style: IconButton.styleFrom(fixedSize: const Size.square(46)),
+            icon: const Icon(Icons.more_vert),
+            onPressed: () => _openMenu(controller, track),
+          ),
+        ],
+      );
+    }
     final direct =
         _youtubeId(track) != null &&
         MusicModeScope.of(context)?.connection?.isDirect == true;
@@ -819,9 +841,13 @@ class _TopRow extends StatelessWidget {
 /// Anterior, reproducir o pausar y siguiente: tres píldoras del color de la
 /// portada, la del centro la más ancha (Limusic `ClassicTransportRow`).
 class _TransportRow extends StatelessWidget {
-  const _TransportRow({required this.controller});
+  const _TransportRow({required this.controller, this.live = false});
 
   final TrackPlaybackController controller;
+
+  /// Una radio en directo: un solo botón, como en la web de ROVR. Parar y
+  /// volver a sintonizar; no hay anterior ni siguiente.
+  final bool live;
 
   @override
   Widget build(BuildContext context) {
@@ -832,6 +858,27 @@ class _TransportRow extends StatelessWidget {
       shape: const StadiumBorder(),
       padding: EdgeInsets.zero,
     );
+    if (live) {
+      return Center(
+        child: IconButton.filled(
+          tooltip: playing || loading ? 'Detener' : 'Sintonizar',
+          style: pill(const Size(120, 80)),
+          iconSize: 42,
+          // Mientras sintoniza no hay nada que parar: se espera a que suene.
+          onPressed: loading
+              ? null
+              : () => unawaited(
+                  playing ? controller.pause() : controller.resume(),
+                ),
+          icon: loading
+              ? const SizedBox.square(
+                  dimension: 26,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                )
+              : Icon(playing ? Icons.stop_rounded : Icons.play_arrow_rounded),
+        ),
+      );
+    }
     // En pantallas estrechas las tres encogen juntas.
     return FittedBox(
       fit: BoxFit.scaleDown,

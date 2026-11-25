@@ -235,7 +235,8 @@ class MysicAudioHandler extends BaseAudioHandler {
         ),
       // Repetir la canción, con indicador: apagado atenuado, encendido con el
       // "1". Con dos acciones propias, Android no añade el botón de aleatorio.
-      if (current != null)
+      // Una radio en directo no se repite, ni tiene anterior/siguiente.
+      if (current != null && current.isLive != true)
         MediaControl.custom(
           androidIcon: controller.repeat == PlaybackRepeat.one
               ? 'drawable/ic_notif_repeat_on'
@@ -245,12 +246,14 @@ class MysicAudioHandler extends BaseAudioHandler {
               : 'Repetir canción: desactivado',
           name: 'repeat',
         ),
-      if (controller.hasPrevious) MediaControl.skipToPrevious,
+      if (controller.hasPrevious && current?.isLive != true)
+        MediaControl.skipToPrevious,
       if (current != null)
         (phase == TrackAudioPhase.playing || phase == TrackAudioPhase.loading)
             ? MediaControl.pause
             : MediaControl.play,
-      if (controller.hasNext) MediaControl.skipToNext,
+      if (controller.hasNext && current?.isLive != true)
+        MediaControl.skipToNext,
     ];
     final compact = <int>[
       for (final (i, c) in controls.indexed)
@@ -261,7 +264,10 @@ class MysicAudioHandler extends BaseAudioHandler {
       PlaybackState(
         controls: controls,
         androidCompactActionIndices: compact,
-        systemActions: current == null ? const {} : const {MediaAction.seek},
+        // Un directo no se puede mover: sin barra de búsqueda en el sistema.
+        systemActions: current == null || current.isLive
+            ? const {}
+            : const {MediaAction.seek},
         processingState: switch (phase) {
           TrackAudioPhase.idle => AudioProcessingState.idle,
           TrackAudioPhase.loading => AudioProcessingState.loading,

@@ -225,9 +225,14 @@ LiveNowPlaying? _rovr(List data, DateTime now) {
           .inMilliseconds /
       1000;
   Map? current;
+  num? nextStart; // cuándo empieza la siguiente: la web cambia de canción ahí
   for (final cue in cues) {
-    if (cue is Map && cue['start'] is num && (cue['start'] as num) <= elapsed) {
+    if (cue is! Map || cue['start'] is! num) continue;
+    final s = cue['start'] as num;
+    if (s <= elapsed) {
       current = cue;
+    } else if (nextStart == null || s < nextStart) {
+      nextStart = s;
     }
   }
   final index = current?['track_index'];
@@ -248,7 +253,11 @@ LiveNowPlaying? _rovr(List data, DateTime now) {
   final start = current!['start'] as num;
   final cueEnd = current['end'];
   final duration = track['duration'];
-  final endSeconds = cueEnd is num && cueEnd > start
+  // La web cambia en el inicio de la marca siguiente (que solapa ~2 s con el
+  // final de esta); sin siguiente (la última pista), en su final.
+  final endSeconds = nextStart != null && nextStart > start
+      ? nextStart
+      : cueEnd is num && cueEnd > start
       ? cueEnd
       : duration is num && duration > 0
       ? start + duration
