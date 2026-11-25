@@ -95,6 +95,28 @@ playlists; álbumes, canciones y artistas avisan de que no se importan.
 Código: `features/spotify_import/` y `core/text/fold_text.dart`. Pruebas:
 `test/spotify_import_test.dart`, `test/spotify_fetcher_test.dart`.
 
+## 3 bis. Descargas sin internet, sin encerrar al usuario
+
+Lo descargado debe verse y sonar **desde Biblioteca → Descargas, con o sin
+internet ni datos**, sin obligar a activar un modo global.
+
+- **Antes.** Si la app arrancaba sin internet y había descargas, se ponía sola en
+  el modo «Solo canciones descargadas»: sustituía las pestañas por una lista y
+  bloqueaba toda la red hasta pulsar «Reintentar». Además, un álbum descargado
+  se abría con la página normal del álbum, que usa el catálogo público de Mysic
+  (el servidor del escritorio) y fallaba si este no respondía.
+- **Ahora.**
+  - Un álbum o playlist descargados se abren siempre con su página propia
+    (`DownloadedCollectionScreen`), con internet o sin él.
+  - Arrancar sin internet con descargas **deja al usuario en Biblioteca →
+    Descargas** (`libraryTabRequests`), solo si seguía en Inicio. No cambia
+    ningún ajuste ni bloquea la red, y puede ir a cualquier otra parte.
+  - El modo «Solo canciones descargadas» ya **solo lo activa el usuario**, desde
+    el interruptor de Descargas o Ajustes (ahorrar datos). Se quitó el modo
+    automático (`checkAtStartup`, `retry`, `leaveAutomatic`).
+
+Pruebas: `test/library_screen_test.dart` y `test/download_store_test.dart`.
+
 ## 4. Almacenado de las descargas
 
 Defectos encontrados en `DownloadStore`:

@@ -97,9 +97,14 @@ mismo:
   mientras bajan las canciones, muestra el avance.
 - Biblioteca → Descargas lleva una cuadrícula **Álbumes y playlists** sobre la
   lista de canciones. Cada tesela dice «Álbum · artista», o «Álbum · 3 de 9»
-  mientras faltan canciones. Con internet se abre su página, y con «Solo
-  canciones descargadas» suenan sus canciones del teléfono. Mantener pulsada
-  abre las mismas opciones que en el resto de la app.
+  mientras faltan canciones. Tocarla abre **siempre la página propia de lo
+  descargado** (`DownloadedCollectionScreen`), con internet o sin él: no pide
+  nada a ningún servidor. Antes, con internet se abría la página normal del
+  álbum, que usa el catálogo público de Mysic (el servidor del escritorio) y
+  fallaba con «No se pudo conectar con el catálogo de Mysic» si este no
+  respondía, aunque el álbum estuviera en el teléfono. Desde los tres puntos de
+  esa página, con internet, se puede abrir la página normal. Mantener pulsada
+  la tarjeta abre las mismas opciones que en el resto de la app.
 - Pulsar Descargar en una colección ya descargada pregunta: **Quitar descarga**
   o, si faltan canciones, **Bajar las que faltan** (Limusic: `downloadMissing`).
 - **Quitar la descarga** suelta la colección y borra sus canciones, salvo las que

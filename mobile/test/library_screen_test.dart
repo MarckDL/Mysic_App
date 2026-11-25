@@ -134,6 +134,37 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('arrancar sin internet abre la Biblioteca ya en Descargas', (
+    tester,
+  ) async {
+    // La app lo pide antes de que la Biblioteca exista (no cambia ningún
+    // ajuste ni bloquea la red: solo deja al usuario donde lo descargado
+    // funciona sin internet).
+    libraryTabRequests.value = LibraryTab.downloads;
+    addTearDown(() => libraryTabRequests.value = null);
+    await _pump(tester, {'playlists'});
+    expect(tester.widget<LibraryChip>(_chip('Descargas')).selected, isTrue);
+    expect(tester.widget<LibraryChip>(_chip('Todo')).selected, isFalse);
+    expect(find.text('Solo canciones descargadas'), findsOneWidget);
+    // La petición se consume: volver a abrir la Biblioteca no la repite.
+    expect(libraryTabRequests.value, isNull);
+    // Y el usuario sigue libre de ir a otra pestaña.
+    await tester.tap(_chip('Todo'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<LibraryChip>(_chip('Todo')).selected, isTrue);
+  });
+
+  testWidgets('pedir Descargas con la Biblioteca abierta cambia de pestaña', (
+    tester,
+  ) async {
+    await _pump(tester, {'playlists'});
+    expect(tester.widget<LibraryChip>(_chip('Todo')).selected, isTrue);
+    libraryTabRequests.value = LibraryTab.downloads;
+    await tester.pumpAndSettle();
+    expect(tester.widget<LibraryChip>(_chip('Descargas')).selected, isTrue);
+    expect(libraryTabRequests.value, isNull);
+  });
+
   testWidgets('Descargas explica cómo descargar cuando no hay ninguna', (
     tester,
   ) async {

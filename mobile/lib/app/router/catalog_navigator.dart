@@ -15,6 +15,8 @@ import '../../features/authentication/presentation/account_screen.dart';
 import '../../features/connected_library/application/music_mode_controller.dart';
 import '../../features/connected_library/domain/music_mode.dart';
 import '../../features/connected_library/presentation/catalog_pages.dart';
+import '../../features/connected_library/presentation/library_screen.dart'
+    show LibraryTab, libraryTabRequests;
 import '../../features/connected_library/presentation/music_mode_host.dart';
 import '../../features/connected_library/presentation/mood_screen.dart';
 import '../../features/connected_library/presentation/music_mode_screen.dart';
@@ -211,15 +213,24 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
     unawaited(_checkConnection());
   }
 
-  /// Sin internet al arrancar y con canciones descargadas, la sesión pasa sola
-  /// a «solo descargadas». No retrasa el primer fotograma: si no hay conexión
-  /// las pestañas se sustituyen por las descargas en cuanto se sabe.
+  /// Sin internet al arrancar y con canciones descargadas, la app deja al
+  /// usuario en Biblioteca → Descargas, donde lo descargado se ve y suena sin
+  /// internet ni datos. No cambia ningún ajuste ni bloquea la red: el usuario
+  /// sigue libre de ir a cualquier otra parte, y el modo «Solo canciones
+  /// descargadas» es solo suyo. No retrasa el primer fotograma, y solo mueve al
+  /// usuario si sigue en Inicio.
   Future<void> _checkConnection() async {
     await DownloadStore.instance.load();
-    if (!mounted || OfflineMode.instance.manual) return;
-    await OfflineMode.instance.checkAtStartup(
-      hasDownloads: DownloadStore.instance.hasDownloads,
-    );
+    if (!mounted ||
+        OfflineMode.instance.manual ||
+        !DownloadStore.instance.hasDownloads) {
+      return;
+    }
+    if (await OfflineMode.hasInternet() || !mounted) return;
+    final here = _router.routeInformationProvider.value.uri.path;
+    if (here != '/') return;
+    libraryTabRequests.value = LibraryTab.downloads;
+    _router.go('/library');
   }
 
   @override

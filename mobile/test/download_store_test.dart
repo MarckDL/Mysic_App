@@ -231,46 +231,24 @@ void main() {
   });
 
   group('modo sin conexión', () {
-    test('sin internet y con descargas pasa solo a descargadas', () async {
-      final mode = OfflineMode.instance;
-      expect(mode.active, isFalse);
-      await mode.checkAtStartup(hasDownloads: true, probe: () async => false);
-      expect(mode.active, isTrue);
-      expect(mode.automatic, isTrue);
-      expect(mode.manual, isFalse);
-    });
+    test(
+      'sin el ajuste manual la app nunca se pone sola en modo sin conexión',
+      () {
+        // Antes, arrancar sin internet con descargas encerraba la app en
+        // «solo descargadas» y bloqueaba toda la red. Ahora solo lo activa el
+        // usuario; lo descargado se ve y suena desde Biblioteca → Descargas.
+        final mode = OfflineMode.instance;
+        expect(mode.active, isFalse);
+        expect(mode.manual, isFalse);
+      },
+    );
 
-    test('sin internet pero sin descargas no cambia nada', () async {
-      await OfflineMode.instance.checkAtStartup(
-        hasDownloads: false,
-        probe: () async => false,
-      );
-      expect(OfflineMode.instance.active, isFalse);
-    });
-
-    test('con internet no se activa', () async {
-      await OfflineMode.instance.checkAtStartup(
-        hasDownloads: true,
-        probe: () async => true,
-      );
-      expect(OfflineMode.instance.active, isFalse);
-    });
-
-    test('reintentar con internet sale del modo automático', () async {
-      final mode = OfflineMode.instance;
-      await mode.checkAtStartup(hasDownloads: true, probe: () async => false);
-      expect(await mode.retry(probe: () async => false), isFalse);
-      expect(mode.active, isTrue);
-      expect(await mode.retry(probe: () async => true), isTrue);
-      expect(mode.active, isFalse);
-    });
-
-    test('el ajuste manual no se quita al volver internet', () async {
+    test('el ajuste manual activa el modo y reset lo apaga', () {
       final mode = OfflineMode.instance..manual = true;
-      expect(await mode.retry(probe: () async => true), isTrue);
       expect(mode.active, isTrue);
+      mode.reset();
+      expect(mode.active, isFalse);
     });
-
     test('con el modo activo ninguna petición de Dio sale', () async {
       var reached = false;
       final dio = Dio()

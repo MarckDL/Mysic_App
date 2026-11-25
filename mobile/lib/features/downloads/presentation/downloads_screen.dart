@@ -10,8 +10,6 @@ import '../../../core/settings/app_settings.dart';
 import '../../playback/application/playback_providers.dart';
 import '../../connected_library/domain/music_mode.dart'
     show MusicAlbum, MusicPlaylist;
-import '../../connected_library/presentation/catalog_pages.dart'
-    show PageSeed, openAlbum;
 import '../../connected_library/presentation/track_sheet.dart'
     show showItemMenu;
 import '../../connected_library/presentation/library_screen.dart'
@@ -73,36 +71,14 @@ class OfflineHome extends ConsumerWidget {
   }
 }
 
-/// Aviso de que no se está usando internet, con la salida correspondiente: si
-/// el modo se activó solo por falta de conexión, reintentar; si lo eligió el
-/// usuario, desactivarlo.
-class _OfflineBanner extends ConsumerStatefulWidget {
+/// Aviso de que el modo «Solo canciones descargadas» está activo, con la salida:
+/// desactivarlo. Solo el usuario lo activa; la app nunca se pone en él sola.
+class _OfflineBanner extends ConsumerWidget {
   const _OfflineBanner();
 
   @override
-  ConsumerState<_OfflineBanner> createState() => _OfflineBannerState();
-}
-
-class _OfflineBannerState extends ConsumerState<_OfflineBanner> {
-  bool _checking = false;
-
-  Future<void> _retry() async {
-    setState(() => _checking = true);
-    final online = await OfflineMode.instance.retry();
-    if (!mounted) return;
-    setState(() => _checking = false);
-    if (!online) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sigue sin haber internet.')),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final mode = OfflineMode.instance;
-    final automatic = mode.automatic && !mode.manual;
     return Material(
       color: theme.colorScheme.secondaryContainer,
       child: Padding(
@@ -110,29 +86,23 @@ class _OfflineBannerState extends ConsumerState<_OfflineBanner> {
         child: Row(
           children: [
             Icon(
-              automatic ? Icons.wifi_off : Icons.download_done,
+              Icons.download_done,
               color: theme.colorScheme.onSecondaryContainer,
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                automatic
-                    ? 'Sin conexión: solo se reproducen las canciones '
-                          'descargadas.'
-                    : 'Modo «Solo canciones descargadas»: no se usa internet '
-                          'ni datos.',
+                'Modo «Solo canciones descargadas»: no se usa internet ni '
+                'datos.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSecondaryContainer,
                 ),
               ),
             ),
             TextButton(
-              onPressed: _checking
-                  ? null
-                  : automatic
-                  ? _retry
-                  : () => ref.read(offlineOnlyProvider.notifier).set(false),
-              child: Text(automatic ? 'Reintentar' : 'Desactivar'),
+              onPressed: () =>
+                  ref.read(offlineOnlyProvider.notifier).set(false),
+              child: const Text('Desactivar'),
             ),
           ],
         ),
@@ -141,29 +111,17 @@ class _OfflineBannerState extends ConsumerState<_OfflineBanner> {
   }
 }
 
-/// Abre la página de una colección descargada. Con internet, la página normal
-/// del álbum o de la playlist (con todo lo demás); sin él, la propia de lo
-/// descargado. Nunca hace sonar nada por sí sola.
+/// Abre la página de una colección descargada: la propia de lo descargado, con
+/// internet o sin él. Lo que está en el teléfono no depende de ningún servidor
+/// (antes se abría la página normal del álbum, que pide el catálogo y fallaba
+/// con «No se pudo conectar con el catálogo de Mysic» si este no respondía).
+/// Desde esa página, con internet, se puede abrir la normal. Nunca hace sonar
+/// nada por sí sola.
 void openDownloadedCollection(
   BuildContext context,
   DownloadedCollection collection,
 ) {
-  if (OfflineMode.instance.active) {
-    context.push('/downloads/collection/${Uri.encodeComponent(collection.id)}');
-    return;
-  }
-  final seed = PageSeed(
-    title: collection.title,
-    imageUrl: collection.thumbnailUrl,
-  );
-  if (collection.album) {
-    openAlbum(context, collection.id, seed: seed);
-  } else {
-    context.push(
-      '/music/playlist/${Uri.encodeComponent(collection.id)}',
-      extra: seed,
-    );
-  }
+  context.push('/downloads/collection/${Uri.encodeComponent(collection.id)}');
 }
 
 /// Lista de descargas: las que están bajando, los fallos, y las canciones.

@@ -36,6 +36,11 @@ enum LibraryTab { all, playlists, albums, artists, songs, downloads }
 /// vuelve a leer lo que muestra.
 final libraryRefreshRequests = ValueNotifier<int>(0);
 
+/// La pestaña que la Biblioteca debe mostrar al abrirse (o ahora, si ya está
+/// abierta): la app la pide al arrancar sin internet para dejar al usuario en
+/// Descargas. La Biblioteca la lee una vez y la borra.
+final libraryTabRequests = ValueNotifier<LibraryTab?>(null);
+
 /// Lo que se sabe de una colección: la última lista que llegó (se conserva
 /// mientras se refresca, como `last` en `GridLibraryPlaylist`), si hay una
 /// petición en curso y si la última falló.
@@ -109,15 +114,32 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     libraryRefreshRequests.addListener(_onRefreshRequested);
+    libraryTabRequests.addListener(_onTabRequested);
     unawaited(_store.load());
-    _enter(LibraryTab.all);
+    // Si la app pidió una pestaña antes de que se abriera la Biblioteca (el
+    // arranque sin internet pide Descargas), se abre ya en ella.
+    final asked = libraryTabRequests.value;
+    if (asked != null) {
+      libraryTabRequests.value = null;
+      _tab = asked;
+    }
+    _enter(_tab);
   }
 
   @override
   void dispose() {
+    libraryTabRequests.removeListener(_onTabRequested);
     libraryRefreshRequests.removeListener(_onRefreshRequested);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  /// Se pidió otra pestaña con la Biblioteca ya abierta.
+  void _onTabRequested() {
+    final asked = libraryTabRequests.value;
+    if (asked == null || !mounted) return;
+    libraryTabRequests.value = null;
+    _select(asked);
   }
 
   /// Algo creó una playlist en la cuenta (el importador de Spotify): se

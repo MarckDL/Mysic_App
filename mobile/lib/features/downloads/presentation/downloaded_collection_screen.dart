@@ -3,17 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/network/offline_mode.dart';
 import '../../connected_library/presentation/catalog_pages.dart'
-    show FloatingBack, StatusScrim;
+    show FloatingBack, PageSeed, StatusScrim, openAlbum;
 import '../../playback/application/playback_providers.dart';
 import '../../search/presentation/catalog_widgets.dart';
 import '../../search/presentation/music_tiles.dart' show AlbumDiscArt;
 import '../data/download_store.dart';
 
-/// La página de un álbum o una playlist descargados, sin internet. Se ve igual
-/// que la página normal del álbum (la portada con su medio disco, el título,
-/// el artista y las pistas numeradas) pero con lo que hay en el teléfono. Con
-/// internet se abre en cambio la página normal.
+/// La página de un álbum o una playlist descargados. Se ve igual que la página
+/// normal del álbum (la portada con su medio disco, el título, el artista y las
+/// pistas numeradas) pero con lo que hay en el teléfono, así que se abre con
+/// internet o sin él, sin pedir nada a ningún servidor. Desde los tres puntos,
+/// con internet, se puede abrir la página normal.
 class DownloadedCollectionScreen extends ConsumerStatefulWidget {
   const DownloadedCollectionScreen({super.key, required this.id});
 
@@ -78,6 +80,23 @@ class _DownloadedCollectionScreenState
     if (mounted && context.canPop()) context.pop();
   }
 
+  void _openOnline(DownloadedCollection collection) {
+    final seed = PageSeed(
+      title: collection.title,
+      imageUrl: collection.thumbnailUrl,
+    );
+    if (collection.album) {
+      openAlbum(context, collection.id, seed: seed);
+    } else {
+      unawaited(
+        context.push(
+          '/music/playlist/${Uri.encodeComponent(collection.id)}',
+          extra: seed,
+        ),
+      );
+    }
+  }
+
   /// Los tres puntos: lo que se puede hacer sin internet con lo descargado.
   void _options(
     DownloadedCollection collection,
@@ -109,6 +128,22 @@ class _DownloadedCollectionScreenState
                 unawaited(_play(tracks, 0, shuffled: true));
               },
             ),
+            // La página normal, con todo lo que pide internet (el corazón, el
+            // artista, más del artista…). Solo con internet.
+            if (!OfflineMode.instance.active)
+              ListTile(
+                leading: const Icon(Icons.open_in_new_rounded),
+                title: Text(
+                  collection.album
+                      ? 'Abrir la página del álbum'
+                      : 'Abrir la página de la playlist',
+                ),
+                subtitle: const Text('Necesita internet'),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  if (mounted) _openOnline(collection);
+                },
+              ),
             ListTile(
               leading: Icon(
                 Icons.delete_outline,
