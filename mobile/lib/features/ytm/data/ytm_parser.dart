@@ -59,6 +59,74 @@ class YtmPage {
   };
 }
 
+/// Cuántas canciones dice un subtítulo («Playlist • 1.234 canciones», «36
+/// songs», «1 canción»); null si no dice ninguna.
+int? songCount(String text) {
+  final match = RegExp(
+    r'(\d[\d.,\s]*)\s*(?:canciones|canci[oó]n|songs?|tracks?|pistas?)',
+    caseSensitive: false,
+  ).firstMatch(text);
+  if (match == null) return null;
+  final digits = match.group(1)!.replaceAll(RegExp(r'[^\d]'), '');
+  final value = int.tryParse(digits);
+  return value == null || value > 100000 ? null : value;
+}
+
+/// Una playlist de la cuenta en el cuadro «Guardar en playlist»: si ya
+/// contiene la canción (o todas las canciones pedidas) y cuántas tiene.
+class YtmSaveOption {
+  const YtmSaveOption(this.id, this.title, this.contains, this.count);
+  final String id;
+  final String title;
+
+  /// Ya está dentro (todas las canciones pedidas).
+  final bool contains;
+  final int? count;
+}
+
+/// La respuesta de `playlist/get_add_to_playlist`: las playlists de la cuenta
+/// con su casilla («containsSelectedVideos»: `ALL`, `SOME` o `NONE`). Lo que
+/// no se entiende se salta; una respuesta sin nada devuelve lista vacía.
+List<YtmSaveOption> parseYtmSaveOptions(Map<String, dynamic> data) {
+  final found = <YtmSaveOption>[];
+  void walk(Object? node, int depth) {
+    if (depth > 12) return;
+    if (node is List) {
+      for (final child in node) {
+        walk(child, depth + 1);
+      }
+    } else if (node is Map<String, dynamic>) {
+      final option = _obj(node['playlistAddToOptionRenderer']);
+      if (option.isNotEmpty) {
+        final id = _str(option['playlistId']);
+        final title = _label(option['title']).trim();
+        if (id.isNotEmpty && _resourceId.hasMatch(id) && title.isNotEmpty) {
+          final text = [
+            _label(option['shortBylineText']),
+            _label(option['subtitle']),
+            _label(option['byline']),
+          ].join(' ');
+          found.add(
+            YtmSaveOption(
+              id,
+              title,
+              _str(option['containsSelectedVideos']) == 'ALL',
+              songCount(text),
+            ),
+          );
+        }
+        return;
+      }
+      for (final child in node.values) {
+        walk(child, depth + 1);
+      }
+    }
+  }
+
+  walk(data['contents'] ?? data, 0);
+  return found;
+}
+
 _Json? _card(_Json value, String surface) {
   final columns = _list(value['flexColumns'])
       .map(
@@ -121,12 +189,18 @@ _Json? _card(_Json value, String surface) {
                 (id.startsWith('VL') ||
                     RegExp(r'^(?:PL|RD|OLAK5uy_)[\w-]+$').hasMatch(id))) ||
             (type.isEmpty && surface == 'playlists' && id.startsWith('VL')))) {
+      // «Playlist • 36 canciones»: el número va en el subtítulo (tarjeta de la
+      // biblioteca) o en la segunda columna (fila).
+      final count = songCount(
+        _label(columns.length > 1 ? columns[1] : value['subtitle']),
+      );
       return {
         'kind': 'playlist',
         'id': playlistId,
         'title': title,
         'private': false,
         'thumbnailUrl': thumbnailUrl,
+        'count': ?count,
       };
     }
     if (type == 'MUSIC_PAGE_TYPE_ARTIST' && _artistId.hasMatch(id)) {

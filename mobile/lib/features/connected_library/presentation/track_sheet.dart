@@ -1027,6 +1027,22 @@ class _PlaylistPickerState extends State<_PlaylistPicker> {
   List<MusicPlaylist>? _playlists;
   var _failed = false;
 
+  // Las casillas: las playlists que ya contienen la canción (de YouTube Music
+  // al abrir, y las que se marcan aquí), las que están cambiando y las que
+  // fallaron. Marcar o desmarcar se aplica al momento: no hay botón de aceptar.
+  final _saved = <String>{};
+  final _pending = <String>{};
+  final _errors = <String, String>{};
+
+  // Cuántas canciones tiene cada una según el cuadro de YouTube Music (si la
+  // tarjeta de la biblioteca no lo traía) y lo que sumó o restó esta hoja.
+  final _optionCounts = <String, int>{};
+  final _delta = <String, int>{};
+
+  // Tope de páginas de la biblioteca que se piden: sobra para una cuenta
+  // normal y evita un bucle si el servidor repite el cursor.
+  static const _maxPages = 20;
+
   @override
   void initState() {
     super.initState();
@@ -1038,23 +1054,58 @@ class _PlaylistPickerState extends State<_PlaylistPicker> {
         .whereType<MusicPlaylist>()
         .toList();
     unawaited(_load());
+    unawaited(_loadMembership());
   }
 
+  // Todas las playlists de la cuenta, página a página: la lista crece mientras
+  // llegan (antes solo se veía la primera página).
   Future<void> _load() async {
     final menu = widget.menu;
+    final all = <MusicPlaylist>[];
+    final seen = <String>{};
+    String? cursor;
     try {
-      final page = await menu.music.page(
-        menu.generation,
-        MusicSurface.playlists,
-        quiet: true,
-      );
-      if (mounted) {
-        setState(
-          () => _playlists = page.items.whereType<MusicPlaylist>().toList(),
+      for (var round = 0; round < _maxPages; round++) {
+        final page = await menu.music.page(
+          menu.generation,
+          MusicSurface.playlists,
+          cursor: cursor,
+          quiet: true,
         );
+        for (final item in page.items.whereType<MusicPlaylist>()) {
+          if (seen.add(item.id)) all.add(item);
+        }
+        if (!mounted) return;
+        setState(() => _playlists = List.of(all));
+        cursor = page.nextCursor;
+        if (cursor == null) break;
       }
     } on Object {
+      // Con lo que ya llegó basta; solo es un fallo si no llegó nada.
       if (mounted && _playlists == null) setState(() => _failed = true);
+    }
+  }
+
+  // En cuáles ya está la canción (y cuántas canciones tiene cada una), tal
+  // como lo dice el cuadro «Guardar en playlist» de YouTube Music. Si no
+  // contesta, las casillas empiezan vacías.
+  Future<void> _loadMembership() async {
+    final menu = widget.menu;
+    try {
+      final options = await menu.music.ask(
+        menu.generation,
+        (client) => client.ytm.saveOptions(_ids),
+      );
+      if (!mounted) return;
+      setState(() {
+        for (final option in options) {
+          if (option.contains) _saved.add(option.id);
+          final count = option.count;
+          if (count != null) _optionCounts[option.id] = count;
+        }
+      });
+    } on Object {
+      // Sin la respuesta no se sabe qué contiene cada una.
     }
   }
 
@@ -1064,18 +1115,55 @@ class _PlaylistPickerState extends State<_PlaylistPicker> {
       ? '«${widget.tracks.single.title}»'
       : '${widget.tracks.length} canciones';
 
-  void _saveTo(MusicPlaylist playlist) {
+  // Marca o desmarca la casilla de [playlist]: guarda o quita las canciones
+  // en ese momento, sin cerrar la hoja (se puede guardar en varias).
+  Future<void> _toggle(MusicPlaylist playlist) async {
+    if (_pending.contains(playlist.id)) return;
     final menu = widget.menu;
-    Navigator.of(context).pop();
-    unawaited(
-      menu.run(() async {
-        await menu.music.ask(
-          menu.generation,
-          (client) => client.ytm.addToPlaylist(playlist.id, _ids),
-        );
-        return 'Guardado en «${playlist.title}»';
-      }),
-    );
+    final add = !_saved.contains(playlist.id);
+    setState(() {
+      _pending.add(playlist.id);
+      _errors.remove(playlist.id);
+    });
+    String? failure;
+    try {
+      await menu.music.ask(
+        menu.generation,
+        (client) => add
+            ? client.ytm.addToPlaylist(playlist.id, _ids)
+            : client.ytm.removeVideosFromPlaylist(playlist.id, _ids),
+      );
+    } on ApiFailure catch (error) {
+      failure = error.message;
+    } on Object {
+      failure = 'No se pudo completar la acción.';
+    }
+    if (!mounted) return;
+    setState(() {
+      _pending.remove(playlist.id);
+      if (failure != null) {
+        _errors[playlist.id] = failure;
+        return;
+      }
+      if (add) {
+        _saved.add(playlist.id);
+      } else {
+        _saved.remove(playlist.id);
+      }
+      final step = widget.tracks.length;
+      _delta[playlist.id] = (_delta[playlist.id] ?? 0) + (add ? step : -step);
+    });
+  }
+
+  // «36 canciones» (con lo que esta hoja sumó o restó) o, si no se sabe, el
+  // tipo de playlist.
+  String _subtitle(MusicPlaylist playlist) {
+    final error = _errors[playlist.id];
+    if (error != null) return error;
+    final base = playlist.trackCount ?? _optionCounts[playlist.id];
+    if (base == null) return playlist.isPrivate ? 'Privada' : 'Playlist';
+    final total = (base + (_delta[playlist.id] ?? 0)).clamp(0, 100000);
+    return total == 1 ? '1 canción' : '$total canciones';
   }
 
   Future<void> _createNew() async {
@@ -1210,16 +1298,20 @@ class _PlaylistPickerState extends State<_PlaylistPicker> {
                     )
                   else
                     for (final playlist in playlists)
-                      _PickRow(
+                      _SaveRow(
                         key: ValueKey(playlist.id),
                         title: playlist.title,
+                        subtitle: _subtitle(playlist),
+                        failed: _errors.containsKey(playlist.id),
                         leading: TrackArtwork(
                           url: playlist.thumbnailUrl,
                           size: 48,
                           borderRadius: 8,
                           fallbackIcon: Icons.queue_music,
                         ),
-                        onTap: () => _saveTo(playlist),
+                        checked: _saved.contains(playlist.id),
+                        pending: _pending.contains(playlist.id),
+                        onToggle: () => unawaited(_toggle(playlist)),
                       ),
                 ],
               ),
@@ -1231,9 +1323,97 @@ class _PlaylistPickerState extends State<_PlaylistPicker> {
   }
 }
 
+// Una playlist del cuadro «Guardar en playlist»: portada, título, cuántas
+// canciones tiene y, a la derecha, la casilla. Tocar la fila o la casilla
+// guarda o quita la canción al instante.
+class _SaveRow extends StatelessWidget {
+  const _SaveRow({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.leading,
+    required this.checked,
+    required this.pending,
+    required this.onToggle,
+    this.failed = false,
+  });
+
+  final String title;
+  final String subtitle;
+  final Widget leading;
+  final bool checked;
+  final bool pending;
+  final bool failed;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context), colors = theme.colorScheme;
+    return Semantics(
+      container: true,
+      checked: checked,
+      label: '$title, $subtitle',
+      child: InkWell(
+        onTap: pending ? null : onToggle,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+          child: Row(
+            children: [
+              leading,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: failed ? colors.error : colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Mientras guarda o quita, un círculo en lugar de la casilla.
+              SizedBox.square(
+                dimension: 40,
+                child: Center(
+                  child: pending
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Checkbox(
+                          value: checked,
+                          onChanged: (_) => onToggle(),
+                          materialTapTargetSize: MaterialTapTargetSize.padded,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _PickRow extends StatelessWidget {
   const _PickRow({
-    super.key,
     required this.title,
     required this.leading,
     required this.onTap,

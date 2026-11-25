@@ -262,8 +262,13 @@ class MusicPlaylist extends MusicItem {
     this.isPrivate, {
     super.shelfTitle,
     this.thumbnailUrl,
+    this.trackCount,
   });
   final String? thumbnailUrl;
+
+  /// Cuántas canciones tiene, si YouTube Music lo dijo en su tarjeta («36
+  /// canciones»); null si no.
+  final int? trackCount;
 
   factory MusicPlaylist.fromJson(Map<String, dynamic> data) => MusicPlaylist(
     data['id'] as String,
@@ -271,9 +276,22 @@ class MusicPlaylist extends MusicItem {
     data['private'] == true,
     thumbnailUrl: data['thumbnailUrl'] as String?,
     shelfTitle: data['shelfTitle'] as String?,
+    trackCount:
+        data['count'] is int &&
+            (data['count'] as int) >= 0 &&
+            (data['count'] as int) <= 100000
+        ? data['count'] as int
+        : null,
   );
 
   final bool isPrivate;
+
+  /// «36 canciones», «1 canción» o null si no se sabe.
+  String? get countLabel => trackCount == null
+      ? null
+      : trackCount == 1
+      ? '1 canción'
+      : '$trackCount canciones';
 }
 
 class MusicAlbum extends MusicItem {

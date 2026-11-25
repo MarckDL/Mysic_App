@@ -61,52 +61,80 @@ List<Shortcut> collectionShortcuts(Set<String> capabilities) => [
     ),
 ];
 
-Widget _sheetFrame(BuildContext context, String title, List<Widget> children) {
+/// La hoja inferior de Inicio: asa, título y una lista que se desplaza.
+/// [header] (p. ej. un buscador) queda fijo bajo el título, sin desplazarse;
+/// con el teclado abierto la hoja sube sobre él.
+Widget _sheetFrame(
+  BuildContext context,
+  String title,
+  List<Widget> children, {
+  Widget? header,
+}) {
   final theme = Theme.of(context), colors = theme.colorScheme;
-  return Material(
-    color: colors.surfaceContainerHigh,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
-    clipBehavior: Clip.antiAlias,
-    child: ConstrainedBox(
-      // Una biblioteca larga se desplaza dentro de la hoja en vez de
-      // empujarla bajo la barra de estado.
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height * .75,
+  final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+  return Padding(
+    padding: EdgeInsets.only(bottom: keyboard),
+    child: Material(
+      color: colors.surfaceContainerHigh,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Container(
-              margin: const EdgeInsets.only(top: 10, bottom: 6),
-              width: 32,
-              height: 4,
-              decoration: BoxDecoration(
-                color: colors.onSurfaceVariant.withValues(alpha: .4),
-                borderRadius: BorderRadius.circular(50),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        // Una biblioteca larga se desplaza dentro de la hoja en vez de
+        // empujarla bajo la barra de estado; con el teclado, se encoge.
+        constraints: BoxConstraints(
+          maxHeight: (MediaQuery.sizeOf(context).height - keyboard) * .75,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 10, bottom: 6),
+                width: 32,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: colors.onSurfaceVariant.withValues(alpha: .4),
+                  borderRadius: BorderRadius.circular(50),
+                ),
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-            child: Text(title, style: theme.textTheme.titleMedium),
-          ),
-          Flexible(
-            child: ListView(
-              shrinkWrap: true,
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.viewPaddingOf(context).bottom + 8,
-              ),
-              children: children,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+              child: Text(title, style: theme.textTheme.titleMedium),
             ),
-          ),
-        ],
+            ?header,
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.viewPaddingOf(context).bottom + 8,
+                ),
+                children: children,
+              ),
+            ),
+          ],
+        ),
       ),
     ),
   );
+}
+
+/// El texto sin mayúsculas ni acentos, para comparar al buscar («Canción» y
+/// «cancion» son lo mismo).
+String foldForSearch(String text) {
+  const from = 'áàäâãéèëêíìïîóòöôõúùüûñç';
+  const to = 'aaaaaeeeeiiiiooooouuuunc';
+  final lower = text.toLowerCase();
+  final out = StringBuffer();
+  for (final rune in lower.runes) {
+    final char = String.fromCharCode(rune);
+    final at = from.indexOf(char);
+    out.write(at < 0 ? char : to[at]);
+  }
+  return out.toString().trim();
 }
 
 Future<void> _showSheet(BuildContext context, WidgetBuilder builder) =>
@@ -149,6 +177,29 @@ class _ShortcutPickerState extends State<_ShortcutPicker> {
   var _playlists = const <Shortcut>[];
   var _albums = const <Shortcut>[];
 
+  // El buscador: filtra por título las tres listas a la vez.
+  final _search = TextEditingController();
+  var _query = '';
+
+  // Tope de páginas que se piden de cada lista: sobra para una cuenta normal
+  // y evita un bucle si el servidor repite el cursor.
+  static const _maxPages = 20;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  List<Shortcut> _filtered(List<Shortcut> items) {
+    final query = foldForSearch(_query);
+    if (query.isEmpty) return items;
+    return [
+      for (final item in items)
+        if (foldForSearch(item.title).contains(query)) item,
+    ];
+  }
+
   @override
   void initState() {
     super.initState();
@@ -171,26 +222,80 @@ class _ShortcutPickerState extends State<_ShortcutPicker> {
     }
   }
 
+  // Todas las playlists (o álbumes) de la cuenta, página a página: la lista
+  // crece mientras llegan. Antes solo se ofrecía la primera página.
   Future<void> _load(
     MusicSurface surface,
     void Function(List<Shortcut> list) store,
   ) async {
+    final all = <Shortcut>[];
+    final seen = <String>{};
+    String? cursor;
     try {
-      final page = await widget.music.page(
-        widget.generation,
-        surface,
-        quiet: true,
-      );
-      if (!mounted) return;
-      setState(
-        () => store([
-          for (final item in page.items)
-            if (item is MusicPlaylist || item is MusicAlbum) shortcutOf(item),
-        ]),
-      );
+      for (var round = 0; round < _maxPages; round++) {
+        final page = await widget.music.page(
+          widget.generation,
+          surface,
+          cursor: cursor,
+          quiet: true,
+        );
+        for (final item in page.items) {
+          if (item is! MusicPlaylist && item is! MusicAlbum) continue;
+          final shortcut = shortcutOf(item);
+          if (seen.add('${shortcut.kind.name}:${shortcut.id}')) {
+            all.add(shortcut);
+          }
+        }
+        if (!mounted) return;
+        setState(() => store(List.of(all)));
+        cursor = page.nextCursor;
+        if (cursor == null) break;
+      }
     } on Object {
       // Se queda con lo que ya se veía.
     }
+  }
+
+  // El buscador: una línea con la lupa a la izquierda (y una «x» para borrar
+  // lo escrito).
+  Widget _searchField(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+      child: TextField(
+        controller: _search,
+        textInputAction: TextInputAction.search,
+        onChanged: (value) => setState(() => _query = value),
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: 'Buscar',
+          prefixIcon: Icon(
+            Icons.search_rounded,
+            color: colors.onSurfaceVariant,
+          ),
+          suffixIcon: _query.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Borrar',
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () {
+                    _search.clear();
+                    setState(() => _query = '');
+                  },
+                ),
+          // Solo una línea debajo, sin caja.
+          border: UnderlineInputBorder(
+            borderSide: BorderSide(color: colors.outlineVariant),
+          ),
+          enabledBorder: UnderlineInputBorder(
+            borderSide: BorderSide(color: colors.outlineVariant),
+          ),
+          focusedBorder: UnderlineInputBorder(
+            borderSide: BorderSide(color: colors.primary, width: 2),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -200,89 +305,109 @@ class _ShortcutPickerState extends State<_ShortcutPicker> {
     final groups = [
       (
         'Biblioteca',
-        collectionShortcuts(music.connection?.capabilities ?? const {}),
+        _filtered(
+          collectionShortcuts(music.connection?.capabilities ?? const {}),
+        ),
       ),
-      ('Playlists', _playlists),
-      ('Álbumes', _albums),
-    ].where((group) => group.$2.isNotEmpty);
+      ('Playlists', _filtered(_playlists)),
+      ('Álbumes', _filtered(_albums)),
+    ].where((group) => group.$2.isNotEmpty).toList();
     return ValueListenableBuilder(
       valueListenable: music.shortcuts,
       builder: (context, _, _) {
         final full = music.shortcutsFull;
-        return _sheetFrame(context, 'Añadir atajo', [
-          for (final (label, items) in groups) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 4),
-              child: Text(
-                label,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colors.onSurfaceVariant,
+        return _sheetFrame(
+          context,
+          'Añadir atajo',
+          header: _searchField(context),
+          [
+            // Nada coincide con lo escrito.
+            if (groups.isEmpty && _query.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+                child: Text(
+                  'No hay resultados para «${_query.trim()}».',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
                 ),
               ),
-            ),
-            for (final shortcut in items)
-              Builder(
-                key: ValueKey('${shortcut.kind.name}:${shortcut.id}'),
-                builder: (context) {
-                  final pinned = music.isShortcut(shortcut);
-                  final enabled = pinned || !full;
-                  return Opacity(
-                    opacity: enabled ? 1 : .4,
-                    child: InkWell(
-                      onTap: enabled
-                          ? () => music.toggleShortcut(shortcut)
-                          : null,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 6,
-                        ),
-                        child: Row(
-                          children: [
-                            ShortcutArt(shortcut: shortcut, size: 48),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    shortcut.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  if (shortcut.subtitle != null)
+            for (final (label, items) in groups) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 4),
+                child: Text(
+                  label,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              for (final shortcut in items)
+                Builder(
+                  key: ValueKey('${shortcut.kind.name}:${shortcut.id}'),
+                  builder: (context) {
+                    final pinned = music.isShortcut(shortcut);
+                    final enabled = pinned || !full;
+                    return Opacity(
+                      opacity: enabled ? 1 : .4,
+                      child: InkWell(
+                        onTap: enabled
+                            ? () => music.toggleShortcut(shortcut)
+                            : null,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 6,
+                          ),
+                          child: Row(
+                            children: [
+                              ShortcutArt(shortcut: shortcut, size: 48),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
                                     Text(
-                                      shortcut.subtitle!,
+                                      shortcut.title,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: theme.textTheme.bodySmall
+                                      style: theme.textTheme.titleSmall
                                           ?.copyWith(
-                                            color: colors.onSurfaceVariant,
+                                            fontWeight: FontWeight.w600,
                                           ),
                                     ),
-                                ],
+                                    if (shortcut.subtitle != null)
+                                      Text(
+                                        shortcut.subtitle!,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              color: colors.onSurfaceVariant,
+                                            ),
+                                      ),
+                                  ],
+                                ),
                               ),
-                            ),
-                            Icon(
-                              pinned
-                                  ? Icons.check_circle_rounded
-                                  : Icons.add_circle_outline_rounded,
-                              color: pinned
-                                  ? colors.primary
-                                  : colors.onSurfaceVariant,
-                            ),
-                          ],
+                              Icon(
+                                pinned
+                                    ? Icons.check_circle_rounded
+                                    : Icons.add_circle_outline_rounded,
+                                color: pinned
+                                    ? colors.primary
+                                    : colors.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                },
-              ),
+                    );
+                  },
+                ),
+            ],
           ],
-        ]);
+        );
       },
     );
   }

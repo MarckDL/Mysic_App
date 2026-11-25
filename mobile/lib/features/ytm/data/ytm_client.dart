@@ -484,6 +484,45 @@ class YtmClient {
     );
   }
 
+  /// Las playlists de la cuenta como las ofrece el cuadro «Guardar en playlist»
+  /// de YouTube Music para [videoIds]: cada una con su casilla (si ya contiene
+  /// las canciones) y, si lo dice, cuántas tiene.
+  Future<List<YtmSaveOption>> saveOptions(List<String> videoIds) async {
+    _require(
+      videoIds.isNotEmpty && videoIds.every(_videoId.hasMatch),
+      'Las canciones no son válidas.',
+    );
+    return parseYtmSaveOptions(
+      await _post('playlist/get_add_to_playlist', {
+        'videoId': videoIds.first,
+        'videoIds': videoIds,
+        'excludeWatchLater': false,
+      }),
+    );
+  }
+
+  /// Quita [videoIds] de una playlist propia sin necesitar la entrada de cada
+  /// fila: lo que hace la casilla de «Guardar en playlist» al desmarcarse.
+  Future<void> removeVideosFromPlaylist(
+    String playlistId,
+    List<String> videoIds,
+  ) async {
+    _require(_playlistId.hasMatch(playlistId), 'La playlist no es válida.');
+    _require(
+      videoIds.isNotEmpty && videoIds.every(_videoId.hasMatch),
+      'Las canciones no son válidas.',
+    );
+    _succeeded(
+      await _post('browse/edit_playlist', {
+        'playlistId': playlistId,
+        'actions': [
+          for (final id in videoIds)
+            {'action': 'ACTION_REMOVE_VIDEO_BY_VIDEO_ID', 'removedVideoId': id},
+        ],
+      }),
+    );
+  }
+
   /// Quita de una playlist propia la entrada [entryId] (la de esa fila, no
   /// todas las apariciones de la canción).
   Future<void> removeFromPlaylist(

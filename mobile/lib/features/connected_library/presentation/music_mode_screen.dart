@@ -434,6 +434,7 @@ class _MusicPageState extends ConsumerState<_MusicPage>
       'title': item.title,
       'private': item.isPrivate,
       'thumbnailUrl': item.thumbnailUrl,
+      'count': item.trackCount,
     },
     _ => {'kind': 'unknown'},
   };
