@@ -702,6 +702,27 @@ Future<void> _showCollectionMenu(
           ownKnown.value &&
           !own.value)
         _libraryRow(menu, item.id, album: false),
+      // Descargada entera: quitarla (Limusic: `removeDownload`). Las canciones
+      // que guarde otra colección se quedan.
+      if (DownloadStore.instance.collection(
+            isAlbum ? item.id : playlistKey(item.id),
+          ) !=
+          null)
+        SheetRow(
+          icon: Icons.delete_outline,
+          label: 'Quitar descarga',
+          destructive: true,
+          onTap: () => unawaited(
+            menu.run(() async {
+              await DownloadStore.instance.releaseCollection(
+                isAlbum ? item.id : playlistKey(item.id),
+              );
+              return isAlbum
+                  ? 'Descarga del álbum quitada'
+                  : 'Descarga de la playlist quitada';
+            }),
+          ),
+        ),
       if (own.value) ...[
         SheetRow(
           icon: Icons.edit_rounded,

@@ -206,12 +206,12 @@ class DownloadStore extends ChangeNotifier {
     final dir = await _directory();
     if (dir == null) return;
     try {
-      final temp = _file(dir, 'collections.json.tmp');
-      await temp.writeAsString(
-        jsonEncode([for (final c in _collections.values) c.toJson()]),
-        flush: true,
+      await _serial(
+        () => _atomicWrite(
+          _file(dir, 'collections.json'),
+          jsonEncode([for (final c in _collections.values) c.toJson()]),
+        ),
       );
-      await temp.rename(_file(dir, 'collections.json').path);
     } on Object {
       // Vale para esta sesión; se corrige en la próxima escritura.
     }
@@ -249,6 +249,12 @@ class DownloadStore extends ChangeNotifier {
     final dir = await _directory();
     if (dir != null) {
       try {
+        for (final id in sourceIds) {
+          final track = _tracks[id];
+          if (track != null && track.albumName == albumName.trim()) {
+            await _writeSidecar(dir, track);
+          }
+        }
         await _writeIndex(dir);
       } on Object {
         // Vale para esta sesión; se repetirá al volver a abrir el álbum.
@@ -304,21 +310,102 @@ class DownloadStore extends ChangeNotifier {
   Future<void> load() => _loading ??= () async {
     final dir = await _directory();
     if (dir == null) return;
+    var repair = false;
+
+    /// Las canciones de un archivo de índice, o null si no existe o no se
+    /// puede leer.
+    Future<List<DownloadedTrack>?> readIndex(File file) async {
+      try {
+        if (!await file.exists()) return null;
+        final data = jsonDecode(await file.readAsString());
+        if (data is! List) return null;
+        return [for (final entry in data) ?DownloadedTrack.fromJson(entry)];
+      } on Object {
+        return null;
+      }
+    }
+
+    Future<bool> hasAudio(String id) async {
+      final audio = _file(dir, id);
+      return await audio.exists() && await audio.length() > 0;
+    }
+
     try {
-      final index = _file(dir, 'index.json');
-      if (await index.exists()) {
-        final data = jsonDecode(await index.readAsString());
-        if (data is List) {
-          for (final entry in data) {
-            final track = DownloadedTrack.fromJson(entry);
-            if (track == null) continue;
-            final audio = _file(dir, track.id);
-            if (await audio.exists() && await audio.length() > 0) {
-              _tracks[track.id] = track;
-            }
+      // El índice; si está dañado, su copia anterior.
+      var listed = await readIndex(_file(dir, 'index.json'));
+      if (listed == null) {
+        if (await _file(dir, 'index.json').exists()) repair = true;
+        listed = await readIndex(_file(dir, 'index.json.bak'));
+        if (listed != null) repair = true;
+      }
+      for (final track in listed ?? const <DownloadedTrack>[]) {
+        if (await hasAudio(track.id)) _tracks[track.id] = track;
+      }
+      // Las fichas de cada canción recuperan las que el índice no recoge
+      // (índice dañado o escritura perdida): su audio está en el teléfono.
+      final sidecars = <File>[];
+      await for (final entity in dir.list()) {
+        if (entity is! File) continue;
+        final name = entity.uri.pathSegments.last;
+        // Las descargas a medias y los temporales de una ejecución anterior no
+        // sirven.
+        if (name.endsWith('.part') || name.endsWith('.tmp')) {
+          try {
+            await entity.delete();
+          } on Object {
+            // Se limpia en el próximo arranque.
+          }
+        } else if (name.length == 16 &&
+            name.endsWith('.json') &&
+            name != 'collections.json') {
+          sidecars.add(entity);
+        }
+      }
+      for (final sidecar in sidecars) {
+        try {
+          final track = DownloadedTrack.fromJson(
+            jsonDecode(await sidecar.readAsString()),
+          );
+          if (track == null || !await hasAudio(track.id)) continue;
+          final known = _tracks[track.id];
+          if (known == null) {
+            _tracks[track.id] = track;
+            repair = true;
+          }
+        } on Object {
+          // Una ficha dañada no impide leer las demás.
+        }
+      }
+      // Descargas anteriores a las fichas: se crean ahora con lo que dice el
+      // índice, para que no dependan de él.
+      final haveSidecar = {
+        for (final file in sidecars)
+          file.uri.pathSegments.last.substring(
+            0,
+            file.uri.pathSegments.last.length - 5,
+          ),
+      };
+      for (final track in _tracks.values.toList()) {
+        if (!haveSidecar.contains(track.id)) {
+          try {
+            await _writeSidecar(dir, track);
+          } on Object {
+            // Se reintenta en el próximo arranque.
           }
         }
       }
+      if (repair) {
+        try {
+          await _writeIndex(dir);
+        } on Object {
+          // Vale para esta sesión.
+        }
+      }
+    } on Object {
+      // Lo que se pudo leer vale; el resto se recupera al volver a abrir.
+    }
+    // Las colecciones se leen aparte: no dependen del índice de canciones.
+    try {
       final saved = _file(dir, 'collections.json');
       if (await saved.exists()) {
         final data = jsonDecode(await saved.readAsString());
@@ -329,26 +416,58 @@ class DownloadStore extends ChangeNotifier {
           }
         }
       }
-      // Las descargas a medias de una ejecución anterior no sirven.
-      await for (final entity in dir.list()) {
-        if (entity is File && entity.path.endsWith('.part')) {
-          await entity.delete();
-        }
-      }
     } on Object {
-      // Un índice ilegible deja la lista vacía; los archivos siguen ahí.
+      // Sin colecciones legibles se ven las canciones sueltas.
     }
     notifyListeners();
   }();
 
-  Future<void> _writeIndex(Directory dir) async {
-    final temp = _file(dir, 'index.json.tmp');
-    await temp.writeAsString(
-      jsonEncode([for (final track in _tracks.values) track.toJson()]),
-      flush: true,
-    );
-    await temp.rename(_file(dir, 'index.json').path);
+  // Todo lo que se escribe en disco (índice, colecciones, fichas) pasa por
+  // esta fila, de una en una: dos escrituras a la vez sobre el mismo archivo
+  // temporal lo dejaban a medias o perdían entradas.
+  Future<void> _io = Future<void>.value();
+  int _tempCounter = 0;
+
+  Future<T> _serial<T>(Future<T> Function() job) {
+    final run = _io.then((_) => job());
+    _io = run.then((_) {}, onError: (_) {});
+    return run;
   }
+
+  /// Escribe [text] en [target] de forma atómica: primero en un temporal propio
+  /// y luego se renombra, así nunca queda un archivo a medias.
+  Future<void> _atomicWrite(File target, String text) async {
+    final temp = File('${target.path}.${_tempCounter++}.tmp');
+    await temp.writeAsString(text, flush: true);
+    await temp.rename(target.path);
+  }
+
+  /// Guarda el índice con lo que hay en memoria *en este momento*: varias
+  /// peticiones seguidas se agrupan en escrituras con el último estado. Antes
+  /// de reemplazarlo deja una copia del anterior (`index.json.bak`).
+  Future<void> _writeIndex(Directory dir) => _serial(() async {
+    final index = _file(dir, 'index.json');
+    if (await index.exists()) {
+      try {
+        await index.copy(_file(dir, 'index.json.bak').path);
+      } on Object {
+        // Sin copia: el índice nuevo se escribe igual.
+      }
+    }
+    await _atomicWrite(
+      index,
+      jsonEncode([for (final track in _tracks.values) track.toJson()]),
+    );
+  });
+
+  /// La ficha de una canción (`<id>.json`): sus datos junto a su audio. Si el
+  /// índice se pierde o se daña, las fichas permiten reconstruirlo.
+  Future<void> _writeSidecar(Directory dir, DownloadedTrack track) => _serial(
+    () => _atomicWrite(
+      _file(dir, '${track.id}.json'),
+      jsonEncode(track.toJson()),
+    ),
+  );
 
   /// El archivo de audio de [sourceId], si está descargado entero.
   Future<File?> file(String sourceId) async {
@@ -413,6 +532,9 @@ class DownloadStore extends ChangeNotifier {
     String id,
     DownloadSourceResolver resolve,
   ) async {
+    // El índice se lee antes de escribirlo: si no, una descarga que acabara
+    // antes de leerlo lo reemplazaría solo con ella.
+    await load();
     final dir = await _directory();
     try {
       if (dir == null) throw const FileSystemException('Sin almacenamiento');
@@ -435,7 +557,7 @@ class DownloadStore extends ChangeNotifier {
       await part.rename(target.path);
       final url = track.thumbnailUrl;
       if (url != null) await _saveCover(url, _file(dir, '$id.jpg'));
-      _tracks[id] = DownloadedTrack(
+      final saved = DownloadedTrack(
         id: id,
         title: track.title,
         artist: track.artistName,
@@ -447,7 +569,16 @@ class DownloadStore extends ChangeNotifier {
         albumId: track.albumId,
         albumName: track.albumName,
       );
-      await _writeIndex(dir);
+      _tracks[id] = saved;
+      // El audio ya está en el teléfono: que el índice o la ficha no se
+      // puedan escribir no es un fallo de la descarga. Al arrancar se
+      // reconstruye lo que falte.
+      try {
+        await _writeSidecar(dir, saved);
+        await _writeIndex(dir);
+      } on Object {
+        debugPrint('downloads_index_write_failed id=$id');
+      }
     } on Object catch (error) {
       if (dir != null) {
         try {
@@ -499,7 +630,7 @@ class DownloadStore extends ChangeNotifier {
     await load();
     final dir = await _directory();
     if (_tracks.remove(sourceId) == null || dir == null) return;
-    for (final name in [sourceId, '$sourceId.jpg']) {
+    for (final name in [sourceId, '$sourceId.jpg', '$sourceId.json']) {
       try {
         final file = _file(dir, name);
         if (await file.exists()) await file.delete();

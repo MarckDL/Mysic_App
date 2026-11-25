@@ -15,6 +15,8 @@ import '../../playback/application/playback_providers.dart';
 import '../../playback/application/track_playback_controller.dart';
 import '../../playback/domain/track_audio_engine.dart' show TrackAudioPhase;
 import '../../search/presentation/catalog_widgets.dart' show TrackArtwork;
+import '../../spotify_import/presentation/spotify_import_sheet.dart'
+    show showSpotifyImport;
 import '../../search/presentation/music_tiles.dart';
 import '../application/music_mode_controller.dart';
 import '../domain/music_mode.dart';
@@ -548,7 +550,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 onTap: () {},
                 child: TabTopBar(
                   title: 'Buscar',
-                  actions: const [AccountAction()],
+                  actions: [
+                    IconButton(
+                      tooltip: 'Importar de Spotify',
+                      icon: const Icon(Icons.link_rounded),
+                      onPressed: () => unawaited(showSpotifyImport(context)),
+                    ),
+                    const AccountAction(),
+                  ],
                   bottom: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [

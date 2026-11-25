@@ -9,9 +9,13 @@ import '../../../core/settings/app_settings.dart';
 import '../../authentication/presentation/account_screen.dart'
     show AccountAction;
 import '../../downloads/application/download_sort_provider.dart';
+import '../../spotify_import/presentation/spotify_import_sheet.dart'
+    show showSpotifyImport;
 import '../../downloads/data/download_store.dart';
 import '../../downloads/domain/download_sort.dart';
 import '../../downloads/presentation/download_sort_sheet.dart';
+import '../../downloads/presentation/downloads_screen.dart'
+    show openDownloadedCollection;
 import '../../playback/application/playback_providers.dart';
 import '../../playback/application/track_playback_controller.dart';
 import '../../playback/domain/track_audio_engine.dart' show TrackAudioPhase;
@@ -26,6 +30,11 @@ import 'track_sheet.dart';
 /// Pestañas de la Biblioteca, en el orden de la fila de chips de Limusic
 /// (`LibraryChips`). Mysic no tiene podcasts.
 enum LibraryTab { all, playlists, albums, artists, songs, downloads }
+
+/// Se sube cada vez que algo cambia la biblioteca de la cuenta desde fuera de
+/// esta pantalla (el importador de Spotify crea una playlist): la Biblioteca
+/// vuelve a leer lo que muestra.
+final libraryRefreshRequests = ValueNotifier<int>(0);
 
 /// Lo que se sabe de una colección: la última lista que llegó (se conserva
 /// mientras se refresca, como `last` en `GridLibraryPlaylist`), si hay una
@@ -99,14 +108,22 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    libraryRefreshRequests.addListener(_onRefreshRequested);
     unawaited(_store.load());
     _enter(LibraryTab.all);
   }
 
   @override
   void dispose() {
+    libraryRefreshRequests.removeListener(_onRefreshRequested);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  /// Algo creó una playlist en la cuenta (el importador de Spotify): se
+  /// vuelve a leer lo que se está viendo.
+  void _onRefreshRequested() {
+    if (mounted) unawaited(_refresh());
   }
 
   /// Al volver a la app se refresca lo que se está viendo: una playlist
@@ -958,16 +975,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
           thumbnailUrl: collection.thumbnailUrl,
         );
 
-  /// Con internet se abre su página; sin ella, suenan sus canciones
-  /// descargadas.
-  void _openCollection(DownloadedCollection collection) {
-    if (OfflineMode.instance.active) {
-      final tracks = _store.tracksOf(collection);
-      if (tracks.isNotEmpty) unawaited(_playDownloads(tracks, 0));
-      return;
-    }
-    _open(_itemOf(collection));
-  }
+  /// Con internet se abre su página de siempre; sin ella, la de lo descargado.
+  void _openCollection(DownloadedCollection collection) =>
+      openDownloadedCollection(context, collection);
 
   void _holdCollection(DownloadedCollection collection) {
     if (!OfflineMode.instance.active) {
@@ -1049,6 +1059,11 @@ class _LibraryBar extends StatelessWidget {
         tooltip: 'Actualizar',
         icon: const Icon(Icons.sync_rounded),
         onPressed: onRefresh,
+      ),
+      IconButton(
+        tooltip: 'Importar de Spotify',
+        icon: const Icon(Icons.link_rounded),
+        onPressed: () => unawaited(showSpotifyImport(context)),
       ),
       if (showHistory)
         IconButton(

@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path_provider/path_provider.dart';
 
 import '../../../core/network/api_failure.dart';
+import '../../../core/network/offline_mode.dart';
 import '../../authentication/domain/auth_repository.dart';
 import 'ytm_client.dart';
 import 'ytm_session.dart';
@@ -132,6 +133,15 @@ class YtmAuthRepository implements AuthRepository {
     final session = _session;
     if (session == null) {
       throw const AuthFailure('Inicia sesión en YouTube Music.');
+    }
+    // Con «solo canciones descargadas» no sale ninguna petición: no es un
+    // rechazo de YouTube, así que no se toca la sesión; la app entra con lo que
+    // sabe de la cuenta.
+    if (OfflineMode.instance.active) {
+      throw const AuthFailure(
+        'Está activado «Solo canciones descargadas».',
+        unreachable: true,
+      );
     }
     final client = _clientFor(session);
     try {

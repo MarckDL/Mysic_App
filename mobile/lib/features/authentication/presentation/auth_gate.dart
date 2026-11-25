@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/router/catalog_navigator.dart';
 import '../application/auth_providers.dart';
 import '../domain/auth_repository.dart';
+import '../domain/mysic_profile.dart';
 import '../../playback/application/playback_providers.dart';
 import 'login_screen.dart';
 
@@ -47,10 +48,25 @@ class AuthGate extends ConsumerWidget {
       if (cached.isLoading) return const _LoadingScreen();
       profile = cached.asData?.value;
     }
+    // Una cuenta recién iniciada aún no tiene perfil guardado. Si YouTube
+    // Music no responde a la comprobación (red, límite de consultas, página
+    // distinta), no se deja la app atascada sin poder entrar: la sesión existe,
+    // así que se entra con lo que se sabe de ella y cada pantalla avisa si
+    // YouTube la rechaza. Un rechazo de verdad ya cerró la sesión.
+    if (profile == null && _unreachable(verified.error)) {
+      profile = MysicProfile(
+        id: user.uid,
+        uid: user.uid,
+        displayName: user.displayName ?? 'Tu cuenta',
+      );
+    }
     if (profile == null) {
       if (verified.isLoading) return const _LoadingScreen();
       return _SessionError(
         onRetry: () => ref.invalidate(verifiedSessionProvider),
+        detail: verified.error is AuthFailure
+            ? (verified.error! as AuthFailure).message
+            : null,
       );
     }
     // La sesión mantiene un único motor caliente durante la navegación.
@@ -72,8 +88,11 @@ class _LoadingScreen extends StatelessWidget {
 }
 
 class _SessionError extends ConsumerWidget {
-  const _SessionError({required this.onRetry});
+  const _SessionError({required this.onRetry, this.detail});
   final VoidCallback onRetry;
+
+  /// Por qué falló la comprobación, si se sabe.
+  final String? detail;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final action = ref.watch(authActionsProvider);
@@ -84,6 +103,15 @@ class _SessionError extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text('No pudimos verificar tu sesión.'),
+            if (detail != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 6, 24, 0),
+                child: Text(
+                  detail!,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
             TextButton(onPressed: onRetry, child: const Text('Reintentar')),
             TextButton(
               onPressed: action.isLoading

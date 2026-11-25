@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/network/offline_mode.dart';
 import '../../core/settings/app_settings.dart';
 import '../../features/downloads/data/download_store.dart';
+import '../../features/downloads/presentation/downloaded_collection_screen.dart';
 import '../../features/downloads/presentation/downloads_screen.dart';
 import '../../features/playback/application/track_playback_controller.dart';
 import '../../features/authentication/domain/mysic_profile.dart';
@@ -170,6 +171,11 @@ class _CatalogNavigatorState extends ConsumerState<CatalogNavigator> {
       GoRoute(
         path: '/downloads',
         builder: (context, state) => _mini(const DownloadsScreen()),
+      ),
+      GoRoute(
+        path: '/downloads/collection/:id',
+        builder: (context, state) =>
+            _mini(DownloadedCollectionScreen(id: state.pathParameters['id']!)),
       ),
       GoRoute(
         path: '/account',

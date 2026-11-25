@@ -1,5 +1,5 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 
 import '../../../core/network/api_failure.dart';
 import '../../../core/network/offline_mode.dart';
@@ -19,9 +19,14 @@ class YtmAccount {
 /// Habla directo con YouTube Music desde el teléfono, con la cookie de la
 /// sesión. No pasa por ningún servidor de Mysic.
 class YtmClient {
-  YtmClient(this.session, {Dio? dio, DateTime Function()? clock})
-    : _dio = dio ?? Dio(),
-      _clock = clock ?? DateTime.now {
+  YtmClient(
+    this.session, {
+    Dio? dio,
+    DateTime Function()? clock,
+    Future<YtmSession?> Function()? renew,
+  }) : _dio = dio ?? Dio(),
+       _clock = clock ?? DateTime.now,
+       _renew = renew ?? YtmSession.refresh {
     _dio.options = BaseOptions(
       baseUrl: 'https://music.youtube.com/youtubei/v1/',
       connectTimeout: const Duration(seconds: 15),
@@ -36,9 +41,64 @@ class YtmClient {
 
   static const origin = 'https://music.youtube.com';
 
-  final YtmSession session;
+  /// La sesión en uso. Cambia cuando YouTube rechaza la cookie y se renueva.
+  YtmSession session;
   final Dio _dio;
   final DateTime Function() _clock;
+  final Future<YtmSession?> Function() _renew;
+
+  // La renovación de la sesión (como la de Limusic, `heal`): la cookie guardada
+  // es una foto que Google va rotando. Cuando YouTube la rechaza se pide a la
+  // vista web la rotada de la misma cuenta; como mucho cada 5 minutos, porque
+  // una cookie muerta provoca una ráfaga de rechazos y todos son lo mismo. Es
+  // común a todos los clientes: lo que renueva uno lo aprovechan los demás.
+  static const _renewEvery = Duration(minutes: 5);
+  static YtmSession? _freshest;
+  static Future<YtmSession?>? _renewing;
+  static DateTime? _lastRenewal;
+
+  @visibleForTesting
+  static void forgetRenewals() {
+    _freshest = null;
+    _renewing = null;
+    _lastRenewal = null;
+  }
+
+  /// Una sesión más fresca de la misma cuenta que la en uso, o null.
+  Future<YtmSession?> _fresher() async {
+    final known = _freshest;
+    if (known != null &&
+        known.cookie != session.cookie &&
+        known.sapisid == session.sapisid) {
+      return known;
+    }
+    final running = _renewing;
+    if (running != null) {
+      final fresh = await running;
+      return fresh != null && fresh.cookie != session.cookie ? fresh : null;
+    }
+    final last = _lastRenewal;
+    if (last != null && _clock().difference(last) < _renewEvery) return null;
+    _lastRenewal = _clock();
+    final attempt = _renew();
+    _renewing = attempt;
+    try {
+      final fresh = await attempt;
+      if (fresh != null &&
+          fresh.sapisid == session.sapisid &&
+          fresh.cookie != session.cookie) {
+        _freshest = fresh;
+        debugPrint('ytm_session renewed');
+        return fresh;
+      }
+      debugPrint('ytm_session renewal found nothing fresher');
+      return null;
+    } on Object {
+      return null;
+    } finally {
+      _renewing = null;
+    }
+  }
 
   /// La vista de la aplicación web de YouTube Music: usa la fecha de hoy
   /// porque YouTube acepta cualquier versión reciente.
@@ -63,6 +123,7 @@ class YtmClient {
     Map<String, dynamic> body, {
     CancelToken? cancelToken,
     Map<String, dynamic>? query,
+    bool renewed = false,
   }) async {
     final Response<dynamic> response;
     try {
@@ -104,6 +165,20 @@ class YtmClient {
     }
     final status = response.statusCode ?? 0;
     debugPrint('ytm_request path=$path status=$status');
+    if ((status == 401 || status == 403) && !renewed) {
+      // Antes de pedir iniciar sesión otra vez: ¿hay una cookie más fresca?
+      final fresh = await _fresher();
+      if (fresh != null) {
+        session = fresh;
+        return _post(
+          path,
+          body,
+          cancelToken: cancelToken,
+          query: query,
+          renewed: true,
+        );
+      }
+    }
     if (status == 401 || status == 403) {
       throw const ApiFailure(
         'YouTube Music cerró la sesión. Inicia sesión de nuevo.',

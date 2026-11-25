@@ -759,6 +759,18 @@ class SpeedDialGrid extends StatelessWidget {
   /// varias páginas que se deslizan, como el de YouTube Music.
   static const pageSize = 9;
 
+  /// Deja [list] en páginas completas: de nueve en nueve cuando pasa de una
+  /// página, y en filas de tres cuando es una sola. Nunca una página a medias,
+  /// con unas pocas casillas y el resto vacío.
+  static List<T> wholePages<T>(List<T> list) {
+    final count = list.length >= pageSize
+        ? list.length ~/ pageSize * pageSize
+        : list.length < 3
+        ? list.length
+        : list.length ~/ 3 * 3;
+    return list.take(count).toList();
+  }
+
   /// Lo que asoma de la página siguiente, para que se vea que se desliza.
   static const _peek = 28.0;
 

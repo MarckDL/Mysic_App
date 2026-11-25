@@ -41,6 +41,19 @@ class MainActivity : AudioServiceActivity() {
                     }
                 }
                 "load" -> result.success(ytmSession.load())
+                // La cookie rotada por YouTube, si la hay para la misma cuenta: se guarda y se
+                // devuelve; null si no hay nada más fresco.
+                "refresh" -> {
+                    val current = ytmSession.load()
+                    if (current == null) {
+                        result.success(null)
+                    } else {
+                        YtmCookieRefresh.refresh(applicationContext, current) { fresh ->
+                            if (fresh != null) ytmSession.save(fresh)
+                            result.success(fresh)
+                        }
+                    }
+                }
                 "clear" -> {
                     ytmSession.clear()
                     android.webkit.CookieManager.getInstance().removeAllCookies { result.success(null) }

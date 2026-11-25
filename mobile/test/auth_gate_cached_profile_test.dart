@@ -153,15 +153,21 @@ void main() {
     expect(cache.stored, same(_ana));
   });
 
-  testWidgets('sin perfil guardado, un servidor caído muestra el error', (
+  testWidgets('sin perfil guardado, un servidor caído deja entrar igualmente', (
     tester,
   ) async {
+    // Una cuenta recién iniciada no tiene perfil guardado: si YouTube Music no
+    // responde a la comprobación, la app no se queda atascada sin poder entrar.
+    final cache = _MemoryCache();
     await mount(
       tester,
-      _MemoryCache(),
+      cache,
       () async => throw const AuthFailure('Sin conexión', unreachable: true),
     );
     await tester.pumpAndSettle();
-    expect(find.text('No pudimos verificar tu sesión.'), findsOneWidget);
+    expect(find.text('No pudimos verificar tu sesión.'), findsNothing);
+    expect(find.byType(NavigationBar), findsOneWidget);
+    // El perfil provisional no se guarda como si estuviera verificado.
+    expect(cache.stored, isNull);
   });
 }

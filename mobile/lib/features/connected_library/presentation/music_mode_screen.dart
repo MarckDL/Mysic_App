@@ -312,15 +312,21 @@ class _MusicPageState extends ConsumerState<_MusicPage>
   Future<void> _restoreDial() async {
     final page = await widget.controller.rememberedDial();
     if (!mounted || _dialFrozen != null || page == null) return;
-    final items = page.items
-        .where((i) => i is MusicTrack || i is MusicPlaylist)
-        .toList();
+    // Solo páginas completas: un guardado con una página a medias se corta.
+    final items = _wholePages(
+      page.items
+          .where((i) => i is MusicTrack || i is MusicPlaylist)
+          .take(_dialSize)
+          .toList(),
+    );
     if (items.isEmpty) return;
     setState(() => _dialFrozen = items);
   }
 
   /// Casillas del collage: tres páginas de 3×3 que se deslizan.
   static const _dialSize = SpeedDialGrid.pageSize * 3;
+
+  static List<T> _wholePages<T>(List<T> list) => SpeedDialGrid.wholePages(list);
 
   /// Compone el collage con lo tuyo: lo más escuchado, lo último que sonó y
   /// lo del Inicio, mezclados, con tus playlists en cada tercera tarjeta.
@@ -337,11 +343,26 @@ class _MusicPageState extends ConsumerState<_MusicPage>
         )
         .take(_dialSize)
         .toList();
+    // Canciones de los demás estantes del Inicio: rellenan el collage cuando lo
+    // propio (lo más oído, lo reciente, el primer estante) no llega a las 27.
+    // No se quitan de su estante: allí siguen estando.
+    final others = hasShelves
+        ? _items
+              .whereType<MusicTrack>()
+              .where((t) => _canPlayTrack(t) && t.shelfTitle != firstShelf)
+              .take(_dialSize)
+              .toList()
+        : const <MusicTrack>[];
     final random = Random(_dialSeed);
     List<T> mixed<T>(List<T> list) => [...list]..shuffle(random);
     final tracks = <MusicTrack>[];
     final seen = <String>{};
-    final sources = [mixed(_played), mixed(_recentTracks), mixed(liked)];
+    final sources = [
+      mixed(_played),
+      mixed(_recentTracks),
+      mixed(liked),
+      mixed(others),
+    ];
     for (
       var round = 0;
       round < _dialSize && tracks.length < _dialSize;
@@ -365,9 +386,8 @@ class _MusicPageState extends ConsumerState<_MusicPage>
             : tracks[nextTrack++],
       );
     }
-    // Filas completas de tres; con menos de tres, las que haya.
-    final count = dial.length < 3 ? dial.length : dial.length ~/ 3 * 3;
-    return dial.take(count).toList();
+    // Páginas completas: nunca una con tres casillas y el resto vacío.
+    return _wholePages(dial);
   }
 
   /// Cuando ya llegaron los datos: si aún no había collage guardado se muestra
@@ -384,7 +404,11 @@ class _MusicPageState extends ConsumerState<_MusicPage>
       });
     }
     setState(() {
-      if ((_dialFrozen == null || force) && fresh.isNotEmpty) {
+      // El guardado se respeta (no hay un collage y otro distinto al instante),
+      // salvo que sea más pobre que el de ahora: uno hecho sin datos, o con
+      // pocas canciones, no debe quedarse para siempre.
+      final poorer = (_dialFrozen?.length ?? 0) < fresh.length;
+      if ((_dialFrozen == null || force || poorer) && fresh.isNotEmpty) {
         _dialFrozen = fresh;
       }
     });
@@ -2035,18 +2059,22 @@ class _MusicPageState extends ConsumerState<_MusicPage>
             )
             .take(_dialSize)
             .toList();
-        dial = found
-            .take(found.length < 3 ? found.length : found.length ~/ 3 * 3)
-            .toList();
+        dial = _wholePages(found);
       } else {
         dial = _dialFrozen ?? const [];
       }
       final dialTracks = dial.whereType<MusicTrack>().toList();
       if (dial.isNotEmpty) {
-        // Lo que ya está en el collage no se repite más abajo en la lista.
+        // Lo del primer estante que ya está en el collage no se repite más
+        // abajo. Las canciones que el collage toma de otros estantes para
+        // llenarse se quedan también en el suyo.
         final shown = {for (final t in dialTracks) t.id};
+        final first = _items.isEmpty ? null : _items.first.shelfTitle;
         hero.addAll(
-          _items.whereType<MusicTrack>().where((t) => shown.contains(t.id)),
+          _items.whereType<MusicTrack>().where(
+            (t) =>
+                shown.contains(t.id) && (!hasShelves || t.shelfTitle == first),
+          ),
         );
         collage = Padding(
           padding: const EdgeInsets.only(top: 4, bottom: 12),
@@ -2643,9 +2671,10 @@ class _MusicPageState extends ConsumerState<_MusicPage>
       final page = await fetch(MusicSurface.playlists);
       if (page != null && mounted) {
         setState(() {
+          // Nueve: una por cada tercera casilla de las 27 del collage.
           _shortcutPlaylists = page.items
               .whereType<MusicPlaylist>()
-              .take(8)
+              .take(9)
               .toList();
         });
       }

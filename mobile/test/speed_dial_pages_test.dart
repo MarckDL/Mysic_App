@@ -23,6 +23,20 @@ List<DialItem> _items(int count, List<String> taps) => [
 ];
 
 void main() {
+  test('el collage solo se queda con páginas completas', () {
+    List<int> n(int count) => List.generate(count, (i) => i);
+    // Una sola página: filas completas de tres.
+    expect(SpeedDialGrid.wholePages(n(0)), isEmpty);
+    expect(SpeedDialGrid.wholePages(n(2)), n(2));
+    expect(SpeedDialGrid.wholePages(n(7)), n(6));
+    expect(SpeedDialGrid.wholePages(n(9)), n(9));
+    // Varias: nunca una página con tres casillas y el resto vacío.
+    expect(SpeedDialGrid.wholePages(n(12)), n(9));
+    expect(SpeedDialGrid.wholePages(n(20)), n(18));
+    expect(SpeedDialGrid.wholePages(n(27)), n(27));
+    expect(SpeedDialGrid.wholePages(n(40)).length, 36);
+  });
+
   testWidgets('con nueve casillas o menos el collage es una sola página', (
     tester,
   ) async {

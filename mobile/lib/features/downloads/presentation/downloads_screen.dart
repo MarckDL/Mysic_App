@@ -8,6 +8,12 @@ import 'package:go_router/go_router.dart';
 import '../../../core/network/offline_mode.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../playback/application/playback_providers.dart';
+import '../../connected_library/domain/music_mode.dart'
+    show MusicAlbum, MusicPlaylist;
+import '../../connected_library/presentation/catalog_pages.dart'
+    show PageSeed, openAlbum;
+import '../../connected_library/presentation/track_sheet.dart'
+    show showItemMenu;
 import '../../connected_library/presentation/library_screen.dart'
     show LibraryCoverTile;
 import '../../playback/presentation/player_widgets.dart';
@@ -131,6 +137,31 @@ class _OfflineBannerState extends ConsumerState<_OfflineBanner> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Abre la página de una colección descargada. Con internet, la página normal
+/// del álbum o de la playlist (con todo lo demás); sin él, la propia de lo
+/// descargado. Nunca hace sonar nada por sí sola.
+void openDownloadedCollection(
+  BuildContext context,
+  DownloadedCollection collection,
+) {
+  if (OfflineMode.instance.active) {
+    context.push('/downloads/collection/${Uri.encodeComponent(collection.id)}');
+    return;
+  }
+  final seed = PageSeed(
+    title: collection.title,
+    imageUrl: collection.thumbnailUrl,
+  );
+  if (collection.album) {
+    openAlbum(context, collection.id, seed: seed);
+  } else {
+    context.push(
+      '/music/playlist/${Uri.encodeComponent(collection.id)}',
+      extra: seed,
     );
   }
 }
@@ -305,7 +336,7 @@ class _DownloadsListState extends ConsumerState<DownloadsList> {
             for (final (index, track) in shown.indexed)
               ListTile(
                 key: ValueKey(track.id),
-                leading: _Cover(track: track),
+                leading: DownloadCover(track: track),
                 title: Text(
                   track.title,
                   maxLines: 1,
@@ -369,16 +400,41 @@ class _DownloadsListState extends ConsumerState<DownloadsList> {
                 : kind,
             url: collection.thumbnailUrl,
             icon: collection.album ? Icons.album : Icons.queue_music,
-            onTap: () {
-              final tracks = _store.tracksOf(collection);
-              if (tracks.isNotEmpty) unawaited(_play(tracks, 0));
-            },
-            onLongPress: () => unawaited(_removeCollection(collection)),
+            onTap: () => openDownloadedCollection(context, collection),
+            onLongPress: () => _holdCollection(collection),
           );
         },
       );
     },
   );
+
+  /// Mantener pulsada una colección: con internet, el menú completo del
+  /// álbum o la playlist (incluye quitar la descarga); sin él, quitarla.
+  void _holdCollection(DownloadedCollection collection) {
+    if (OfflineMode.instance.active) {
+      unawaited(_removeCollection(collection));
+      return;
+    }
+    unawaited(
+      showItemMenu(
+        context,
+        ref,
+        collection.album
+            ? MusicAlbum(
+                collection.id,
+                collection.title,
+                thumbnailUrl: collection.thumbnailUrl,
+                artist: collection.subtitle,
+              )
+            : MusicPlaylist(
+                collection.id,
+                collection.title,
+                false,
+                thumbnailUrl: collection.thumbnailUrl,
+              ),
+      ),
+    );
+  }
 
   Future<void> _removeCollection(DownloadedCollection collection) async {
     final confirmed = await showDialog<bool>(
@@ -445,8 +501,8 @@ class _PendingProgress extends StatelessWidget {
 }
 
 /// La portada guardada con la canción; si falta, la de la red o su caché.
-class _Cover extends StatelessWidget {
-  const _Cover({required this.track});
+class DownloadCover extends StatelessWidget {
+  const DownloadCover({super.key, required this.track});
 
   final DownloadedTrack track;
 

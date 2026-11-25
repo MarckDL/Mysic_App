@@ -200,8 +200,8 @@ mixin _PageLoader<W extends ConsumerStatefulWidget, T> on ConsumerState<W> {
 
 /// Degradado bajo la barra de estado: el contenido que se desplaza por
 /// debajo de ella se funde con el fondo en vez de mezclarse con el reloj.
-class _StatusScrim extends StatelessWidget {
-  const _StatusScrim();
+class StatusScrim extends StatelessWidget {
+  const StatusScrim({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -233,8 +233,8 @@ class _StatusScrim extends StatelessWidget {
 }
 
 /// Botón redondo translúcido que flota sobre la cabecera.
-class _FloatingBack extends StatelessWidget {
-  const _FloatingBack();
+class FloatingBack extends StatelessWidget {
+  const FloatingBack({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -352,7 +352,7 @@ class _SeedLoading extends StatelessWidget {
               Semantics(label: 'Cargando', child: const SkeletonRows()),
             ],
           ),
-          Positioned(top: top + 8, left: 8, child: const _FloatingBack()),
+          Positioned(top: top + 8, left: 8, child: const FloatingBack()),
         ],
       ),
     );
@@ -491,7 +491,7 @@ class _ArtistScreenState extends ConsumerState<ArtistScreen>
                   ),
               ],
             ),
-            const _StatusScrim(),
+            const StatusScrim(),
           ],
         ),
       );
@@ -552,7 +552,7 @@ class _ArtistHeader extends StatelessWidget {
           Positioned(
             left: 12,
             top: MediaQuery.paddingOf(context).top + 8,
-            child: const _FloatingBack(),
+            child: const FloatingBack(),
           ),
           Positioned(
             left: 16,
@@ -801,7 +801,7 @@ class _AlbumScreenState extends ConsumerState<AlbumScreen>
                       ),
                       child: Row(
                         children: [
-                          const _FloatingBack(),
+                          const FloatingBack(),
                           const Spacer(),
                           // Las mismas opciones que al mantener pulsado el
                           // álbum: reproducir, cola, radio, guardar, atajo…
@@ -919,7 +919,7 @@ class _AlbumScreenState extends ConsumerState<AlbumScreen>
                 );
               },
             ),
-            const _StatusScrim(),
+            const StatusScrim(),
           ],
         ),
       );

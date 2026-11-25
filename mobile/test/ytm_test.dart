@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mysic/core/network/api_failure.dart';
+import 'package:mysic/core/network/offline_mode.dart';
 import 'package:mysic/features/authentication/domain/auth_repository.dart';
 import 'package:mysic/features/connected_library/domain/music_mode.dart';
 import 'package:mysic/features/ytm/data/ytm_auth_repository.dart';
@@ -277,6 +278,38 @@ void main() {
       final user = await r.authStateChanges().first;
       expect(user, isNotNull);
       expect(user!.uid, const YtmSession(_cookie).uid);
+      r.dispose();
+    });
+
+    test('con «solo canciones descargadas» activo no se verifica ni se cierra '
+        'la sesión', () async {
+      // Es lo que dejaba la app atascada: una sesión guardada, el modo sin
+      // conexión encendido en el teléfono, y la comprobación fallando al
+      // instante porque la petición ni sale.
+      var requests = 0;
+      final r = YtmAuthRepository(
+        load: () async => const YtmSession(_cookie),
+        login: () async => null,
+        clear: () async {},
+        clientFor: (session) {
+          requests++;
+          return YtmClient(session);
+        },
+        cache: YtmAccountCache(
+          path: '${Uri.file('offline').path}.none/ytm_account.json',
+        ),
+      );
+      OfflineMode.instance.manual = true;
+      addTearDown(OfflineMode.instance.reset);
+
+      await expectLater(
+        r.verify(),
+        throwsA(
+          isA<AuthFailure>().having((e) => e.unreachable, 'unreachable', true),
+        ),
+      );
+      expect(requests, 0, reason: 'no se intenta la red');
+      expect(r.session, isNotNull, reason: 'la sesión sigue guardada');
       r.dispose();
     });
 

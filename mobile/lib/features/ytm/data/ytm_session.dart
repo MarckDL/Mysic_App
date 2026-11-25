@@ -33,6 +33,18 @@ class YtmSession {
     }
   }
 
+  /// Pide al lado nativo las cookies que YouTube rotó para la misma cuenta
+  /// (las guarda cifradas). Devuelve la sesión nueva o null si no hay nada más
+  /// fresco.
+  static Future<YtmSession?> refresh() async {
+    try {
+      final cookie = await _channel.invokeMethod<String>('refresh');
+      return cookie == null || !_hasSapisid(cookie) ? null : YtmSession(cookie);
+    } on Object {
+      return null;
+    }
+  }
+
   /// Cierra la sesión: borra la cookie guardada y la del navegador.
   static Future<void> clear() async {
     try {

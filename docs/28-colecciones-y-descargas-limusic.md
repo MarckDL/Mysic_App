@@ -121,8 +121,14 @@ Pruebas: `test/downloaded_collection_test.dart`.
 
 ## 3. Otros cambios de esta tanda
 
-- **Collage del Inicio en tres páginas que se deslizan**, como el de YouTube
-  Music: 27 elementos, 9 por página, con puntos.
+- **Collage del Inicio («Accesos directos»)**: tres páginas de 3×3 que se
+  deslizan (27 casillas, 9 por página, con puntos). Con pocos datos salía una
+  segunda página con tres casillas y un hueco debajo; ahora:
+  - el collage se llena también con canciones de los demás estantes del Inicio
+    (se quedan en su estante), y con 9 playlists en vez de 8;
+  - solo se muestran **páginas completas** (`SpeedDialGrid.wholePages`): 9, 18 o
+    27; con menos de 9, una sola con filas de tres;
+  - un collage guardado más pobre que el de ahora se reemplaza.
 - **Mini reproductor en todas las páginas** que se abren sobre las pestañas
   (álbum, playlist, artista, género, Recientes, Descargas…), con
   `WithMiniPlayer`.
