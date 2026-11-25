@@ -131,6 +131,97 @@ class _PlaybackProgressState extends State<PlaybackProgress> {
   }
 }
 
+/// La línea de tiempo del programa que suena en una radio en directo (ROVR da
+/// cuándo empieza y acaba): el contador de lo que lleva en el aire («84:01»,
+/// como en su web) y una barra con lo que falta. Avanza sola con el reloj y,
+/// como un directo, no se puede mover. Todo alineado a la izquierda.
+class LiveTimeline extends StatefulWidget {
+  const LiveTimeline({super.key, required this.controller});
+
+  final TrackPlaybackController controller;
+
+  @override
+  State<LiveTimeline> createState() => _LiveTimelineState();
+}
+
+class _LiveTimelineState extends State<LiveTimeline> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  /// `84:01`, o `1:24:01` si pasa de una hora.
+  static String clock(Duration d) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    final h = d.inHours, m = d.inMinutes % 60, s = d.inSeconds % 60;
+    return h > 0 ? '$h:${two(m)}:${two(s)}' : '${two(d.inMinutes)}:${two(s)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = widget.controller;
+    final start = controller.liveStartedAt;
+    final end = controller.liveEndsAt;
+    if (start == null || end == null) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final total = end.difference(start).inMilliseconds;
+    final elapsed = DateTime.now()
+        .difference(start)
+        .inMilliseconds
+        .clamp(0, total > 0 ? total : 0);
+    final small = theme.textTheme.labelMedium?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    return Semantics(
+      label: 'Línea de tiempo del programa',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                clock(Duration(milliseconds: elapsed)),
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  color: theme.colorScheme.onSurface,
+                  fontWeight: FontWeight.w300,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              const Spacer(),
+              Text('de ${clock(Duration(milliseconds: total))}', style: small),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(
+              minHeight: 4,
+              value: total > 0 ? elapsed / total : 0,
+              backgroundColor: theme.colorScheme.onSurfaceVariant.withValues(
+                alpha: .22,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Pista del deslizador dibujada como forma de onda.
 ///
 /// Las alturas salen de una función determinista de [seed] (la canción), sin

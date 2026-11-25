@@ -48,6 +48,7 @@ class JustAudioTrackEngine
   );
   final _positions = StreamController<Duration>.broadcast();
   final _durations = StreamController<Duration?>.broadcast();
+  final _liveTitles = StreamController<String?>.broadcast();
   final _states = StreamController<TrackAudioPhase>.broadcast();
   final _subscriptions = <StreamSubscription<dynamic>>[];
   bool _configured = false;
@@ -63,6 +64,8 @@ class JustAudioTrackEngine
   Stream<Duration> get positions => _positions.stream;
   @override
   Stream<Duration?> get durations => _durations.stream;
+  @override
+  Stream<String?> get liveTitles => _liveTitles.stream;
   @override
   Duration? get duration => _instance?.duration;
   void _emit(TrackAudioPhase phase) {
@@ -128,6 +131,11 @@ class JustAudioTrackEngine
         if (!_disposed) _durations.add(value);
       }),
     );
+    _subscriptions.add(
+      _player.icyMetadataStream.listen((metadata) {
+        if (!_disposed) _liveTitles.add(metadata?.info?.title);
+      }),
+    );
     _configured = true;
   }
 
@@ -161,11 +169,14 @@ class JustAudioTrackEngine
     Uri? licensedAudio,
     Uri? deviceAudio,
     TrackAudioReader? readAudio,
+    Uri? liveAudio,
     bool refresh = false,
     int? durationSeconds,
   }) async {
     final demo = sourceId == PlaybackResolution.demoId;
-    if ((!demo && !RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(sourceId)) ||
+    if ((!demo &&
+            liveAudio == null &&
+            !RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(sourceId)) ||
         token.isEmpty) {
       throw StateError('Fuente inválida');
     }
@@ -174,6 +185,7 @@ class JustAudioTrackEngine
     try {
       final ownSource =
           demo ||
+          liveAudio != null ||
           licensedAudio != null ||
           deviceAudio != null ||
           readAudio != null;
@@ -204,6 +216,16 @@ class JustAudioTrackEngine
         audio = AudioSource.file(deviceAudio.toFilePath());
       } else if (readAudio != null) {
         audio = AccountAudioSource(readAudio);
+      } else if (liveAudio != null) {
+        // Una radio en directo necesita red: sin ella no hay nada que sonar.
+        if (OfflineMode.instance.active) throw const PlaybackSourceFailure();
+        if (liveAudio.scheme != 'https' ||
+            liveAudio.host.isEmpty ||
+            liveAudio.userInfo.isNotEmpty ||
+            liveAudio.hasFragment) {
+          throw StateError('Fuente de audio inválida');
+        }
+        audio = AudioSource.uri(liveAudio);
       } else if (licensedAudio != null) {
         if (licensedAudio.scheme != 'https' ||
             licensedAudio.host.isEmpty ||
@@ -489,6 +511,7 @@ class JustAudioTrackEngine
     await _instance?.dispose();
     await _positions.close();
     await _durations.close();
+    await _liveTitles.close();
     await _states.close();
   }
 }

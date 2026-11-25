@@ -36,6 +36,9 @@ flutter:
     - assets/audio/mysic-demo.wav
     - assets/images/discover-mountains.webp
     - assets/images/mysic.png
+    - assets/images/radio-kdvs.png
+    - assets/images/radio-rovr.png
+    - assets/images/radio-shonan-beach-fm.png
 
   fonts:
     # Las de Limusic (licencia OFL, ver assets/fonts/OFL-*.txt).

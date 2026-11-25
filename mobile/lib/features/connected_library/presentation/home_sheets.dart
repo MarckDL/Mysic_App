@@ -365,6 +365,12 @@ Future<void> showEditHome(BuildContext context, MusicModeController music) =>
               layout.dial,
               (on) => layout.copyWith(dial: on),
             ),
+            toggle(
+              'Radios',
+              'Emisoras en directo, bajo el carrusel',
+              layout.radio,
+              (on) => layout.copyWith(radio: on),
+            ),
           ]);
         },
       ),

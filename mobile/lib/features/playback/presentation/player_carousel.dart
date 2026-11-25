@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../search/presentation/catalog_widgets.dart';
 import '../application/track_playback_controller.dart';
 import 'artwork_prefetch.dart';
+import 'live_cover.dart';
 
 /// La portada del reproductor y sus vecinas: la que suena, grande y en el
 /// centro, con la anterior y la siguiente asomando a los lados, algo más
@@ -147,8 +148,14 @@ class _PlayerCoverCarouselState extends State<PlayerCoverCarousel> {
       covers = Center(
         child: _Cover(
           size: side,
-          url: _player.current?.thumbnailUrl,
+          // Una radio con carátula de lo que suena la usa; si no, su logo.
+          url: _player.current?.isLive == true
+              ? _player.liveArtwork
+              : _player.current?.thumbnailUrl,
           asset: _player.isBundledTrack ? _bundledCover : null,
+          live: _player.current?.isLive == true && _player.liveArtwork == null,
+          liveColors: _player.current?.liveColors,
+          liveLogo: _player.current?.liveLogo,
         ),
       );
     } else {
@@ -180,7 +187,15 @@ class _PlayerCoverCarouselState extends State<PlayerCoverCarousel> {
                     child: _Cover(
                       key: ValueKey('cover:${queue[index].id}:$index'),
                       size: side,
-                      url: queue[index].thumbnailUrl,
+                      url: queue[index].isLive && index == _player.index
+                          ? _player.liveArtwork
+                          : queue[index].thumbnailUrl,
+                      live:
+                          queue[index].isLive &&
+                          !(index == _player.index &&
+                              _player.liveArtwork != null),
+                      liveColors: queue[index].liveColors,
+                      liveLogo: queue[index].liveLogo,
                       dim: .35 * distance,
                       // Tocar una vecina salta a ella.
                       onTap: distance > .5
@@ -219,6 +234,9 @@ class _Cover extends StatelessWidget {
     required this.size,
     this.url,
     this.asset,
+    this.liveColors,
+    this.liveLogo,
+    this.live = false,
     this.dim = 0,
     this.onTap,
   });
@@ -226,6 +244,11 @@ class _Cover extends StatelessWidget {
   final double size;
   final String? url;
   final String? asset;
+
+  /// Una radio en directo: su degradado en lugar de una imagen.
+  final bool live;
+  final List<int>? liveColors;
+  final String? liveLogo;
 
   /// Cuánto se atenúa (una vecina), de 0 a 1.
   final double dim;
@@ -251,7 +274,9 @@ class _Cover extends StatelessWidget {
         borderRadius: BorderRadius.circular(_radius),
         child: Stack(
           children: [
-            if (asset != null)
+            if (live)
+              LiveCover(size: size, colors: liveColors, logo: liveLogo)
+            else if (asset != null)
               Image.asset(
                 asset!,
                 width: size,

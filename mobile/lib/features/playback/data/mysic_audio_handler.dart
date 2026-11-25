@@ -16,6 +16,9 @@ class MysicAudioHandler extends BaseAudioHandler {
   TrackAudioPhase? _publishedPhase;
   int? _publishedIndex;
   Duration? _publishedDuration;
+
+  /// Lo último que dijo una radio en directo y que ya está en la notificación.
+  String? _publishedLive;
   (PlaybackRepeat, bool, int, bool)? _publishedOptions;
 
   // Me gusta: el corazón del widget y de los controles. Sin cuenta enlazada no
@@ -111,18 +114,37 @@ class MysicAudioHandler extends BaseAudioHandler {
   // La portada va cuadrada y de buen tamaño: Android la muestra grande en la
   // notificación y en la pantalla de bloqueo, y una miniatura pequeña o con
   // franjas se estira y se sale del recuadro.
-  MediaItem _item(CatalogTrack track, [Duration? actualDuration, Uri? art]) =>
-      MediaItem(
-        id: track.id,
-        title: track.title,
-        artist: track.artistName,
-        duration:
-            actualDuration ??
-            (track.durationSeconds == null
-                ? null
-                : Duration(seconds: track.durationSeconds!)),
-        artUri: art ?? NotificationArt.immediate(track.thumbnailUrl),
-      );
+  MediaItem _item(CatalogTrack track, [Duration? actualDuration, Uri? art]) {
+    // Una radio en directo: lo que suena ahora, y la emisora como álbum.
+    final controller = _controller;
+    final now = track.isLive && identical(controller?.current, track)
+        ? controller?.liveTitle
+        : null;
+    return MediaItem(
+      id: track.id,
+      title: now ?? track.title,
+      artist: now == null
+          ? track.artistName
+          : controller?.liveArtist ?? track.title,
+      album: now == null
+          ? null
+          : controller?.liveProgram == null
+          ? track.title
+          : '${track.title} · ${controller?.liveProgram}',
+      duration:
+          actualDuration ??
+          (track.durationSeconds == null
+              ? null
+              : Duration(seconds: track.durationSeconds!)),
+      artUri:
+          art ??
+          NotificationArt.immediate(
+            now != null && controller?.liveArtwork != null
+                ? controller?.liveArtwork
+                : track.thumbnailUrl,
+          ),
+    );
+  }
 
   /// Con una miniatura de vídeo, genera la portada cuadrada y, cuando está,
   /// la pone en la notificación (si la canción sigue siendo la misma).
@@ -162,14 +184,20 @@ class MysicAudioHandler extends BaseAudioHandler {
       queue.add(nextQueue.map(_item).toList(growable: false));
       _publishedQueue = nextQueue;
     }
+    final live = controller.liveTitle == null
+        ? null
+        : '${controller.liveArtist}|${controller.liveTitle}|'
+              '${controller.liveProgram}|${controller.liveArtwork}';
     if (!identical(current, _publishedCurrent) ||
-        controller.duration != _publishedDuration) {
+        controller.duration != _publishedDuration ||
+        live != _publishedLive) {
       if (current == null) {
         _clearMediaItem();
       } else {
         mediaItem.add(_item(current, controller.duration));
         _squareArt(current);
       }
+      _publishedLive = live;
       _publishedDuration = controller.duration;
       _publishedCurrent = current;
     }

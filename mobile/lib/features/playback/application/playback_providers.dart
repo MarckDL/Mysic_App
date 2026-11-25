@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/settings/app_settings.dart';
 import '../../authentication/application/auth_providers.dart';
+import '../../radio/data/now_playing_client.dart';
 import '../../connected_library/domain/music_mode.dart' show MusicTrack;
 import '../../authentication/domain/auth_repository.dart';
 import '../../history/application/listening_tracker.dart';
@@ -49,6 +50,9 @@ final trackPlaybackControllerProvider =
         auth,
         ref.watch(trackAudioEngineFactoryProvider)(),
         uid,
+        liveInfo: fetchLiveNowPlaying,
+        hlsInfo: fetchHlsTrackInfo,
+        moodsFetcher: fetchRadioMoods,
         radio: (videoId, {cursor}) async {
           final session = ref.read(ytmAuthProvider).session;
           if (session == null) throw const AuthFailure('Sin sesión.');

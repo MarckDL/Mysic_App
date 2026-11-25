@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../application/track_playback_controller.dart';
 import '../domain/track_audio_engine.dart';
 import 'artwork_prefetch.dart';
+import 'live_cover.dart';
 import '../../search/presentation/catalog_widgets.dart';
 import '../../ytm/data/liked_tracks.dart';
 
@@ -87,18 +88,38 @@ class MiniPlayer extends StatelessWidget {
                           padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
                           child: Row(
                             children: [
-                              TrackArtwork(
-                                url: current.thumbnailUrl,
-                                size: 42,
-                                borderRadius: 6,
-                              ),
+                              if (current.isLive &&
+                                  controller.liveArtwork != null)
+                                TrackArtwork(
+                                  url: controller.liveArtwork,
+                                  size: 42,
+                                  borderRadius: 6,
+                                )
+                              else if (current.isLive)
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: LiveCover(
+                                    size: 42,
+                                    colors: current.liveColors,
+                                    logo: current.liveLogo,
+                                  ),
+                                )
+                              else
+                                TrackArtwork(
+                                  url: current.thumbnailUrl,
+                                  size: 42,
+                                  borderRadius: 6,
+                                ),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      current.title,
+                                      current.isLive
+                                          ? controller.liveTitle ??
+                                                current.title
+                                          : current.title,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: theme.textTheme.titleSmall
@@ -107,7 +128,11 @@ class MiniPlayer extends StatelessWidget {
                                           ),
                                     ),
                                     Text(
-                                      current.artistName,
+                                      current.isLive &&
+                                              controller.liveTitle != null
+                                          ? controller.liveArtist ??
+                                                current.title
+                                          : current.artistName,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: theme.textTheme.bodySmall

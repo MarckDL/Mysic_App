@@ -4,6 +4,9 @@ import 'package:flutter/foundation.dart';
 
 import '../../authentication/domain/auth_repository.dart';
 import '../../history/application/listening_tracker.dart';
+import '../../radio/domain/hls_track_info.dart';
+import '../../radio/domain/live_now_playing.dart';
+import '../../radio/domain/radio_mood.dart';
 import '../../search/domain/catalog_track.dart';
 import '../domain/track_audio_engine.dart';
 import '../domain/playback_resolution.dart';
@@ -30,6 +33,9 @@ class TrackPlaybackController extends ChangeNotifier {
     this._uid, {
     this.history,
     this.radio,
+    this.liveInfo,
+    this.hlsInfo,
+    this.moodsFetcher,
   }) {
     unawaited(_engine.warmUp().catchError((Object _) {}));
     _subscription = _engine.states.listen((value) {
@@ -94,10 +100,222 @@ class TrackPlaybackController extends ChangeNotifier {
         notifyListeners();
       }
     });
+    _liveTitles = _engine.liveTitles.listen((raw) {
+      // Si la emisora da su propio JSON, ese manda (trae también la carátula).
+      if (!_active || current?.isLive != true || _hasLiveInfo) return;
+      final parsed = parseLiveTitle(raw, station: current!.title);
+      if (parsed?.$1 == liveArtist && parsed?.$2 == liveTitle) return;
+      liveArtist = parsed?.$1;
+      liveTitle = parsed?.$2;
+      notifyListeners();
+    });
     _authSubscription = _auth.authStateChanges().listen((user) {
       if (!_disposed && user?.uid != _uid) unawaited(clear());
     });
   }
+
+  /// Lo que suena ahora en la radio en directo (de los metadatos del flujo);
+  /// null mientras no diga nada o no sea una radio.
+  String? liveArtist, liveTitle;
+
+  /// El programa en el aire y la carátula de la canción, si la emisora los da.
+  String? liveProgram, liveArtwork;
+
+  /// Cuándo empezó y cuándo acaba la canción de la radio, si la emisora lo da
+  /// (la línea de tiempo del reproductor); null si no.
+  DateTime? liveStartedAt, liveEndsAt;
+
+  /// Quién presenta el programa, la discográfica de la canción y los moods del
+  /// programa (ROVR); vacíos si la emisora no los da.
+  String? liveCurator, liveLabel;
+  List<String> liveMoods = const [];
+
+  /// De dónde se leen los moods de una emisora (null: sin pastillas de mood).
+  final RadioMoodsFetcher? moodsFetcher;
+
+  /// Los moods de la emisora que suena (ROVR: DRIVE, THINK…); vacío si no tiene
+  /// o aún no llegaron. El reproductor los muestra como pastillas.
+  List<RadioMood> liveMoodOptions = const [];
+  Uri? _moodsLoadedFrom;
+
+  /// Lee los moods de la emisora de [track] (una sola vez por emisora) y avisa
+  /// al reproductor para que dibuje las pastillas.
+  void _loadMoods(CatalogTrack track) {
+    final url = track.liveMoodsUrl, fetch = moodsFetcher;
+    if (url == null || fetch == null) {
+      liveMoodOptions = const [];
+      _moodsLoadedFrom = null;
+      return;
+    }
+    if (_moodsLoadedFrom == url) return;
+    _moodsLoadedFrom = url;
+    unawaited(() async {
+      List<RadioMood> found;
+      try {
+        found = await fetch(url);
+      } on Object {
+        found = const [];
+      }
+      if (!_active || _moodsLoadedFrom != url) return;
+      // Sin lista, se reintentará la próxima vez que suene la emisora.
+      if (found.isEmpty) _moodsLoadedFrom = null;
+      liveMoodOptions = found;
+      notifyListeners();
+    }());
+  }
+
+  /// De dónde se lee lo que suena ahora (null: solo los metadatos del flujo).
+  final LiveInfoFetcher? liveInfo;
+
+  /// De dónde se leen los metadatos de la canción que van dentro del audio HLS
+  /// (ID3 en cada segmento); null: no se leen.
+  final HlsInfoFetcher? hlsInfo;
+  bool _hasLiveInfo = false;
+  Timer? _liveTimer, _hlsTimer;
+  int _liveRun = 0;
+
+  // Las dos fuentes de «lo que suena», que se combinan en [_applyLive]:
+  // la programación de la emisora (programa, curador, línea de tiempo…) y lo
+  // que dice el propio audio (título, artista, discográfica, carátula).
+  LiveNowPlaying? _schedule;
+  HlsTrackInfo? _hls;
+
+  /// Cada cuánto se vuelve a preguntar la programación a la emisora.
+  static const liveInfoEvery = Duration(seconds: 30);
+
+  /// Cada cuánto se lee la etiqueta del audio (un segmento pesa ~40 KB).
+  static const hlsInfoEvery = Duration(seconds: 15);
+
+  void _stopLiveInfo() {
+    _liveRun++;
+    _liveTimer?.cancel();
+    _liveTimer = null;
+    _hlsTimer?.cancel();
+    _hlsTimer = null;
+    _schedule = null;
+    _hls = null;
+  }
+
+  /// Une la programación y la etiqueta del audio en lo que ve el reproductor.
+  /// Si el audio dice qué suena, manda: es la fuente real (la programación se
+  /// calcula por la hora y puede ir desfasada unos segundos).
+  void _applyLive() {
+    final s = _schedule, h = _hls;
+    if (s == null && h == null) return;
+    _hasLiveInfo = true;
+    liveTitle = h?.title ?? s?.title;
+    liveArtist = h != null ? h.artist : s?.artist;
+    liveLabel = h != null ? h.label : s?.label;
+    liveProgram = s?.program;
+    liveCurator = s?.curator;
+    liveMoods = s?.moods ?? const [];
+    liveStartedAt = s?.startedAt;
+    liveEndsAt = s?.endsAt;
+    // Carátula: la de la canción que suena; si no la tiene, la foto del
+    // programa; si tampoco, la imagen del mood o el logo.
+    liveArtwork =
+        (h != null ? h.coverUri?.toString() : s?.artwork) ??
+        s?.showImage ??
+        current?.thumbnailUrl;
+    notifyListeners();
+  }
+
+  /// Lee lo que suena ahora en la emisora y lo repite mientras se quiera
+  /// escucharla: la programación (si la tiene) cada [liveInfoEvery], justo
+  /// después de que acabe cada canción, y la etiqueta del audio cada
+  /// [hlsInfoEvery].
+  void _startLiveInfo(CatalogTrack track) {
+    _stopLiveInfo();
+    final run = _liveRun;
+    final url = track.liveInfo, fetch = liveInfo;
+    if (url != null && fetch != null) {
+      Future<void> poll() async {
+        LiveNowPlaying? info;
+        if (_wantPlayback) {
+          try {
+            info = await fetch(url);
+          } on Object {
+            info = null;
+          }
+        }
+        if (!_active || run != _liveRun) return;
+        if (info != null) {
+          _schedule = info;
+          _applyLive();
+        }
+        // Con la hora de fin de la canción, se vuelve a preguntar justo
+        // después (así el título cambia a tiempo); si no, cada [liveInfoEvery].
+        var wait = liveInfoEvery;
+        final ends = info?.trackEndsAt;
+        if (ends != null) {
+          final untilEnd =
+              ends.difference(DateTime.now()) + const Duration(seconds: 2);
+          if (untilEnd < wait) {
+            wait = untilEnd < const Duration(seconds: 5)
+                ? const Duration(seconds: 5)
+                : untilEnd;
+          }
+        }
+        _liveTimer = Timer(wait, () => unawaited(poll()));
+      }
+
+      unawaited(poll());
+    }
+
+    final stream = track.liveStream, readHls = hlsInfo;
+    if (stream != null && readHls != null && stream.path.endsWith('.m3u8')) {
+      Future<void> pollHls() async {
+        HlsTrackInfo? info;
+        if (_wantPlayback) {
+          try {
+            info = await readHls(stream);
+          } on Object {
+            info = null;
+          }
+        }
+        if (!_active || run != _liveRun) return;
+        // Sin etiqueta (entre pistas, o una señal sin ella) se conserva la
+        // anterior: mejor la última canción que un hueco.
+        if (info != null) {
+          _hls = info;
+          _applyLive();
+        }
+        _hlsTimer = Timer(hlsInfoEvery, () => unawaited(pollHls()));
+      }
+
+      unawaited(pollHls());
+    }
+  }
+
+  /// Separa el `StreamTitle` de una radio («Artista - Título») en
+  /// (artista, título). Devuelve null si no hay canción identificada: vacío,
+  /// el propio nombre de la emisora o avisos como «offline». Sin separador,
+  /// todo es el título.
+  static (String?, String)? parseLiveTitle(
+    String? raw, {
+    required String station,
+  }) {
+    final text = raw?.trim() ?? '';
+    if (text.isEmpty || text.length > 200) return null;
+    final lower = text.toLowerCase();
+    if (lower == station.toLowerCase() ||
+        lower.endsWith(' - offline') ||
+        lower == 'offline' ||
+        lower.endsWith(' - live') ||
+        lower == 'unknown') {
+      return null;
+    }
+    final cut = text.indexOf(' - ');
+    if (cut <= 0 || cut + 3 >= text.length) return (null, text);
+    final artist = text.substring(0, cut).trim();
+    final title = text.substring(cut + 3).trim();
+    // «Emisora - algo»: el prefijo es la emisora, no un artista.
+    if (artist.toLowerCase() == station.toLowerCase()) {
+      return title.isEmpty ? null : (null, title);
+    }
+    return (artist, title);
+  }
+
   bool get isDemoTrack => current?.id == demoTrack.id;
   bool get isBundledTrack => isDemoTrack || current?.isMusicPreview == true;
   MusicListenCallback? _onPreviewListened;
@@ -117,6 +335,7 @@ class TrackPlaybackController extends ChangeNotifier {
   late final StreamSubscription<TrackAudioPhase> _subscription;
   late final StreamSubscription<Duration> _positions;
   late final StreamSubscription<Duration?> _durations;
+  late final StreamSubscription<String?> _liveTitles;
   late final StreamSubscription<AuthUser?> _authSubscription;
   final List<CatalogTrack> _queue = [];
   List<CatalogTrack> get queue => List.unmodifiable(_queue);
@@ -270,6 +489,7 @@ class TrackPlaybackController extends ChangeNotifier {
           track.deviceAudio == null &&
           track.licensedAudio == null &&
           track.readAudio == null &&
+          track.liveStream == null &&
           _validTrack(track)) {
         ids.add(track.id.substring(8));
       }
@@ -289,7 +509,8 @@ class TrackPlaybackController extends ChangeNotifier {
         next.isMusicPreview ||
         next.deviceAudio != null ||
         next.licensedAudio != null ||
-        next.readAudio != null) {
+        next.readAudio != null ||
+        next.liveStream != null) {
       return;
     }
     unawaited(
@@ -411,6 +632,7 @@ class TrackPlaybackController extends ChangeNotifier {
   bool _validTrack(CatalogTrack track) =>
       track.id == demoTrack.id ||
       track.isMusicPreview ||
+      (track.isLive && track.liveStream != null) ||
       RegExp(r'^youtube:[A-Za-z0-9_-]{11}$').hasMatch(track.id);
 
   Future<void> start(String id) => playTrack(
@@ -477,7 +699,8 @@ class TrackPlaybackController extends ChangeNotifier {
             !track.isMusicPreview &&
             track.deviceAudio == null &&
             track.licensedAudio == null &&
-            track.readAudio == null)
+            track.readAudio == null &&
+            track.liveStream == null)
           track.id.substring(8),
     };
     if (ids.isNotEmpty) _engine.warm(ids.take(warmLimit).toList());
@@ -493,7 +716,8 @@ class TrackPlaybackController extends ChangeNotifier {
         track.isMusicPreview ||
         track.deviceAudio != null ||
         track.licensedAudio != null ||
-        track.readAudio != null) {
+        track.readAudio != null ||
+        track.liveStream != null) {
       return;
     }
     _engine.touch(track.id.substring(8));
@@ -660,7 +884,12 @@ class TrackPlaybackController extends ChangeNotifier {
   Future<void>? _recoverSource() {
     if (!_wantPlayback || _autoRecoveryUsed || current == null) return null;
     _autoRecoveryUsed = true;
-    return _loadTrack(index, resumeAt: position, refresh: true);
+    // Una radio vuelve al directo: no hay posición a la que regresar.
+    return _loadTrack(
+      index,
+      resumeAt: current!.isLive ? Duration.zero : position,
+      refresh: true,
+    );
   }
 
   Future<void> _loadTrack(
@@ -690,8 +919,19 @@ class TrackPlaybackController extends ChangeNotifier {
     final generation = ++_generation;
     _eventsEnabled = false;
     index = target;
+    // Lo que sonaba en la radio anterior ya no vale.
+    liveArtist = liveTitle = liveProgram = liveArtwork = null;
+    liveStartedAt = liveEndsAt = null;
+    liveCurator = liveLabel = null;
+    liveMoods = const [];
+    // Un mood no trae «ahora suena»: su imagen cuadrada hace de portada.
+    if (current?.isLive == true) liveArtwork = current!.thumbnailUrl;
+    _hasLiveInfo = false;
+    _stopLiveInfo();
     sourceId = isBundledTrack
         ? PlaybackResolution.demoId
+        : current!.isLive
+        ? current!.id
         : current!.id.substring(8);
     final requestedId = sourceId!;
     position = resumeAt ?? Duration.zero;
@@ -713,6 +953,7 @@ class TrackPlaybackController extends ChangeNotifier {
         licensedAudio: current!.licensedAudio,
         deviceAudio: current!.deviceAudio,
         readAudio: current!.readAudio,
+        liveAudio: current!.liveStream,
         durationSeconds: current!.durationSeconds,
       );
       if (!_valid(generation)) return;
@@ -734,6 +975,13 @@ class TrackPlaybackController extends ChangeNotifier {
       if (!_wantPlayback) {
         _set(TrackAudioPhase.paused);
         return;
+      }
+      if (current!.isLive) {
+        _startLiveInfo(current!);
+        _loadMoods(current!);
+      } else {
+        liveMoodOptions = const [];
+        _moodsLoadedFrom = null;
       }
       await _engine.play();
       if (_valid(generation) && _wantPlayback) {
@@ -839,6 +1087,15 @@ class TrackPlaybackController extends ChangeNotifier {
 
   Future<void> resume() async {
     if (!_active) return;
+    // Una radio en directo no se reanuda donde se dejó: la ventana del directo
+    // ya avanzó (el reproductor daría un error de «detrás del directo»). Se
+    // vuelve a sintonizar y suena lo que está sonando ahora.
+    if (current?.isLive == true &&
+        phase != TrackAudioPhase.loading &&
+        phase != TrackAudioPhase.playing) {
+      await _loadTrack(index);
+      return;
+    }
     if (phase == TrackAudioPhase.error && current != null) {
       await _loadTrack(index, resumeAt: position, refresh: true);
     } else if (phase == TrackAudioPhase.paused) {
@@ -888,6 +1145,7 @@ class TrackPlaybackController extends ChangeNotifier {
     ++_generation;
     _wantPlayback = false;
     _eventsEnabled = false;
+    _stopLiveInfo();
     if (!_disposed) {
       final stopped = _stopEngine();
       _set(TrackAudioPhase.idle);
@@ -1013,6 +1271,8 @@ class TrackPlaybackController extends ChangeNotifier {
     unawaited(_subscription.cancel());
     unawaited(_positions.cancel());
     unawaited(_durations.cancel());
+    unawaited(_liveTitles.cancel());
+    _stopLiveInfo();
     unawaited(_authSubscription.cancel());
     unawaited(_engine.dispose());
     super.dispose();

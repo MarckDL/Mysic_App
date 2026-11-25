@@ -41,6 +41,11 @@ abstract interface class TrackAudioEngine {
   Stream<Duration> get positions;
   Stream<Duration?> get durations;
   Duration? get duration;
+
+  /// Lo que dice el flujo de una radio en directo que suena ahora (el
+  /// `StreamTitle` de ICY, normalmente «Artista - Título»); null si no dice
+  /// nada o al cambiar de pista.
+  Stream<String?> get liveTitles;
   Future<void> warmUp();
   void markPlaybackRequested();
   Future<void> load(
@@ -49,6 +54,10 @@ abstract interface class TrackAudioEngine {
     Uri? licensedAudio,
     Uri? deviceAudio,
     TrackAudioReader? readAudio,
+
+    /// Una radio en directo: su flujo (`https`; los parámetros se permiten).
+    /// Con él, [sourceId] no es un id de YouTube y no se resuelve nada.
+    Uri? liveAudio,
     bool refresh = false,
 
     /// Duración conocida de la pista; decide si su audio se guarda en disco

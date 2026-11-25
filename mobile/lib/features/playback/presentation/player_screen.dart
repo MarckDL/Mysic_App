@@ -10,6 +10,8 @@ import '../../../core/images/disk_cached_image.dart';
 import '../../connected_library/domain/music_mode.dart'
     show MusicTrack, TrackLinks;
 import '../../connected_library/presentation/catalog_pages.dart';
+import '../../connected_library/presentation/library_screen.dart'
+    show LibraryChip;
 import '../../connected_library/presentation/music_mode_host.dart';
 import '../../connected_library/presentation/track_sheet.dart';
 import '../../lyrics/data/lyrics_repository.dart';
@@ -350,7 +352,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              PlaybackProgress(key: ValueKey(track.id), controller: controller),
+              if (track.isLive) ...[
+                // ROVR da cuándo empieza y acaba el programa: su línea de tiempo.
+                if (controller.liveStartedAt != null &&
+                    controller.liveEndsAt != null)
+                  LiveTimeline(controller: controller),
+                _LiveBadge(
+                  playing: controller.phase == TrackAudioPhase.playing,
+                ),
+              ] else
+                PlaybackProgress(
+                  key: ValueKey(track.id),
+                  controller: controller,
+                ),
               if (controller.phase == TrackAudioPhase.error)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -399,6 +413,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final likes = _likes;
     final id = _youtubeId(track);
     final linkable = _linkable(controller);
+    // Una radio dice lo que suena ahora; mientras no, su nombre y su dial.
+    final nowPlaying = track.isLive && controller.liveTitle != null;
+    final artistText = !track.isLive
+        ? track.artistName
+        : nowPlaying
+        ? controller.liveArtist ?? track.title
+        : track.artistName;
+    final titleText = nowPlaying ? controller.liveTitle! : track.title;
     return Column(
       children: [
         _TopRow(
@@ -411,6 +433,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             onPressed: () => unawaited(_openOutput()),
           ),
         ),
+        // Las señales de la emisora, bajo «Reproduciendo»: «Radio» y sus moods.
+        if (track.isLive && controller.liveMoodOptions.isNotEmpty)
+          _MoodPills(controller: controller, track: track),
         // Portada, línea de letra y título van juntos con huecos fijos; la
         // altura que sobra queda sobre la portada. Donde falta sitio (pantalla
         // baja, letra grande) encoge la portada, no los huecos ni el título.
@@ -454,7 +479,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: _gutter),
-                child: controller.isBundledTrack
+                child: controller.isBundledTrack || track.isLive
                     ? const SizedBox(height: _LyricLine.height)
                     : _LyricLine(
                         key: ValueKey(track.id),
@@ -475,7 +500,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                           : null,
                       borderRadius: BorderRadius.circular(6),
                       child: Text(
-                        track.artistName,
+                        artistText,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodyMedium?.copyWith(
@@ -493,7 +518,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                       children: [
                         Expanded(
                           child: Text(
-                            track.title,
+                            titleText,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.titleLarge?.copyWith(
@@ -533,6 +558,46 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                     // Debajo, el álbum como enlace a su página.
                     if (linkable)
                       _AlbumLink(key: ValueKey(track.id), track: track)
+                    else if (nowPlaying)
+                      // La emisora y su dial, donde iría el álbum.
+                      // Todo a la izquierda: la emisora con su programa y quién
+                      // lo presenta («BY …») y, si la hay, la discográfica.
+                      SizedBox(
+                        height: _AlbumLink.height,
+                        width: double.infinity,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              [
+                                track.title,
+                                if (controller.liveProgram != null)
+                                  controller.liveProgram!
+                                else
+                                  track.artistName,
+                                if (controller.liveCurator != null)
+                                  'by ${controller.liveCurator}',
+                              ].join(' · '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                            if (controller.liveLabel != null)
+                              Text(
+                                controller.liveLabel!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colors.onSurfaceVariant,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                          ],
+                        ),
+                      )
                     else
                       const SizedBox(height: _AlbumLink.height),
                   ],
@@ -582,7 +647,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           tooltip: 'Letra',
           icon: Icons.lyrics_outlined,
           active: _view == _View.lyrics,
-          onPressed: controller.isBundledTrack
+          onPressed: controller.isBundledTrack || track.isLive
               ? null
               : () => _toggle(_View.lyrics),
         ),
@@ -610,6 +675,102 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           onPressed: () => _openMenu(controller, track),
         ),
       ],
+    );
+  }
+}
+
+/// Las pastillas «RADIO · mood · mood…» de una emisora con varias señales
+/// (ROVR). La que suena va rellena; tocar otra cambia de señal.
+class _MoodPills extends StatelessWidget {
+  const _MoodPills({required this.controller, required this.track});
+
+  final TrackPlaybackController controller;
+  final CatalogTrack track;
+
+  /// «DRIVE» → «Drive»: como las pastillas de la Biblioteca.
+  static String _capital(String text) => text.isEmpty
+      ? text
+      : text[0].toUpperCase() + text.substring(1).toLowerCase();
+
+  @override
+  Widget build(BuildContext context) {
+    // La pista de la emisora («Radio»): la propia, o de la que cuelga el mood.
+    final radio = track.liveParent ?? track;
+    final onRadio = track.liveParent == null;
+    // Las mismas pastillas que los filtros de la Biblioteca (`LibraryChip`):
+    // la elegida va rellena del acento; tocar otra cambia de señal.
+    return SizedBox(
+      height: 44,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+        children: [
+          LibraryChip(
+            label: 'Radio',
+            selected: onRadio,
+            onTap: () {
+              if (!onRadio) unawaited(controller.playQueue([radio]));
+            },
+          ),
+          for (final mood in controller.liveMoodOptions) ...[
+            const SizedBox(width: 8),
+            LibraryChip(
+              label: _capital(mood.title),
+              selected: track.id.endsWith(':${mood.id}'),
+              onTap: () {
+                if (!track.id.endsWith(':${mood.id}')) {
+                  unawaited(controller.playQueue([mood.toTrack(radio)]));
+                }
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// En lugar de la barra de progreso: una radio no tiene principio ni fin.
+class _LiveBadge extends StatelessWidget {
+  const _LiveBadge({required this.playing});
+
+  final bool playing;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    // A la izquierda, como el resto de los datos de la radio.
+    return SizedBox(
+      height: 40,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          decoration: BoxDecoration(
+            color: colors.primary.withValues(alpha: .16),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.circle,
+                size: 9,
+                color: playing ? colors.primary : colors.onSurfaceVariant,
+              ),
+              const SizedBox(width: 7),
+              Text(
+                'EN VIVO',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: colors.onSurface,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

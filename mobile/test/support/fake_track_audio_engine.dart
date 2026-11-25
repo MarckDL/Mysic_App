@@ -15,6 +15,7 @@ class FakeTrackAudioEngine implements TrackAudioEngine {
   Uri? lastLicensedAudio;
   TrackAudioReader? lastReader;
   Uri? lastDeviceAudio;
+  Uri? lastLiveAudio;
   int? lastDurationSeconds;
   int plays = 0;
   int stops = 0;
@@ -31,6 +32,9 @@ class FakeTrackAudioEngine implements TrackAudioEngine {
   Stream<Duration> get positions => positionEvents.stream;
   @override
   Stream<Duration?> get durations => const Stream.empty();
+  final liveTitleEvents = StreamController<String?>.broadcast(sync: true);
+  @override
+  Stream<String?> get liveTitles => liveTitleEvents.stream;
   @override
   Future<void> warmUp() async {
     warmUps++;
@@ -49,9 +53,11 @@ class FakeTrackAudioEngine implements TrackAudioEngine {
     Uri? licensedAudio,
     Uri? deviceAudio,
     TrackAudioReader? readAudio,
+    Uri? liveAudio,
     bool refresh = false,
     int? durationSeconds,
   }) async {
+    lastLiveAudio = liveAudio;
     lastDurationSeconds = durationSeconds;
     this.sourceId = sourceId;
     lastLicensedAudio = licensedAudio;

@@ -1033,11 +1033,29 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         cover(album, album.detail ?? 'Álbum', Icons.album);
     Widget playlistCard(MusicPlaylist playlist) =>
         cover(playlist, 'Playlist', Icons.queue_music);
-    Widget artistCard(MusicArtist artist) => _ArtistCircle(
+    // El mismo componente que la pestaña Artistas de la Biblioteca: la foto
+    // cuadrada con el nombre dentro, no un círculo.
+    Widget artistCard(MusicArtist artist) => ArtistPhotoTile(
       key: ValueKey('artist:${artist.id}'),
-      artist: artist,
+      name: artist.title,
+      detail: artist.detail,
+      url: artist.thumbnailUrl,
       onTap: () => _open(artist),
       onLongPress: () => _hold(artist),
+    );
+
+    // Los artistas en filas de tres, como en la Biblioteca.
+    Widget artistRows(List<MusicArtist> artists) => SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      sliver: SliverList.builder(
+        itemCount: (artists.length / 3).ceil(),
+        itemBuilder: (context, row) => ArtistPhotoRow(
+          tiles: [
+            for (final artist in artists.skip(row * 3).take(3))
+              artistCard(artist),
+          ],
+        ),
+      ),
     );
 
     // Una cuadrícula de tarjetas, con el alto que piden su carátula y su texto.
@@ -1069,7 +1087,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     );
 
     double coverExtent(double cell) => (cell - 20) + 16 + scale.scale(58);
-    double artistExtent(double cell) => (cell - 20) + 28 + scale.scale(40);
 
     switch (_kind) {
       case SearchKind.songs:
@@ -1081,7 +1098,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       case SearchKind.playlists:
         return [grid(results.playlists, null, coverExtent, playlistCard)];
       case SearchKind.artists:
-        return [grid(results.artists, 3, artistExtent, artistCard)];
+        return [artistRows(results.artists)];
       case SearchKind.all:
         final top = results.top;
         final songs = results.songs.take(5).toList();
@@ -1114,7 +1131,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           ],
           if (results.artists.isNotEmpty) ...[
             header('Artistas', SearchKind.artists),
-            shelf(results.artists, 136, artistExtent(136), artistCard),
+            shelf(
+              results.artists,
+              138,
+              138 / .86 + 6,
+              (artist) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 5),
+                child: artistCard(artist),
+              ),
+            ),
           ],
           if (results.videos.isNotEmpty) ...[
             header('Vídeos', SearchKind.videos),
@@ -1775,55 +1800,6 @@ class _TopResultCard extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Un artista como foto redonda sobre su nombre (Limusic `ArtistCircle`).
-class _ArtistCircle extends StatelessWidget {
-  const _ArtistCircle({
-    super.key,
-    required this.artist,
-    required this.onTap,
-    required this.onLongPress,
-  });
-
-  final MusicArtist artist;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
-
-  @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    onLongPress: onLongPress,
-    borderRadius: BorderRadius.circular(8),
-    child: Padding(
-      padding: const EdgeInsets.all(10),
-      child: LayoutBuilder(
-        builder: (context, box) => Column(
-          children: [
-            TrackArtwork(
-              url: artist.thumbnailUrl,
-              size: box.maxWidth,
-              borderRadius: box.maxWidth / 2,
-              fallbackIcon: Icons.person,
-            ),
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                artist.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  height: 1.2,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
 }
 
 /// Un vídeo musical con su forma, 16:9, para que la fila de Vídeos se lea

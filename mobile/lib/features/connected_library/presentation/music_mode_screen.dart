@@ -15,6 +15,7 @@ import '../../authentication/presentation/account_screen.dart'
 import '../../playback/application/playback_providers.dart';
 import '../../playback/application/track_playback_controller.dart';
 import '../../playback/domain/track_audio_engine.dart' show TrackAudioPhase;
+import '../../radio/presentation/radio_shelf.dart';
 import '../../search/presentation/catalog_widgets.dart' show TrackArtwork;
 import '../../search/presentation/item_sheet.dart';
 import '../../search/presentation/music_tiles.dart';
@@ -2502,6 +2503,16 @@ class _MusicPageState extends ConsumerState<_MusicPage>
         ),
       );
       rows.add(SongGridShelf(rows: shelfRows));
+    }
+    // Inicio: la radio va bajo el primer carrusel.
+    if (isHome && _layout.radio) {
+      final at = rows.indexWhere((r) => r is _ShelfStrip);
+      const block = RadioShelf();
+      if (at >= 0) {
+        rows.insert(at + 1, block);
+      } else {
+        rows.add(block);
+      }
     }
     // Inicio entra en cascada: cada sección aparece un instante después de la
     // anterior (las lejanas, construidas al desplazar, aparecen sin espera).

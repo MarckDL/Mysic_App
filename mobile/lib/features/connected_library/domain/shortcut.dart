@@ -68,7 +68,11 @@ class HomeLayout {
     this.backdrop = true,
     this.shortcuts = true,
     this.dial = true,
+    this.radio = true,
   });
+
+  /// El bloque de radios en directo, bajo el carrusel.
+  final bool radio;
 
   /// La fila de ambientes (Relax, Dormir…).
   final bool chips;
@@ -87,7 +91,9 @@ class HomeLayout {
     bool? backdrop,
     bool? shortcuts,
     bool? dial,
+    bool? radio,
   }) => HomeLayout(
+    radio: radio ?? this.radio,
     chips: chips ?? this.chips,
     backdrop: backdrop ?? this.backdrop,
     shortcuts: shortcuts ?? this.shortcuts,
@@ -99,6 +105,7 @@ class HomeLayout {
     'backdrop': backdrop,
     'shortcuts': shortcuts,
     'dial': dial,
+    'radio': radio,
   };
 
   factory HomeLayout.fromJson(Map<String, dynamic>? data) => HomeLayout(
@@ -106,5 +113,6 @@ class HomeLayout {
     backdrop: data?['backdrop'] != false,
     shortcuts: data?['shortcuts'] != false,
     dial: data?['dial'] != false,
+    radio: data?['radio'] != false,
   );
 }
